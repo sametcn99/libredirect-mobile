@@ -1,0 +1,25 @@
+{
+  "routeId": "twitter",
+  "cases": [
+    {
+      "input": "https://twitter.com/someuser/status/123456789",
+      "frontendId": "nitter",
+      "expected": { "path": "/someuser/status/123456789", "query": null, "fragment": null }
+    },
+    {
+      "input": "https://x.com/someuser",
+      "frontendId": "nitter",
+      "expected": { "path": "/someuser", "query": null, "fragment": null }
+    },
+    {
+      "input": "https://mobile.twitter.com/someuser/status/123?s=20",
+      "frontendId": "nitter",
+      "expected": { "path": "/someuser/status/123", "query": "s=20", "fragment": null }
+    },
+    {
+      "input": "https://x.com/someuser",
+      "frontendId": "official",
+      "expected": "passthrough"
+    }
+  ]
+}

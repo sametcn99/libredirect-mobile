@@ -1,0 +1,35 @@
+{
+  "routeId": "youtube",
+  "cases": [
+    {
+      "input": "https://youtube.com/watch?v=abc",
+      "frontendId": "invidious",
+      "expected": { "path": "/watch", "query": "v=abc", "fragment": null }
+    },
+    {
+      "input": "https://www.youtube.com/watch?v=abc&t=42",
+      "frontendId": "invidious",
+      "expected": { "path": "/watch", "query": "v=abc&t=42", "fragment": null }
+    },
+    {
+      "input": "https://m.youtube.com/watch?v=abc",
+      "frontendId": "invidious",
+      "expected": { "path": "/watch", "query": "v=abc", "fragment": null }
+    },
+    {
+      "input": "https://youtu.be/abc123",
+      "frontendId": "invidious",
+      "expected": { "path": "/abc123", "query": null, "fragment": null }
+    },
+    {
+      "input": "https://music.youtube.com/playlist?list=xyz",
+      "frontendId": "invidious",
+      "expected": { "path": "/playlist", "query": "list=xyz", "fragment": null }
+    },
+    {
+      "input": "https://youtube.com/watch?v=abc",
+      "frontendId": "official",
+      "expected": "passthrough"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LibRedirect Mobile</string>
+    <string name="redirect_cannot_open">Could not open this link.</string>
+    <string name="redirect_no_browser">No browser available to open this link.</string>
+</resources>

@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LibRedirect Mobile routing manifest (schemaVersion 1)",
+  "description": "Structural validation for the signed routing manifest the app consumes. Cross-record constraints that cannot be expressed here (global route-id uniqueness, global host uniqueness, private/local instance host rejection, custom-scheme allowlist membership) are enforced by tools/validate-routes.ts semantic validation, not by this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "generatedAt", "routes"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "This file only validates schemaVersion 1 manifests. A future breaking change to the manifest shape ships as schemaVersion 2 with its own schema file; old app builds reject any schemaVersion they do not recognize."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Single global monotonically increasing counter, independent of schemaVersion. The app rejects any manifest whose revision is lower than the currently active one."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/route" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Lowercase kebab-case identifier. Used as a persistent settings key on the client, so it must not be repurposed for a different route/frontend once published."
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "hostname": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+      "description": "Exact hostname to match, lowercase, at least two labels. No wildcards and no implicit normalization: every host variant a route should match (www., m., youtu.be, ...) must be listed explicitly."
+    },
+    "instanceOrigin": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(:[0-9]{1,5})?$",
+      "description": "HTTPS origin only: scheme + host + optional port, no path/query/fragment. This is the literal value substituted for {instance} and for the replaced origin in the replace-origin strategy. Rejection of private/local/loopback hosts (localhost, 127.0.0.1, 10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12, ::1, ...) is semantic validation, not expressible as a single regex here."
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "hosts", "frontends"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/displayName" },
+        "hosts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/hostname" },
+          "maxItems": 32,
+          "uniqueItems": true,
+          "description": "Every host in this list must be globally unique across the entire manifest: a host may belong to at most one route."
+        },
+        "hostPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 256,
+            "pattern": "^\\^[^\\x00-\\x1f/]+\\$$"
+          },
+          "maxItems": 16,
+          "uniqueItems": true,
+          "description": "Anchored, hostname-only patterns used for upstream services with wildcard subdomains. Patterns are validated against the app's safe subset before activation."
+        },
+        "frontends": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/frontend" },
+          "minItems": 1,
+          "maxItems": 16,
+          "description": "Frontend ids only need to be unique within this route, not across the manifest."
+        }
+      }
+    },
+    "frontend": {
+      "oneOf": [
+        { "$ref": "#/$defs/replaceOriginFrontend" },
+        { "$ref": "#/$defs/templateFrontend" },
+        { "$ref": "#/$defs/customSchemeFrontend" },
+        { "$ref": "#/$defs/passthroughFrontend" }
+      ]
+    },
+    "replaceOriginFrontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "strategy", "instances"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/displayName" },
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "replace-origin" }
+          },
+          "description": "Substitutes the selected instance's origin for the matched URL's origin. Path, query, and fragment pass through unchanged."
+        },
+        "instances": { "$ref": "#/$defs/instanceList" }
+      }
+    },
+    "templateFrontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "strategy", "instances"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/displayName" },
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "output"],
+          "properties": {
+            "type": { "const": "template" },
+            "output": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "pattern": "^[^\\x00-\\x1f]*$",
+              "description": "May reference exactly {instance}, {path}, {query:NAME}, and {fragment}. The full placeholder grammar (which forms are valid, how each is percent-encoded on substitution) is specified in the manifest-format plan artifact and implemented independently by tools/validate-routes.ts and the Android template strategy — this schema only bounds length and rejects control characters."
+            }
+          }
+        },
+        "instances": { "$ref": "#/$defs/instanceList" }
+      }
+    },
+    "customSchemeFrontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "strategy"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/displayName" },
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "scheme"],
+          "properties": {
+            "type": { "const": "custom-scheme" },
+            "scheme": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 32,
+              "pattern": "^[a-z][a-z0-9+.-]*$",
+              "description": "Destination app URI scheme (no trailing ':'). The matched URL is rewritten to '{scheme}://{originalUrl}' verbatim; there is no instance to select. Whether the app actually honors a given scheme at runtime is a Phase 7 app-side allowlist decision, not something this schema enforces."
+            }
+          }
+        }
+      },
+      "description": "No 'instances' field: custom-scheme wraps the original URL for a destination app, it does not pick among hosted instances."
+    },
+    "passthroughFrontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "strategy"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/displayName" },
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "passthrough" }
+          }
+        }
+      },
+      "description": "No 'instances' field. Lets a route expose an explicit 'use the original site' choice alongside its other frontends, e.g. in a frontend selector UI, rather than requiring the user to fall back to a client-side exception."
+    },
+    "instanceList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/instanceOrigin" },
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true
+    }
+  }
+}

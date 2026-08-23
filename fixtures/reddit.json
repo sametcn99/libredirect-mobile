@@ -1,0 +1,25 @@
+{
+  "routeId": "reddit",
+  "cases": [
+    {
+      "input": "https://reddit.com/r/kotlin",
+      "frontendId": "redlib",
+      "expected": { "path": "/r/kotlin", "query": null, "fragment": null }
+    },
+    {
+      "input": "https://www.reddit.com/r/kotlin/comments/abc123/some_title/",
+      "frontendId": "redlib",
+      "expected": { "path": "/r/kotlin/comments/abc123/some_title/", "query": null, "fragment": null }
+    },
+    {
+      "input": "https://old.reddit.com/r/kotlin?sort=top",
+      "frontendId": "redlib",
+      "expected": { "path": "/r/kotlin", "query": "sort=top", "fragment": null }
+    },
+    {
+      "input": "https://reddit.com/r/kotlin",
+      "frontendId": "official",
+      "expected": "passthrough"
+    }
+  ]
+}

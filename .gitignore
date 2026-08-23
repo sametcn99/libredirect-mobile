@@ -1,0 +1,42 @@
+# Android / Gradle
+android/.gradle/
+android/.kotlin/
+android/build/
+android/*/build/
+android/local.properties
+android/.cxx/
+android/captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+android/*/.idea/
+
+# Keep the shareable Android Studio run configuration under the Android project.
+!android/.idea/
+android/.idea/*
+!android/.idea/runConfigurations/
+!android/.idea/runConfigurations/*
+
+# Kotlin
+*.hprof
+
+# Bun / Node tooling
+tools/node_modules/
+tools/dist/
+tools/*.tsbuildinfo
+
+# Generated manifest artifacts (published by CI, not committed by hand)
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+*.swp

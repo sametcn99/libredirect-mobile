@@ -1,0 +1,1528 @@
+{
+  "schemaVersion": 1,
+  "revision": 4,
+  "generatedAt": "2026-08-23T16:40:22.977Z",
+  "routes": [
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "hosts": [
+        "www.youtube.com",
+        "m.youtube.com",
+        "youtube.com",
+        "img.youtube.com",
+        "www.youtu.be",
+        "youtu.be",
+        "www.youtube-nocookie.com",
+        "youtube-nocookie.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "cloudtube",
+          "name": "CloudTube",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://tube.cadence.moe",
+            "https://tube.boritsch.de"
+          ]
+        },
+        {
+          "id": "invidious",
+          "name": "Invidious",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://inv.nadeko.net",
+            "https://invidious.nerdvpn.de",
+            "https://invidious.f5.si",
+            "https://yt.chocolatemoo53.com",
+            "https://invidious.tiekoetter.com",
+            "https://inv-ygg.nadeko.net",
+            "https://inv.nadeko.ygg"
+          ]
+        },
+        {
+          "id": "piped",
+          "name": "Piped",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://adminforge.de",
+            "https://drgns.space",
+            "https://piped.private.coffee"
+          ]
+        },
+        {
+          "id": "piped-material",
+          "name": "Piped-Material",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://piped-material.xn--17b.net",
+            "https://piped-material.ftp.sh",
+            "https://eds-v2.piped.xn--17b.net"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "youtube-1",
+      "name": "YouTube (additional hosts)",
+      "hosts": [
+        "i.ytimg.com",
+        "s.ytimg.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "invidious",
+          "name": "Invidious",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://inv.nadeko.net",
+            "https://invidious.nerdvpn.de",
+            "https://invidious.f5.si",
+            "https://yt.chocolatemoo53.com",
+            "https://invidious.tiekoetter.com",
+            "https://inv-ygg.nadeko.net",
+            "https://inv.nadeko.ygg"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "youtube-music",
+      "name": "YT Music",
+      "hosts": [
+        "music.youtube.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "hyperpipe",
+          "name": "Hyperpipe",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://hyperpipe.surge.sh",
+            "https://music.adminforge.de",
+            "https://music.pfcd.me",
+            "https://hyperpipe.frontendfriendly.xyz",
+            "https://hyperpipe.drgns.space",
+            "https://hyperpipe.projectsegfau.lt",
+            "https://hp.ggtyler.dev",
+            "https://hyperpipe.lunar.icu",
+            "https://hp.iqbalrifai.eu.org",
+            "https://hp.ngn.tf",
+            "https://hyperpipe.ducks.party",
+            "https://hyperpipe.darkness.services"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "twitter",
+      "name": "Twitter",
+      "hosts": [
+        "www.twitter.com",
+        "mobile.twitter.com",
+        "twitter.com",
+        "www.x.com",
+        "mobile.x.com",
+        "x.com",
+        "pbs.twimg.com",
+        "video.twimg.com",
+        "platform.x.com",
+        "platform.twitter.com",
+        "t.co"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "nitter",
+          "name": "Nitter",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://xcancel.com",
+            "https://nitter.poast.org",
+            "https://nitter.privacyredirect.com",
+            "https://lightbrd.com",
+            "https://nitter.space",
+            "https://nitter.tiekoetter.com",
+            "https://nuku.trabun.org",
+            "https://nitter.catsarch.com",
+            "https://nitter.kareem.one"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chat-gpt",
+      "name": "ChatGPT",
+      "hosts": [
+        "chatgpt.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bluesky",
+      "name": "Bluesky",
+      "hosts": [
+        "bsky.app"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reddit",
+      "name": "Reddit",
+      "hosts": [
+        "www.reddit.com",
+        "old.reddit.com",
+        "np.reddit.com",
+        "new.reddit.com",
+        "amp.reddit.com",
+        "reddit.com"
+      ],
+      "hostPatterns": [
+        "^((i|(external-)?preview)\\.)?redd\\.it$"
+      ],
+      "frontends": [
+        {
+          "id": "redlib",
+          "name": "Redlib",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://safereddit.com",
+            "https://redlib.catsarch.com",
+            "https://red.artemislena.eu",
+            "https://redlib.cow.rip",
+            "https://redlib.privadency.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tumblr",
+      "name": "Tumblr",
+      "hosts": [
+        "media.tumblr.com",
+        "assets.tumblr.com",
+        "static.tumblr.com",
+        "tumblr.com"
+      ],
+      "hostPatterns": [
+        "^[0-9]+\\.media\\.tumblr\\.com$",
+        "^(www\\.)?([a-zA-Z0-9-]+)\\.tumblr.com$"
+      ],
+      "frontends": [
+        {
+          "id": "priviblur",
+          "name": "Priviblur",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://pb.bloat.cat",
+            "https://tb.opnxng.com",
+            "https://priviblur.pussthecat.org",
+            "https://priviblur.thebunny.zone",
+            "https://priviblur.canine.tools",
+            "https://pb.cleberg.net",
+            "https://tumblr.nerdvpn.de",
+            "https://pb.proxik.cloud",
+            "https://priviblur.privadency.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "twitch",
+      "name": "Twitch",
+      "hosts": [
+        "www.twitch.tv",
+        "www.twitch.com",
+        "clips.twitch.tv",
+        "clips.twitch.com",
+        "twitch.tv",
+        "twitch.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "safetwitch",
+          "name": "SafeTwitch",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://safetwitch.drgns.space",
+            "https://ttv.vern.cc",
+            "https://twitch.sudovanilla.org",
+            "https://safetwitch.ducks.party",
+            "https://safetwitch.nogafam.fr",
+            "https://safetwitch.privacyredirect.com",
+            "https://safetwitch.darkness.services",
+            "https://safetwitch.4o1x5.dev",
+            "https://safetwitch.adminforge.de",
+            "https://twitch.blitzw.in",
+            "https://safetwitch.canine.tools",
+            "https://safetwitch.privadency.com"
+          ]
+        },
+        {
+          "id": "twineo",
+          "name": "Twineo",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://twineo.exozy.me",
+            "https://twineo.drgns.space"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tiktok",
+      "name": "TikTok",
+      "hosts": [
+        "www.tiktok.com",
+        "tiktok.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "proxi-tok",
+          "name": "ProxiTok",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://proxitok.pabloferreiro.es",
+            "https://proxitok.pussthecat.org",
+            "https://tok.habedieeh.re",
+            "https://proxitok.privacydev.net",
+            "https://tok.artemislena.eu",
+            "https://tok.adminforge.de",
+            "https://cringe.whatever.social",
+            "https://proxitok.lunar.icu",
+            "https://proxitok.privacy.com.de",
+            "https://cringe.seitan-ayoub.lol",
+            "https://tt.opnxng.com",
+            "https://tiktok.wpme.pl",
+            "https://proxitok.r4fo.com",
+            "https://proxitok.belloworld.it"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "instagram",
+      "name": "Instagram",
+      "hosts": [
+        "www.instagram.com",
+        "instagram.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "kittygram",
+          "name": "kittygram",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://kittygr.am",
+            "https://kittygram.irelephant.net",
+            "https://kittygram.nexussfan.cz",
+            "https://kittygram.kareem.one",
+            "https://kg.lus.lu",
+            "https://kg.meowing.de",
+            "https://kittygram.nadeko.net",
+            "https://kittygram.pussthecat.org"
+          ]
+        },
+        {
+          "id": "proxigram",
+          "name": "Proxigram",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://ig.opnxng.com",
+            "https://proxigram.lunar.icu",
+            "https://gram.whatever.social",
+            "https://ig.snine.nl",
+            "https://proxigram.privacyredirect.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "imdb",
+      "name": "IMDb",
+      "hosts": [
+        "www.imdb.com",
+        "m.imdb.com",
+        "imdb.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "libremdb",
+          "name": "libremdb",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://libremdb.iket.me",
+            "https://libremdb.pussthecat.org",
+            "https://ld.vern.cc",
+            "https://binge.whatever.social",
+            "https://libremdb.lunar.icu",
+            "https://libremdb.jeikobu.net",
+            "https://lmdb.hostux.net",
+            "https://binge.whateveritworks.org",
+            "https://libremdb.nerdyfam.tech",
+            "https://libremdb.tux.pizza",
+            "https://libremdb.frontendfriendly.xyz",
+            "https://d.opnxng.com",
+            "https://libremdb.r4fo.com",
+            "https://libremdb.privacydev.net",
+            "https://libremdb.ducks.party",
+            "https://lmdb.ngn.tf",
+            "https://lmdb.bloat.cat",
+            "https://libremdb.darkness.services",
+            "https://libremdb.hyperreal.coffee",
+            "https://ld.ca.zorby.top",
+            "https://imdb.nerdvpn.de",
+            "https://libremdb.canine.tools",
+            "https://libremdb-fly.fly.dev"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bilibili",
+      "name": "Bilibili",
+      "hosts": [
+        "www.bilibili.com",
+        "space.bilibili.com",
+        "bilibili.com",
+        "b23.tv"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pixiv",
+      "name": "Pixiv",
+      "hosts": [
+        "www.pixiv.net",
+        "pixiv.net"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "lite-xiv",
+          "name": "LiteXiv",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://litexiv.qunn.link",
+            "https://litexiv.bloat.cat",
+            "https://lxv.dc09.ru",
+            "https://lite.ext4.xyz"
+          ]
+        },
+        {
+          "id": "pixiv-fe",
+          "name": "PixivFE",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://pixivfe.exozy.me",
+            "https://pixivfe.drgns.space",
+            "https://pixivfe.ducks.party",
+            "https://pixiv.perennialte.ch",
+            "https://pixivfe.darkness.services",
+            "https://pixivfe.thebunny.zone"
+          ]
+        },
+        {
+          "id": "vixipy",
+          "name": "Vixipy",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://vx.maid.zone",
+            "https://vx2.maid.zone"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fandom",
+      "name": "Fandom",
+      "hosts": [],
+      "hostPatterns": [
+        "^([a-zA-Z0-9-]+\\.)?(fandom|wikia)\\.com$"
+      ],
+      "frontends": [
+        {
+          "id": "breeze-wiki",
+          "name": "BreezeWiki",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://breezewiki.com",
+            "https://antifandom.com",
+            "https://breezewiki.pussthecat.org",
+            "https://breeze.mint.lgbt",
+            "https://z.opnxng.com",
+            "https://breezewiki.moonshadow.dev",
+            "https://breezewiki.woodland.cafe",
+            "https://breezewiki.nadeko.net",
+            "https://fandom.reallyaweso.me",
+            "https://breezewiki.r4fo.com",
+            "https://bw.artemislena.eu",
+            "https://breeze.hostux.net",
+            "https://breezewiki.private.coffee"
+          ]
+        },
+        {
+          "id": "phantom",
+          "name": "Phantom",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://phantom.nadeko.net"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "imgur",
+      "name": "Imgur",
+      "hosts": [],
+      "hostPatterns": [
+        "^([im]\\.)?(stack\\.)?imgur\\.(com|io)$"
+      ],
+      "frontends": [
+        {
+          "id": "rimgo",
+          "name": "rimgo",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://ri.bcow.xyz",
+            "https://rimgo.pussthecat.org",
+            "https://imgur.artemislena.eu",
+            "https://rimgo.hostux.net",
+            "https://ri.nadeko.net",
+            "https://rimgo.nohost.network",
+            "https://rimgo.catsarch.com",
+            "https://rimgo.ducks.party",
+            "https://rmgur.com",
+            "https://rimgo.privacyredirect.com",
+            "https://rimgo.reallyaweso.me",
+            "https://rimgo.bloat.cat",
+            "https://rimgo.darkness.services",
+            "https://rimgo.4o1x5.dev",
+            "https://rimgo.aketawi.space",
+            "https://imgur.nerdvpn.de",
+            "https://rimgo.canine.tools",
+            "https://rimgo.astrial.org",
+            "https://r.opnxng.com",
+            "https://rg.kuuro.net",
+            "https://rimgo.proxik.cloud",
+            "https://anaimg.starbeamrainbowlabs.com",
+            "https://rimgo.wuemeli.com",
+            "https://rimgo.manerakai.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pinterest",
+      "name": "Pinterest",
+      "hosts": [
+        "i.pinimg.com"
+      ],
+      "hostPatterns": [
+        "^((?!api\\.)[a-zA-Z]+\\.)?pinterest\\.com$"
+      ],
+      "frontends": [
+        {
+          "id": "binternet",
+          "name": "Binternet",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://binternet.revvy.de",
+            "https://binternet.darkness.services",
+            "https://bn.bloat.cat",
+            "https://bn.opnxng.com",
+            "https://binternet.ducks.party",
+            "https://binternet.4o1x5.dev",
+            "https://binternet.privacyredirect.com",
+            "https://binternet.lunar.icu",
+            "https://binternet.canine.tools",
+            "https://bn.kuuro.net",
+            "https://binternet.privadency.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "soundcloud",
+      "name": "SoundCloud",
+      "hosts": [
+        "soundcloud.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "soundcloak",
+          "name": "soundcloak",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://sc1.maid.zone",
+            "https://sc.bloat.cat",
+            "https://sc.opnxng.com",
+            "https://sc2.bloat.cat",
+            "https://soundcloak.tijn.dev",
+            "https://sc2.maid.zone",
+            "https://soundcloak.thoughtcrime.st",
+            "https://sc3.maid.zone",
+            "https://sc.monochrome.tf",
+            "https://soundcloak.nadeko.net"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bandcamp",
+      "name": "Bandcamp",
+      "hosts": [
+        "f4.bcbits.com",
+        "t4.bcbits.com"
+      ],
+      "hostPatterns": [
+        "^([a-zA-Z0-9-]+\\.)?bandcamp\\.com$"
+      ],
+      "frontends": [
+        {
+          "id": "tent",
+          "name": "Tent",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://bandcamp.lurkmore.com",
+            "https://tent.bloat.cat",
+            "https://tent.canine.tools",
+            "https://tent.deep-swarm.xyz",
+            "https://tent.lab8.cz",
+            "https://tent.nbh.ax",
+            "https://tent.private.coffee",
+            "https://tent.sny.sh",
+            "https://tn.dc09.ru",
+            "https://tn.maid.zone",
+            "https://tn.vern.cc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tekstowo",
+      "name": "Tekstowo.pl",
+      "hosts": [
+        "www.tekstowo.pl",
+        "tekstowo.pl"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "genius",
+      "name": "Genius",
+      "hosts": [
+        "www.genius.com",
+        "genius.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "dumb",
+          "name": "Dumb",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://dm.vern.cc",
+            "https://sing.whatever.social",
+            "https://dumb.lunar.icu",
+            "https://dumb.privacydev.net",
+            "https://dumb.ducks.party",
+            "https://dumb.privacyfucking.rocks",
+            "https://dumb.hyperreal.coffee",
+            "https://dumb.bloat.cat",
+            "https://dumb.jeikobu.net",
+            "https://dumb.canine.tools",
+            "https://lyr.dc09.ru",
+            "https://db.kuuro.net",
+            "https://genius.fsky.io",
+            "https://dumb.artemislena.eu"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "medium",
+      "name": "Medium",
+      "hosts": [
+        "towardsdatascience.com",
+        "uxdesign.cc",
+        "uxplanet.org",
+        "betterprogramming.pub",
+        "aninjusticemag.com",
+        "betterhumans.pub",
+        "psiloveyou.xyz",
+        "entrepreneurshandbook.co",
+        "blog.coinbase.com",
+        "levelup.gitconnected.com",
+        "javascript.plainenglish.io",
+        "blog.bitsrc.io",
+        "itnext.io",
+        "codeburst.io",
+        "infosecwriteups.com",
+        "blog.devgenius.io",
+        "writingcooperative.com",
+        "proandroiddev.com",
+        "redfin.engineering"
+      ],
+      "hostPatterns": [
+        "^([a-zA-Z0-9-]+\\.)?medium\\.com$"
+      ],
+      "frontends": [
+        {
+          "id": "lib-medium",
+          "name": "LibMedium",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://libmedium.batsense.net",
+            "https://md.vern.cc",
+            "https://medium.hostux.net",
+            "https://r.sudovanilla.org",
+            "https://libmedium.ducks.party"
+          ]
+        },
+        {
+          "id": "scribe",
+          "name": "Scribe",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://scribe.nixnet.services",
+            "https://scribe.rawbit.ninja",
+            "https://sc.vern.cc",
+            "https://m.opnxng.com",
+            "https://scribe.r4fo.com",
+            "https://scribe.privacyredirect.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quora",
+      "name": "Quora",
+      "hosts": [],
+      "hostPatterns": [
+        "^([a-zA-Z0-9-]+\\.)*quora\\.com$"
+      ],
+      "frontends": [
+        {
+          "id": "quetre",
+          "name": "Quetre",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://quetre.iket.me",
+            "https://qr.vern.cc",
+            "https://quetre.pussthecat.org",
+            "https://quetre.tokhmi.xyz",
+            "https://quetre.privacydev.net",
+            "https://ask.habedieeh.re",
+            "https://quetre.blackdrgn.nl",
+            "https://quetre.lunar.icu",
+            "https://q.opnxng.com",
+            "https://ask.sudovanilla.org",
+            "https://quetre.drgns.space",
+            "https://quetre.r4fo.com",
+            "https://quetre.ducks.party",
+            "https://quetre.nadeko.net",
+            "https://quetre.private.coffee",
+            "https://quetre.canine.tools",
+            "https://qt.bloat.cat",
+            "https://quetre.jeikobu.net",
+            "https://quetre.franklyflawless.org",
+            "https://q.307200.xyz",
+            "https://quora.nerdvpn.de",
+            "https://quetre.privacyredirect.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "hosts": [
+        "github.com",
+        "gist.github.com",
+        "raw.githubusercontent.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "gothub",
+          "name": "Gothub",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://gothub.lunar.icu",
+            "https://gothub.r4fo.com",
+            "https://gothub.dev.projectsegfau.lt",
+            "https://gothub.projectsegfau.lt",
+            "https://gothub.libre.tw",
+            "https://gothub.wuemeli.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab",
+      "hosts": [
+        "gitlab.com",
+        "gitlab.freedesktop.com",
+        "gitlab.archlinux.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "stack-overflow",
+      "name": "Stack Overflow",
+      "hosts": [],
+      "hostPatterns": [
+        "^(www\\.)?([a-zA-Z]+\\.)?stackoverflow\\.com$",
+        "^((?!(api|data|blog)\\.)[a-zA-Z0-9-]+\\.(meta\\.)?)?stackexchange\\.com$",
+        "^(www\\.)?([a-zA-Z]+\\.)?(askubuntu\\.com|mathoverflow\\.net|serverfault\\.com|stackapps\\.com|superuser\\.com)$"
+      ],
+      "frontends": [
+        {
+          "id": "anonymous-overflow",
+          "name": "AnonymousOverflow",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://code.whatever.social",
+            "https://ao.vern.cc",
+            "https://overflow.smnz.de",
+            "https://overflow.lunar.icu",
+            "https://overflow.adminforge.de",
+            "https://overflow.floppa.cloud",
+            "https://overflow.hostux.net",
+            "https://overflow.projectsegfau.lt",
+            "https://code.xbdm.fun",
+            "https://overflow.fascinated.cc",
+            "https://ao.bloat.cat",
+            "https://anonoverflow.frontendfriendly.xyz",
+            "https://ao.owo.si",
+            "https://overflow.datura.network",
+            "https://overflow.freedit.eu",
+            "https://ao.rootdo.com",
+            "https://anonoverflow.moonshadow.dev",
+            "https://o.sudovanilla.org",
+            "https://anonymousoverflow.privacyfucking.rocks",
+            "https://exchange.seitan-ayoub.lol",
+            "https://overflow.r4fo.com",
+            "https://overflow.ducks.party",
+            "https://ao.ngn.tf",
+            "https://overflow.snine.nl",
+            "https://anonymousoverflow.privacyredirect.com",
+            "https://soflow.nerdvpn.de",
+            "https://overflow.einfachzocken.eu",
+            "https://anonymousoverflow.catsarch.com",
+            "https://overflow.darkness.services",
+            "https://anonflow.aketawi.space",
+            "https://ao.bunk.lol",
+            "https://o.iii.st",
+            "https://overflow.canine.tools",
+            "https://a.opnxng.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reuters",
+      "name": "Reuters",
+      "hosts": [
+        "www.reuters.com",
+        "reuters.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "neuters",
+          "name": "Neuters",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://neuters.de",
+            "https://nu.vern.cc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "snopes",
+      "name": "Snopes",
+      "hosts": [
+        "www.snopes.com",
+        "snopes.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "suds",
+          "name": "Suds",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://sd.vern.cc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ifunny",
+      "name": "iFunny",
+      "hosts": [
+        "www.ifunny.co",
+        "ifunny.co"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tenor",
+      "name": "Tenor",
+      "hosts": [
+        "www.tenor.com",
+        "tenor.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "mezzo",
+          "name": "Mezzo",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://tenor.fsky.io",
+            "https://tenor.nadeko.net"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "knowyourmeme",
+      "name": "KnowYourMeme",
+      "hosts": [
+        "www.knowyourmeme.com",
+        "knowyourmeme.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "urban-dictionary",
+      "name": "Urban Dictionary",
+      "hosts": [
+        "www.urbandictionary.com",
+        "urbandictionary.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "rural-dictionary",
+          "name": "Rural Dictionary",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://rd.vern.cc",
+            "https://rd.bloat.cat"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "goodreads",
+      "name": "Goodreads",
+      "hosts": [
+        "www.goodreads.com",
+        "goodreads.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "biblio-reads",
+          "name": "BiblioReads",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://biblioreads.eu.org",
+            "https://biblioreads.vercel.app",
+            "https://biblioreads.mooo.com",
+            "https://bl.vern.cc",
+            "https://biblioreads.lunar.icu",
+            "https://read.whateveritworks.org",
+            "https://biblioreads.privacyfucking.rocks",
+            "https://read.seitan-ayoub.lol",
+            "https://read.freedit.eu",
+            "https://biblioreads.ducks.party",
+            "https://biblioreads.snine.nl",
+            "https://biblioreads.privacyredirect.com",
+            "https://reads.nezumi.party",
+            "https://br.bloat.cat",
+            "https://biblioreads.canine.tools",
+            "https://biblioreads.franklyflawless.org"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wolfram-alpha",
+      "name": "Wolfram Alpha",
+      "hosts": [
+        "www.wolframalpha.com",
+        "wolframalpha.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "instructables",
+      "name": "Instructables",
+      "hosts": [
+        "www.instructables.com",
+        "instructables.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wikipedia",
+      "name": "Wikipedia",
+      "hosts": [],
+      "hostPatterns": [
+        "^([a-z]+\\.)*wikipedia\\.org$"
+      ],
+      "frontends": [
+        {
+          "id": "wikiless",
+          "name": "Wikiless",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://wiki.froth.zone",
+            "https://wikiless.northboot.xyz",
+            "https://wikiless.tiekoetter.com",
+            "https://wl.vern.cc",
+            "https://wikiless.rawbit.ninja",
+            "https://wikiless.funami.tech",
+            "https://wiki.adminforge.de",
+            "https://wiki.owo.si",
+            "https://w.sneed.network",
+            "https://wikiless.r4fo.com",
+            "https://wiki.seitan-ayoub.lol"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wayback-machine",
+      "name": "Wayback Machine",
+      "hosts": [
+        "web.archive.org"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pastebin",
+      "name": "Pastebin",
+      "hosts": [
+        "pastebin.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "name": "Search",
+      "hosts": [
+        "libredirect.github.io"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "searx",
+          "name": "SearX",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://search.stinpriza.org",
+            "https://searx.dresden.network",
+            "https://searx.gnu.style",
+            "https://searx.mastodontech.de",
+            "https://searx.mxchange.org",
+            "https://searx.nixnet.services",
+            "https://searx.roflcopter.fr",
+            "https://searx.ru",
+            "https://searx.zapashcanon.fr"
+          ]
+        },
+        {
+          "id": "whoogle",
+          "name": "Whoogle",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://search.garudalinux.org",
+            "https://whoogle.privacydev.net",
+            "https://whoogle.lunar.icu"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "search-1",
+      "name": "Search (additional hosts)",
+      "hosts": [
+        "www.google.com",
+        "google.com",
+        "www.bing.com",
+        "bing.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "translate",
+      "name": "Translate",
+      "hosts": [],
+      "hostPatterns": [
+        "^translate\\.google(\\.[a-z]{2,3}){1,2}$"
+      ],
+      "frontends": [
+        {
+          "id": "mozhi",
+          "name": "Mozhi",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://mozhi.aryak.me",
+            "https://translate.projectsegfau.lt",
+            "https://translate.nerdvpn.de",
+            "https://mozhi.ducks.party",
+            "https://mozhi.pussthecat.org",
+            "https://mozhi.adminforge.de",
+            "https://translate.privacyredirect.com",
+            "https://mozhi.canine.tools",
+            "https://mzh.dc09.xyz",
+            "https://mozhi.bloat.cat",
+            "https://mozhi.catsarch.com"
+          ]
+        },
+        {
+          "id": "simply-translate",
+          "name": "SimplyTranslate",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://simplytranslate.org",
+            "https://st.adast.dk",
+            "https://simplytranslate.ducks.party",
+            "https://simplytranslate.aketawi.space"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "google-lens",
+      "name": "Google Lens",
+      "hosts": [],
+      "hostPatterns": [
+        "^lens\\.google(\\.[a-z]{2,3}){1,2}$"
+      ],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "maps",
+      "name": "Maps",
+      "hosts": [],
+      "hostPatterns": [
+        "^(www\\.)?maps\\.google(\\.[a-z]{2,3}){1,2}$",
+        "^(www\\.)?google(\\.[a-z]{2,3}){1,2}$"
+      ],
+      "frontends": [
+        {
+          "id": "osm",
+          "name": "OpenStreetMap",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://www.openstreetmap.org"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "send-files",
+      "name": "Send Files",
+      "hosts": [
+        "send.firefox.com",
+        "sendfiles.online"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "send",
+          "name": "Send",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://send.vis.ee",
+            "https://send.mni.li",
+            "https://send.monks.tools",
+            "https://send.boblorange.net",
+            "https://send.aurorabilisim.com",
+            "https://send.artemislena.eu",
+            "https://fileupload.ggc-project.de",
+            "https://drop.chapril.org",
+            "https://send.jeugdhulp.be",
+            "https://files.psu.ru",
+            "https://s.opnxng.com",
+            "https://send.cyberjake.xyz",
+            "https://send.kokomo.cloud",
+            "https://send.adminforge.de",
+            "https://send.turingpoint.de",
+            "https://send.aslaets.be",
+            "https://send.codespace.cz",
+            "https://upload.nolog.cz",
+            "https://ch.skysend.ch",
+            "https://de.skysend.ch",
+            "https://allthefiles.net",
+            "https://send.canine.tools",
+            "https://send.aezafiles.net",
+            "https://send.sdad.pro",
+            "https://send.skylerszijjarto.com",
+            "https://send.richy.sh",
+            "https://send.majoenell.com",
+            "https://send.nog.community",
+            "https://send.hostnetwork.xyz"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ultimate-guitar",
+      "name": "Ultimate Guitar",
+      "hosts": [
+        "tabs.ultimate-guitar.com",
+        "www.ultimate-guitar.com",
+        "ultimate-guitar.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "baidu-tieba",
+      "name": "Baidu Tieba",
+      "hosts": [
+        "tieba.baidu.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "threads",
+      "name": "Threads",
+      "hosts": [
+        "www.threads.net",
+        "www.threads.com",
+        "threads.net",
+        "threads.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "deviant-art",
+      "name": "DeviantArt",
+      "hosts": [
+        "www.deviantart.com",
+        "deviantart.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "skunky-art",
+          "name": "SkunkyArt",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://sa.orehus.club",
+            "https://skunky.bloat.cat",
+            "https://skunkyart.lumaeris.com",
+            "https://art.bloat.cat",
+            "https://sa.dc09.ru",
+            "https://da.opnxng.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "geeks-for-geeks",
+      "name": "GeeksforGeeks",
+      "hosts": [
+        "www.geeksforgeeks.org",
+        "geeksforgeeks.org"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    },
+    {
+      "id": "coub",
+      "name": "Coub",
+      "hosts": [
+        "www.coub.com",
+        "coub.com"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "koub",
+          "name": "Koub",
+          "strategy": {
+            "type": "replace-origin"
+          },
+          "instances": [
+            "https://koub.bloat.cat",
+            "https://koub2.bloat.cat"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chefkoch",
+      "name": "Chefkoch",
+      "hosts": [
+        "www.chefkoch.de",
+        "chefkoch.de"
+      ],
+      "hostPatterns": [],
+      "frontends": [
+        {
+          "id": "original",
+          "name": "Original site",
+          "strategy": {
+            "type": "passthrough"
+          }
+        }
+      ]
+    }
+  ]
+}

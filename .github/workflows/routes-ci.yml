@@ -1,0 +1,39 @@
+name: Routes Tooling CI
+
+on:
+  pull_request:
+    paths:
+      - "tools/**"
+      - ".github/workflows/routes-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/**"
+      - ".github/workflows/routes-ci.yml"
+
+concurrency:
+  group: routes-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Format check
+        run: bun run format:check
