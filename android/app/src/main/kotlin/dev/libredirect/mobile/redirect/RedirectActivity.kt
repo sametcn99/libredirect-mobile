@@ -2,8 +2,8 @@ package dev.libredirect.mobile.redirect
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Patterns
 import android.util.Log
+import android.util.Patterns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
@@ -14,8 +14,8 @@ import dev.libredirect.mobile.core.routing.RoutingFailure
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.settings.SettingsRepository
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

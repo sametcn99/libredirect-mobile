@@ -112,8 +112,7 @@ class SettingsRepository(private val context: Context) {
 
     private fun decodeSet(raw: String?): Set<String> = decodeOrDefault(raw, emptySet())
 
-    private fun decodeStringMap(raw: String?): Map<String, String> =
-        decodeOrDefault(raw, emptyMap())
+    private fun decodeStringMap(raw: String?): Map<String, String> = decodeOrDefault(raw, emptyMap())
 
     private fun decodeInstanceSelections(raw: String?): Map<String, InstanceSelection> =
         decodeOrDefault(raw, emptyMap())

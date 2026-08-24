@@ -67,8 +67,8 @@ class ManifestRepository(
         }
 
         val raw = String(bundle.manifestBytes, Charsets.UTF_8)
-        val candidate = decodeRaw(raw)
-            ?: return RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+        val candidate =
+            decodeRaw(raw) ?: return RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
 
         if (candidate.schemaVersion != ManifestValidator.SUPPORTED_SCHEMA_VERSION) {
             return RefreshResult.Rejected(RefreshRejectionReason.UNSUPPORTED_SCHEMA_VERSION)
@@ -128,12 +128,13 @@ class ManifestRepository(
     private fun loadBaseManifest(): Manifest? = loadActiveFromDisk() ?: loadPreviousFromDisk() ?: loadBundled()
 
     private fun Manifest.withCustomRoutes(): Manifest {
-        val validCustomRoutes = buildList {
-            for (route in customServiceRepository.routes()) {
-                val candidate = copy(routes = routes + route)
-                if (ManifestValidator.validate(candidate).isEmpty()) add(route)
+        val validCustomRoutes =
+            buildList {
+                for (route in customServiceRepository.routes()) {
+                    val candidate = copy(routes = routes + route)
+                    if (ManifestValidator.validate(candidate).isEmpty()) add(route)
+                }
             }
-        }
         return if (validCustomRoutes.isEmpty()) this else copy(routes = routes + validCustomRoutes)
     }
 

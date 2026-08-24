@@ -87,7 +87,10 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Add a service")
-        Text("Use one hostname per line. A template is optional and supports {instance}, {path}, {query:name}, and {fragment}.")
+        Text(
+            "Use one hostname per line. A template is optional and supports " +
+                "{instance}, {path}, {query:name}, and {fragment}.",
+        )
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
@@ -129,7 +132,8 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
                 val cleanHosts = hosts.split(',', '\n', '\r', ' ', '\t').map(String::trim).filter(String::isNotEmpty)
                 val cleanInstance = instance.trim()
                 if (cleanName.isNotEmpty() && cleanHosts.isNotEmpty() && cleanInstance.isNotEmpty()) {
-                    val id = "custom-" + cleanName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-') + "-" + System.currentTimeMillis()
+                    val slug = cleanName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+                    val id = "custom-$slug-${System.currentTimeMillis()}"
                     val strategy =
                         template.trim().takeIf(String::isNotEmpty)?.let { output -> Strategy.Template(output) }
                             ?: Strategy.ReplaceOrigin
@@ -138,14 +142,15 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
                             id = id,
                             name = cleanName,
                             hosts = cleanHosts.distinct().map(String::lowercase),
-                            frontends = listOf(
-                                Frontend(
-                                    id = "custom-frontend",
-                                    name = frontendName.trim().ifEmpty { "Custom frontend" },
-                                    strategy = strategy,
-                                    instances = listOf(cleanInstance),
+                            frontends =
+                                listOf(
+                                    Frontend(
+                                        id = "custom-frontend",
+                                        name = frontendName.trim().ifEmpty { "Custom frontend" },
+                                        strategy = strategy,
+                                        instances = listOf(cleanInstance),
+                                    ),
                                 ),
-                            ),
                         ),
                     )
                     name = ""
