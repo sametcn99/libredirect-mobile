@@ -86,7 +86,9 @@ object ManifestValidator {
         pattern: String,
         errors: MutableList<String>,
     ) {
-        if (pattern.length > 256 || pattern.any { it.code < 0x20 } || !pattern.startsWith("^") || !pattern.endsWith("$")) {
+        val looksInvalid =
+            pattern.length > 256 || pattern.any { it.code < 0x20 } || !pattern.startsWith("^") || !pattern.endsWith("$")
+        if (looksInvalid) {
             errors += "route '$routeId' has an invalid host pattern"
             return
         }

@@ -27,7 +27,6 @@ sealed interface Strategy {
     data object Passthrough : Strategy
 
     companion object {
-        fun requiresInstances(strategy: Strategy): Boolean =
-            strategy is ReplaceOrigin || strategy is Template
+        fun requiresInstances(strategy: Strategy): Boolean = strategy is ReplaceOrigin || strategy is Template
     }
 }

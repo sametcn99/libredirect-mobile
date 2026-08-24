@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -29,8 +29,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.redirect.RedirectActivity
 import dev.libredirect.mobile.ui.MainUiState
@@ -55,7 +55,8 @@ fun HomeScreen(
         val rawLink = linkText.trim()
         val normalizedLink =
             when {
-                rawLink.startsWith("https://", ignoreCase = true) || rawLink.startsWith("http://", ignoreCase = true) -> rawLink
+                rawLink.startsWith("https://", ignoreCase = true) ||
+                    rawLink.startsWith("http://", ignoreCase = true) -> rawLink
                 rawLink.isNotEmpty() -> "https://$rawLink"
                 else -> ""
             }
@@ -164,14 +165,15 @@ fun HomeScreen(
                 ListItem(
                     headlineContent = { Text("Source code") },
                     supportingContent = { Text("GitHub · sametcn99/libredirect-mobile") },
-                    modifier = Modifier.clickable {
-                        context.startActivity(
-                            Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://github.com/sametcn99/libredirect-mobile"),
-                            ),
-                        )
-                    },
+                    modifier =
+                        Modifier.clickable {
+                            context.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://github.com/sametcn99/libredirect-mobile"),
+                                ),
+                            )
+                        },
                 )
             }
         }

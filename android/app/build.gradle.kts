@@ -14,12 +14,13 @@ plugins {
  * pipeline yet): CI only ever runs `assembleDebug`, so a missing local.properties
  * entry here just means an unsigned release build rather than a broken one.
  */
-val localProperties = Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use { load(it) }
+val localProperties =
+    Properties().apply {
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localPropertiesFile.inputStream().use { load(it) }
+        }
     }
-}
 val releaseStoreFile = localProperties.getProperty("RELEASE_STORE_FILE")?.let { rootProject.file(it) }
 
 android {

@@ -70,11 +70,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
-    fun setRoutingEnabled(enabled: Boolean) =
-        launchSafely { settingsRepository.setRoutingEnabled(enabled) }
+    fun setRoutingEnabled(enabled: Boolean) = launchSafely { settingsRepository.setRoutingEnabled(enabled) }
 
-    fun setSelectedBrowser(packageName: String?) =
-        launchSafely { settingsRepository.setSelectedBrowser(packageName) }
+    fun setSelectedBrowser(packageName: String?) = launchSafely { settingsRepository.setSelectedBrowser(packageName) }
 
     fun setRouteEnabled(
         routeId: String,
@@ -92,8 +90,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selection: InstanceSelection,
     ) = launchSafely { settingsRepository.setInstanceSelection(routeId, frontendId, selection) }
 
-    fun setExceptions(exceptions: List<ExceptionRule>) =
-        launchSafely { settingsRepository.setExceptions(exceptions) }
+    fun setExceptions(exceptions: List<ExceptionRule>) = launchSafely { settingsRepository.setExceptions(exceptions) }
 
     fun addCustomRoute(route: Route) {
         launchSafely {
@@ -101,11 +98,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (result.isSuccess) {
                 customRoutes = withContext(Dispatchers.IO) { manifestRepository.customRoutes() }
                 manifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
-                _uiState.value = buildUiState(settingsRepository.settings.first()).copy(customServiceMessage = "Custom service added")
+                val settings = settingsRepository.settings.first()
+                _uiState.value = buildUiState(settings).copy(customServiceMessage = "Custom service added")
             } else {
-                _uiState.value = _uiState.value.copy(
-                    customServiceMessage = result.exceptionOrNull()?.message ?: "Could not add custom service",
-                )
+                _uiState.value =
+                    _uiState.value.copy(
+                        customServiceMessage = result.exceptionOrNull()?.message ?: "Could not add custom service",
+                    )
             }
         }
     }
@@ -115,7 +114,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) { manifestRepository.removeCustomRoute(routeId) }
             customRoutes = withContext(Dispatchers.IO) { manifestRepository.customRoutes() }
             manifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
-            _uiState.value = buildUiState(settingsRepository.settings.first()).copy(customServiceMessage = "Custom service removed")
+            val settings = settingsRepository.settings.first()
+            _uiState.value = buildUiState(settings).copy(customServiceMessage = "Custom service removed")
         }
     }
 

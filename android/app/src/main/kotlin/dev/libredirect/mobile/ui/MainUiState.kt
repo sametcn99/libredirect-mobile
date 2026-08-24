@@ -1,8 +1,8 @@
 package dev.libredirect.mobile.ui
 
+import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
-import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.update.UpdateInfo
 
 data class MainUiState(

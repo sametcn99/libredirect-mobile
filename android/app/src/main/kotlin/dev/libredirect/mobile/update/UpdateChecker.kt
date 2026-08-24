@@ -58,7 +58,10 @@ class UpdateChecker(
             val body = response.body?.string()?.take(MAX_RESPONSE_CHARS) ?: return null
             val release = json.decodeFromString(GitHubRelease.serializer(), body)
             if (release.draft || release.prerelease) return null
-            return UpdateInfo(versionName = release.tagName.removePrefix("v").removePrefix("V"), releaseUrl = release.htmlUrl)
+            return UpdateInfo(
+                versionName = release.tagName.removePrefix("v").removePrefix("V"),
+                releaseUrl = release.htmlUrl,
+            )
         }
     }
 

@@ -17,10 +17,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.libredirect.mobile.ui.browser.BrowserPickerScreen
+import dev.libredirect.mobile.ui.custom.CustomServicesScreen
 import dev.libredirect.mobile.ui.exceptions.ExceptionsScreen
 import dev.libredirect.mobile.ui.home.HomeScreen
 import dev.libredirect.mobile.ui.service.ServiceDetailScreen
-import dev.libredirect.mobile.ui.custom.CustomServicesScreen
 
 private const val ROUTE_HOME = "home"
 private const val ROUTE_BROWSERS = "browsers"
@@ -92,7 +92,9 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                     ServiceDetailScreen(
                         service = service,
                         onBack = { navController.popBackStack() },
-                        onFrontendSelected = { frontendId -> viewModel.setSelectedFrontend(service.routeId, frontendId) },
+                        onFrontendSelected = { frontendId ->
+                            viewModel.setSelectedFrontend(service.routeId, frontendId)
+                        },
                         onInstanceSelectionChange = { frontendId, selection ->
                             viewModel.setInstanceSelection(service.routeId, frontendId, selection)
                         },
