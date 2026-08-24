@@ -9,6 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,6 +35,7 @@ private const val ROUTE_CUSTOM_SERVICES = "custom-services"
 fun AppNavHost(navController: NavHostController = rememberNavController()) {
     val viewModel: MainViewModel = viewModel()
     val state by viewModel.uiState.collectAsState()
+    val currentState by rememberUpdatedState(state)
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.errorMessage) {
@@ -44,11 +46,11 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(navController = navController, startDestination = ROUTE_HOME) {
-            addHomeDestination(navController, state, viewModel)
-            addBrowserDestination(navController, state, viewModel)
-            addExceptionsDestination(navController, state, viewModel)
-            addCustomServicesDestination(navController, state, viewModel)
-            addServiceDestination(navController, state, viewModel)
+            addHomeDestination(navController, { currentState }, viewModel)
+            addBrowserDestination(navController, { currentState }, viewModel)
+            addExceptionsDestination(navController, { currentState }, viewModel)
+            addCustomServicesDestination(navController, { currentState }, viewModel)
+            addServiceDestination(navController, { currentState }, viewModel)
         }
 
         SnackbarHost(
@@ -60,12 +62,12 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
 
 private fun NavGraphBuilder.addHomeDestination(
     navController: NavHostController,
-    state: MainUiState,
+    stateProvider: () -> MainUiState,
     viewModel: MainViewModel,
 ) {
     composable(ROUTE_HOME) {
         HomeScreen(
-            state = state,
+            state = stateProvider(),
             actions =
                 HomeActions(
                     onRoutingEnabledChange = viewModel::setRoutingEnabled,
@@ -82,10 +84,11 @@ private fun NavGraphBuilder.addHomeDestination(
 
 private fun NavGraphBuilder.addBrowserDestination(
     navController: NavHostController,
-    state: MainUiState,
+    stateProvider: () -> MainUiState,
     viewModel: MainViewModel,
 ) {
     composable(ROUTE_BROWSERS) {
+        val state = stateProvider()
         BrowserPickerScreen(
             browsers = viewModel.installedBrowsers(),
             selectedPackageName = state.selectedBrowserPackage,
@@ -100,10 +103,11 @@ private fun NavGraphBuilder.addBrowserDestination(
 
 private fun NavGraphBuilder.addExceptionsDestination(
     navController: NavHostController,
-    state: MainUiState,
+    stateProvider: () -> MainUiState,
     viewModel: MainViewModel,
 ) {
     composable(ROUTE_EXCEPTIONS) {
+        val state = stateProvider()
         ExceptionsScreen(
             exceptions = state.exceptions,
             onBack = navController::popBackStack,
@@ -114,10 +118,11 @@ private fun NavGraphBuilder.addExceptionsDestination(
 
 private fun NavGraphBuilder.addCustomServicesDestination(
     navController: NavHostController,
-    state: MainUiState,
+    stateProvider: () -> MainUiState,
     viewModel: MainViewModel,
 ) {
     composable(ROUTE_CUSTOM_SERVICES) {
+        val state = stateProvider()
         CustomServicesScreen(
             routes = state.customRoutes,
             message = state.customServiceMessage,
@@ -130,10 +135,11 @@ private fun NavGraphBuilder.addCustomServicesDestination(
 
 private fun NavGraphBuilder.addServiceDestination(
     navController: NavHostController,
-    state: MainUiState,
+    stateProvider: () -> MainUiState,
     viewModel: MainViewModel,
 ) {
     composable(ROUTE_SERVICE) { backStackEntry ->
+        val state = stateProvider()
         val routeId = backStackEntry.arguments?.getString("routeId")
         val service = state.services.find { it.routeId == routeId }
         if (service != null) {

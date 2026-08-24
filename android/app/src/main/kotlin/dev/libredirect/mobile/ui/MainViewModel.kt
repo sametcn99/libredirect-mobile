@@ -37,12 +37,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
     private var manifest: Manifest? = null
+    private var manifestErrorMessage: String? = null
     private var browsers: List<BrowserInfo> = emptyList()
     private var customRoutes: List<Route> = emptyList()
 
     init {
         launchSafely {
-            manifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
+            manifest = loadManifest()
             customRoutes = withContext(Dispatchers.IO) { manifestRepository.customRoutes() }
             browsers = withContext(Dispatchers.IO) { browserLauncher.installedBrowsers() }
             settingsRepository.settings.collect { settings ->
@@ -97,7 +98,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val result = withContext(Dispatchers.IO) { manifestRepository.addCustomRoute(route) }
             if (result.isSuccess) {
                 customRoutes = withContext(Dispatchers.IO) { manifestRepository.customRoutes() }
-                manifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
+                manifest = loadManifest()
                 val settings = settingsRepository.settings.first()
                 _uiState.value = buildUiState(settings).copy(customServiceMessage = "Custom service added")
             } else {
@@ -124,7 +125,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(refreshInProgress = true, lastRefreshMessage = null)
 
             val result = manifestRepository.refresh(ManifestEndpoints.MANIFEST_URL, ManifestEndpoints.SIGNATURE_URL)
-            manifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
+            manifest = loadManifest()
 
             val message =
                 when (result) {
@@ -174,6 +175,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedBrowserLabel = browserLabel,
             services = services,
             manifestRevision = currentManifest?.revision,
+            manifestErrorMessage = manifestErrorMessage,
             exceptions = settings.exceptions,
             refreshInProgress = _uiState.value.refreshInProgress,
             lastRefreshMessage = _uiState.value.lastRefreshMessage,
@@ -183,6 +185,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updateAvailable = _uiState.value.updateAvailable,
         )
     }
+
+    private suspend fun loadManifest(): Manifest? =
+        withContext(Dispatchers.IO) {
+            val loaded = manifestRepository.activeManifest()
+            manifestErrorMessage =
+                if (loaded == null) {
+                    manifestRepository.lastLoadError() ?: "Routing data is unavailable"
+                } else {
+                    null
+                }
+            loaded
+        }
 
     /**
      * Every ViewModel-initiated coroutine goes through here: an unexpected

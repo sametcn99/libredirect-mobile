@@ -62,6 +62,9 @@ jobs:
       - name: Build signed release APK
         run: ./gradlew assembleRelease
 
+      - name: Smoke test bundled manifest in release APK
+        run: ./gradlew :core:test -PreleaseApk="$PWD/app/build/outputs/apk/release/app-release.apk"
+
       - name: Rename APK to release asset name
         run: |
           mkdir -p release-out

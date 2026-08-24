@@ -10,9 +10,9 @@ plugins {
 }
 
 /**
- * Release signing is optional and machine-local (project plan has no CI release
- * pipeline yet): CI only ever runs `assembleDebug`, so a missing local.properties
- * entry here just means an unsigned release build rather than a broken one.
+ * Release signing is optional and machine-local. The release workflow provides
+ * the same properties from GitHub Secrets before building the signed artifact;
+ * a local build without local.properties remains an unsigned release build.
  */
 val localProperties =
     Properties().apply {

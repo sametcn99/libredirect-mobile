@@ -12,6 +12,7 @@ data class MainUiState(
     val selectedBrowserLabel: String = "System default",
     val services: List<ServiceUiState> = emptyList(),
     val manifestRevision: Int? = null,
+    val manifestErrorMessage: String? = null,
     val exceptions: List<ExceptionRule> = emptyList(),
     val refreshInProgress: Boolean = false,
     val lastRefreshMessage: String? = null,

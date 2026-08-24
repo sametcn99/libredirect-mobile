@@ -17,7 +17,13 @@ val lintFixTask = tasks.register("lintFix") {
     description = "Formats Kotlin sources and auto-corrects supported Detekt findings."
 }
 
+val releaseApkPath = providers.gradleProperty("releaseApk")
+
 subprojects {
+    tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+        releaseApkPath.orNull?.let { systemProperty("releaseApk", it) }
+    }
+
     plugins.withId("org.jlleitschuh.gradle.ktlint") {
         lintFixTask.configure {
             dependsOn(tasks.named("ktlintFormat"))

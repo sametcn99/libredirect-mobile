@@ -112,6 +112,7 @@ private fun HomeContent(
         modifier = Modifier.padding(input.contentPadding).fillMaxWidth(),
     ) {
         addUpdateItem(state.updateAvailable, input.context::openRelease)
+        addManifestErrorItem(state.manifestErrorMessage, actions.onRefreshClick)
         addLinkItem(input.linkText, input.linkError, input.onLinkChange, input.onOpenLink)
         addRoutingItem(state, actions.onRoutingEnabledChange)
         addBrowserItem(state, actions.onBrowserClick)
@@ -119,6 +120,26 @@ private fun HomeContent(
         addNavigationItems(state, actions)
         addRoutingDataItem(state, actions.onRefreshClick)
         addSourceCodeItem(input.context)
+    }
+}
+
+private fun LazyListScope.addManifestErrorItem(
+    error: String?,
+    onRetry: () -> Unit,
+) {
+    error ?: return
+    item {
+        ListItem(
+            headlineContent = { Text("Routing data unavailable") },
+            supportingContent = { Text(error) },
+            trailingContent = {
+                TextButton(onClick = onRetry) {
+                    Text("Retry")
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        )
+        HorizontalDivider()
     }
 }
 

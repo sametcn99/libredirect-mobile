@@ -1,6 +1,7 @@
 package dev.libredirect.mobile.manifest
 
 import android.content.Context
+import android.util.Log
 import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.ManifestJson
 import dev.libredirect.mobile.core.manifest.ManifestValidator
@@ -30,6 +31,9 @@ class ManifestRepository(
     @Volatile
     private var cached: Manifest? = null
 
+    @Volatile
+    private var lastLoadError: String? = null
+
     /** Never null in practice — the bundled asset is a build-time guarantee — but
      * callers must still treat a null result as "route nothing, pass everything through"
      * (fail-open) rather than crash, in case that guarantee is ever violated. */
@@ -39,6 +43,13 @@ class ManifestRepository(
         cached = manifest
         return manifest?.withCustomRoutes()
     }
+
+    /**
+     * Returns a diagnostic for the last failed load, if no valid manifest was
+     * available. The detail is intentionally kept here so the UI can explain
+     * an empty service list instead of silently treating it as a valid state.
+     */
+    fun lastLoadError(): String? = lastLoadError
 
     fun customRoutes(): List<Route> = customServiceRepository.routes()
 
@@ -115,23 +126,32 @@ class ManifestRepository(
             false
         }
 
-    private fun loadActiveFromDisk(): Manifest? = readManifestFile(activeFile())
+    private fun loadActiveFromDisk(): Manifest? = readManifestFile(activeFile(), "active.json")
 
-    private fun loadPreviousFromDisk(): Manifest? = readManifestFile(previousFile())
+    private fun loadPreviousFromDisk(): Manifest? = readManifestFile(previousFile(), "previous.json")
 
     private fun loadBundled(): Manifest? =
         try {
             val raw = context.assets.open(BUNDLED_ASSET_NAME).bufferedReader().use { it.readText() }
-            decodeAndValidate(raw)
-        } catch (_: IOException) {
+            decodeAndValidate(raw, BUNDLED_ASSET_NAME)
+        } catch (error: IOException) {
+            recordLoadFailure(BUNDLED_ASSET_NAME, "could not be read", error)
             null
-        } catch (_: SerializationException) {
-            null
-        } catch (_: IllegalArgumentException) {
+        } catch (error: RuntimeException) {
+            recordLoadFailure(BUNDLED_ASSET_NAME, "could not be loaded", error)
             null
         }
 
-    private fun loadBaseManifest(): Manifest? = loadActiveFromDisk() ?: loadPreviousFromDisk() ?: loadBundled()
+    private fun loadBaseManifest(): Manifest? {
+        lastLoadError = null
+        val manifest = loadActiveFromDisk() ?: loadPreviousFromDisk() ?: loadBundled()
+        if (manifest == null && lastLoadError == null) {
+            recordLoadFailure("manifest", "no valid manifest was found", null)
+        } else if (manifest != null) {
+            lastLoadError = null
+        }
+        return manifest
+    }
 
     private fun Manifest.withCustomRoutes(): Manifest {
         val validCustomRoutes =
@@ -144,15 +164,18 @@ class ManifestRepository(
         return if (validCustomRoutes.isEmpty()) this else copy(routes = routes + validCustomRoutes)
     }
 
-    private fun readManifestFile(file: File): Manifest? {
+    private fun readManifestFile(
+        file: File,
+        source: String,
+    ): Manifest? {
         if (!file.exists()) return null
         return try {
-            decodeAndValidate(file.readText())
-        } catch (_: IOException) {
+            decodeAndValidate(file.readText(), source)
+        } catch (error: IOException) {
+            recordLoadFailure(source, "could not be read", error)
             null
-        } catch (_: SerializationException) {
-            null
-        } catch (_: IllegalArgumentException) {
+        } catch (error: RuntimeException) {
+            recordLoadFailure(source, "could not be loaded", error)
             null
         }
     }
@@ -181,11 +204,27 @@ class ManifestRepository(
         }
     }
 
-    private fun decodeAndValidate(raw: String): Manifest? {
-        val manifest = decodeRaw(raw) ?: return null
+    private fun decodeAndValidate(
+        raw: String,
+        source: String,
+    ): Manifest? {
+        val manifest =
+            try {
+                ManifestJson.decode(raw)
+            } catch (error: SerializationException) {
+                recordLoadFailure(source, "JSON decode failed", error)
+                return null
+            } catch (error: IllegalArgumentException) {
+                recordLoadFailure(source, "JSON decode failed", error)
+                return null
+            } catch (error: RuntimeException) {
+                recordLoadFailure(source, "JSON decode failed", error)
+                return null
+            }
         return try {
             ManifestValidator.requireValid(manifest)
-        } catch (_: RuntimeException) {
+        } catch (error: RuntimeException) {
+            recordLoadFailure(source, "validation failed", error)
             null
         }
     }
@@ -201,6 +240,16 @@ class ManifestRepository(
             null
         }
 
+    private fun recordLoadFailure(
+        source: String,
+        reason: String,
+        error: Throwable?,
+    ) {
+        val detail = error?.message?.takeIf(String::isNotBlank) ?: error?.javaClass?.simpleName
+        lastLoadError = "$source: $reason${detail?.let { " ($it)" } ?: ""}"
+        Log.e(TAG, "Manifest load failed: $lastLoadError", error)
+    }
+
     private fun manifestDir(): File = File(context.filesDir, "manifest").apply { mkdirs() }
 
     private fun activeFile(): File = File(manifestDir(), "active.json")
@@ -208,6 +257,7 @@ class ManifestRepository(
     private fun previousFile(): File = File(manifestDir(), "previous.json")
 
     private companion object {
+        const val TAG = "ManifestRepository"
         const val BUNDLED_ASSET_NAME = "routes.json"
     }
 }
