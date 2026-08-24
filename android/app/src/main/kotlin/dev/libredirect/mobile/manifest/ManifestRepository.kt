@@ -8,7 +8,6 @@ import dev.libredirect.mobile.core.manifest.ManifestValidator
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.RoutingContext
 import dev.libredirect.mobile.core.routing.UrlRouter
-import kotlinx.serialization.SerializationException
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -137,9 +136,6 @@ class ManifestRepository(
         } catch (error: IOException) {
             recordLoadFailure(BUNDLED_ASSET_NAME, "could not be read", error)
             null
-        } catch (error: RuntimeException) {
-            recordLoadFailure(BUNDLED_ASSET_NAME, "could not be loaded", error)
-            null
         }
 
     private fun loadBaseManifest(): Manifest? {
@@ -174,9 +170,6 @@ class ManifestRepository(
         } catch (error: IOException) {
             recordLoadFailure(source, "could not be read", error)
             null
-        } catch (error: RuntimeException) {
-            recordLoadFailure(source, "could not be loaded", error)
-            null
         }
     }
 
@@ -208,37 +201,19 @@ class ManifestRepository(
         raw: String,
         source: String,
     ): Manifest? {
-        val manifest =
-            try {
-                ManifestJson.decode(raw)
-            } catch (error: SerializationException) {
-                recordLoadFailure(source, "JSON decode failed", error)
-                return null
-            } catch (error: IllegalArgumentException) {
-                recordLoadFailure(source, "JSON decode failed", error)
-                return null
-            } catch (error: RuntimeException) {
-                recordLoadFailure(source, "JSON decode failed", error)
-                return null
-            }
-        return try {
-            ManifestValidator.requireValid(manifest)
-        } catch (error: RuntimeException) {
-            recordLoadFailure(source, "validation failed", error)
-            null
+        val decoded = runCatching { ManifestJson.decode(raw) }
+        val decodeError = decoded.exceptionOrNull()
+        if (decodeError != null) {
+            recordLoadFailure(source, "JSON decode failed", decodeError)
+            return null
         }
+
+        val validated = runCatching { ManifestValidator.requireValid(decoded.getOrThrow()) }
+        validated.exceptionOrNull()?.let { recordLoadFailure(source, "validation failed", it) }
+        return validated.getOrNull()
     }
 
-    private fun decodeRaw(raw: String): Manifest? =
-        try {
-            ManifestJson.decode(raw)
-        } catch (_: SerializationException) {
-            null
-        } catch (_: IllegalArgumentException) {
-            null
-        } catch (_: RuntimeException) {
-            null
-        }
+    private fun decodeRaw(raw: String): Manifest? = runCatching { ManifestJson.decode(raw) }.getOrNull()
 
     private fun recordLoadFailure(
         source: String,
