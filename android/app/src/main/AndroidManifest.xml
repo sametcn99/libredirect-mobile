@@ -39,7 +39,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
-            android:theme="@android:style/Theme.NoDisplay">
+            android:theme="@style/Theme.LibRedirectMobile.Redirect">
 
             <!-- General URL routing: an app sends an https/http link our way (ACTION_VIEW). -->
             <intent-filter android:label="@string/app_name">

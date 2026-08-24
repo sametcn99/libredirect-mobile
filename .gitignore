@@ -6,6 +6,9 @@ android/*/build/
 android/local.properties
 android/.cxx/
 android/captures/
+android/keystore/
+*.jks
+*.keystore
 *.apk
 *.aab
 *.ap_

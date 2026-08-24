@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,19 @@ plugins {
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
 }
+
+/**
+ * Release signing is optional and machine-local (project plan has no CI release
+ * pipeline yet): CI only ever runs `assembleDebug`, so a missing local.properties
+ * entry here just means an unsigned release build rather than a broken one.
+ */
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+val releaseStoreFile = localProperties.getProperty("RELEASE_STORE_FILE")?.let { rootProject.file(it) }
 
 android {
     namespace = "dev.libredirect.mobile"
@@ -21,6 +36,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null && releaseStoreFile.exists()) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -28,6 +54,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (releaseStoreFile != null && releaseStoreFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

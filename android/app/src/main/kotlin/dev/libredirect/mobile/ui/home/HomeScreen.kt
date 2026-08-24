@@ -16,6 +16,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -74,6 +76,18 @@ fun HomeScreen(
 
     Scaffold(topBar = { TopAppBar(title = { Text("LibRedirect Mobile") }) }) { padding ->
         LazyColumn(modifier = Modifier.padding(padding).fillMaxWidth()) {
+            state.updateAvailable?.let { update ->
+                item {
+                    UpdateAvailableRow(
+                        versionName = update.versionName,
+                        onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.releaseUrl)))
+                        },
+                    )
+                    HorizontalDivider()
+                }
+            }
+
             item {
                 LinkOpenRow(
                     value = linkText,
@@ -162,6 +176,19 @@ fun HomeScreen(
             }
         }
     }
+}
+
+@Composable
+private fun UpdateAvailableRow(
+    versionName: String,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text("Update available") },
+        supportingContent = { Text("Version $versionName - tap to view release") },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.clickable(onClick = onClick),
+    )
 }
 
 @Composable

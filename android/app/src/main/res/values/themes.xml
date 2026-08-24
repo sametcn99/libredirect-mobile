@@ -1,4 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.LibRedirectMobile" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      android:windowBackground is set explicitly (not left to the parent theme's default)
+      because this is what briefly shows through during Compose Navigation's transition
+      between screens, before the incoming screen has painted over it. Must be kept in sync
+      with the night variant in values-night/themes.xml, or that transition flashes the
+      wrong color even though Compose's own MaterialTheme (Theme.kt) already follows system
+      dark mode correctly.
+    -->
+    <style name="Theme.LibRedirectMobile" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFFFFBFE</item>
+    </style>
+
+    <!--
+      Unlike Theme.NoDisplay, this does not carry windowIsNoDisplay: that flag forces the
+      framework to require finish() to be called synchronously before onResume() completes,
+      which RedirectActivity cannot do since its routing work suspends onto Dispatchers.IO.
+      Translucent + no animation keeps it visually invisible without that constraint.
+    -->
+    <style name="Theme.LibRedirectMobile.Redirect" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
 </resources>

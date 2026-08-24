@@ -3,6 +3,7 @@ package dev.libredirect.mobile.ui
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.manifest.Route
+import dev.libredirect.mobile.update.UpdateInfo
 
 data class MainUiState(
     val loading: Boolean = true,
@@ -16,6 +17,8 @@ data class MainUiState(
     val lastRefreshMessage: String? = null,
     val customRoutes: List<Route> = emptyList(),
     val customServiceMessage: String? = null,
+    val errorMessage: String? = null,
+    val updateAvailable: UpdateInfo? = null,
 )
 
 data class ServiceUiState(

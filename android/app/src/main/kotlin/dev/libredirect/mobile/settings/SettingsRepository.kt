@@ -1,9 +1,11 @@
 package dev.libredirect.mobile.settings
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -17,7 +19,15 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private val Context.settingsDataStore by preferencesDataStore(name = "settings")
+/**
+ * A corrupted preferences file (partial write, disk error) otherwise throws
+ * from the Flow itself on every read with nothing downstream to catch it —
+ * resetting to empty preferences trades those saved settings for staying up.
+ */
+private val Context.settingsDataStore by preferencesDataStore(
+    name = "settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 /**
  * All structured values (maps, lists) are stored as JSON strings under a
