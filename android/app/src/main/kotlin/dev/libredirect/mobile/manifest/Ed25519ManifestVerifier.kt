@@ -1,5 +1,6 @@
 package dev.libredirect.mobile.manifest
 
+import dev.libredirect.mobile.manifest.Ed25519ManifestVerifier.PUBLIC_KEY_BASE64
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import java.util.Base64
@@ -28,19 +29,18 @@ object Ed25519ManifestVerifier : ManifestVerifier {
         signatureBytes: ByteArray,
     ): Boolean {
         val signature =
-            try {
+            runCatching {
                 // The fetched .sig file is base64 text and commonly ends with a
                 // trailing newline; the strict Basic decoder rejects that as-is.
                 Base64.getDecoder().decode(String(signatureBytes, Charsets.UTF_8).trim())
-            } catch (_: IllegalArgumentException) {
-                return false
-            }
-        if (signature.size != SIGNATURE_LENGTH_BYTES) return false
+            }.getOrNull()
 
-        val verifier = Ed25519Signer()
-        verifier.init(false, publicKey)
-        verifier.update(manifestBytes, 0, manifestBytes.size)
-        return verifier.verifySignature(signature)
+        return signature?.takeIf { it.size == SIGNATURE_LENGTH_BYTES }?.let { validSignature ->
+            Ed25519Signer().apply {
+                init(false, publicKey)
+                update(manifestBytes, 0, manifestBytes.size)
+            }.verifySignature(validSignature)
+        } ?: false
     }
 
     private const val SIGNATURE_LENGTH_BYTES = 64

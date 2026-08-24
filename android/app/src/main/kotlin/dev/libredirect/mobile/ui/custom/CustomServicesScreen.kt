@@ -31,6 +31,14 @@ import dev.libredirect.mobile.core.manifest.Frontend
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.manifest.Strategy
 
+private data class CustomServiceDraft(
+    val name: String = "",
+    val hosts: String = "",
+    val frontendName: String = "",
+    val instance: String = "",
+    val template: String = "",
+)
+
 @Composable
 fun CustomServicesScreen(
     routes: List<Route>,
@@ -76,11 +84,7 @@ fun CustomServicesScreen(
 
 @Composable
 private fun CustomServiceForm(onAdd: (Route) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var hosts by remember { mutableStateOf("") }
-    var frontendName by remember { mutableStateOf("") }
-    var instance by remember { mutableStateOf("") }
-    var template by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf(CustomServiceDraft()) }
 
     Column(
         modifier = Modifier.padding(16.dp),
@@ -91,78 +95,85 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
             "Use one hostname per line. A template is optional and supports " +
                 "{instance}, {path}, {query:name}, and {fragment}.",
         )
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Service name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = hosts,
-            onValueChange = { hosts = it },
-            label = { Text("Source hostnames") },
-            minLines = 2,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = frontendName,
-            onValueChange = { frontendName = it },
-            label = { Text("Frontend name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = instance,
-            onValueChange = { instance = it },
-            label = { Text("HTTPS instance origin") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = template,
-            onValueChange = { template = it },
-            label = { Text("Optional output template") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        CustomServiceFields(draft = draft, onDraftChange = { draft = it })
         Button(
             onClick = {
-                val cleanName = name.trim()
-                val cleanHosts = hosts.split(',', '\n', '\r', ' ', '\t').map(String::trim).filter(String::isNotEmpty)
-                val cleanInstance = instance.trim()
-                if (cleanName.isNotEmpty() && cleanHosts.isNotEmpty() && cleanInstance.isNotEmpty()) {
-                    val slug = cleanName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
-                    val id = "custom-$slug-${System.currentTimeMillis()}"
-                    val strategy =
-                        template.trim().takeIf(String::isNotEmpty)?.let { output -> Strategy.Template(output) }
-                            ?: Strategy.ReplaceOrigin
-                    onAdd(
-                        Route(
-                            id = id,
-                            name = cleanName,
-                            hosts = cleanHosts.distinct().map(String::lowercase),
-                            frontends =
-                                listOf(
-                                    Frontend(
-                                        id = "custom-frontend",
-                                        name = frontendName.trim().ifEmpty { "Custom frontend" },
-                                        strategy = strategy,
-                                        instances = listOf(cleanInstance),
-                                    ),
-                                ),
-                        ),
-                    )
-                    name = ""
-                    hosts = ""
-                    frontendName = ""
-                    instance = ""
-                    template = ""
+                draft.toRoute()?.let {
+                    onAdd(it)
+                    draft = CustomServiceDraft()
                 }
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Add service")
         }
+    }
+}
+
+@Composable
+private fun CustomServiceFields(
+    draft: CustomServiceDraft,
+    onDraftChange: (CustomServiceDraft) -> Unit,
+) {
+    OutlinedTextField(
+        value = draft.name,
+        onValueChange = { onDraftChange(draft.copy(name = it)) },
+        label = { Text("Service name") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = draft.hosts,
+        onValueChange = { onDraftChange(draft.copy(hosts = it)) },
+        label = { Text("Source hostnames") },
+        minLines = 2,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = draft.frontendName,
+        onValueChange = { onDraftChange(draft.copy(frontendName = it)) },
+        label = { Text("Frontend name") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = draft.instance,
+        onValueChange = { onDraftChange(draft.copy(instance = it)) },
+        label = { Text("HTTPS instance origin") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = draft.template,
+        onValueChange = { onDraftChange(draft.copy(template = it)) },
+        label = { Text("Optional output template") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private fun CustomServiceDraft.toRoute(): Route? {
+    val cleanName = name.trim()
+    val cleanHosts = hosts.split(',', '\n', '\r', ' ', '\t').map(String::trim).filter(String::isNotEmpty)
+    val cleanInstance = instance.trim()
+    return if (cleanName.isNotEmpty() && cleanHosts.isNotEmpty() && cleanInstance.isNotEmpty()) {
+        val slug = cleanName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+        val strategy = template.trim().takeIf(String::isNotEmpty)?.let(Strategy::Template) ?: Strategy.ReplaceOrigin
+        Route(
+            id = "custom-$slug-${System.currentTimeMillis()}",
+            name = cleanName,
+            hosts = cleanHosts.distinct().map(String::lowercase),
+            frontends =
+                listOf(
+                    Frontend(
+                        id = "custom-frontend",
+                        name = frontendName.trim().ifEmpty { "Custom frontend" },
+                        strategy = strategy,
+                        instances = listOf(cleanInstance),
+                    ),
+                ),
+        )
+    } else {
+        null
     }
 }

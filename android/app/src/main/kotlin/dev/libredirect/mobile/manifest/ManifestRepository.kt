@@ -44,12 +44,19 @@ class ManifestRepository(
 
     /** Adds a custom route only when it remains valid and does not shadow a built-in host/id. */
     fun addCustomRoute(route: Route): Result<Unit> {
-        val base = loadBaseManifest() ?: return Result.failure(IllegalStateException("No routing manifest available"))
-        val existing = base.routes + customServiceRepository.routes().filterNot { it.id == route.id }
-        val errors = ManifestValidator.validate(base.copy(routes = existing + route))
-        if (errors.isNotEmpty()) return Result.failure(IllegalArgumentException(errors.joinToString("; ")))
-        customServiceRepository.save(route)
-        return Result.success(Unit)
+        val base = loadBaseManifest()
+        return if (base == null) {
+            Result.failure(IllegalStateException("No routing manifest available"))
+        } else {
+            val existing = base.routes + customServiceRepository.routes().filterNot { it.id == route.id }
+            val errors = ManifestValidator.validate(base.copy(routes = existing + route))
+            if (errors.isNotEmpty()) {
+                Result.failure(IllegalArgumentException(errors.joinToString("; ")))
+            } else {
+                customServiceRepository.save(route)
+                Result.success(Unit)
+            }
+        }
     }
 
     fun removeCustomRoute(routeId: String) = customServiceRepository.delete(routeId)
@@ -58,42 +65,41 @@ class ManifestRepository(
         manifestUrl: String,
         signatureUrl: String,
     ): RefreshResult {
-        val bundle =
-            fetcher.fetchBundle(manifestUrl, signatureUrl)
-                ?: return RefreshResult.Rejected(RefreshRejectionReason.FETCH_FAILED)
-
-        if (!verifier.verify(bundle.manifestBytes, bundle.signatureBytes)) {
-            return RefreshResult.Rejected(RefreshRejectionReason.INVALID_SIGNATURE)
+        val bundle = fetcher.fetchBundle(manifestUrl, signatureUrl)
+        return if (bundle == null) {
+            RefreshResult.Rejected(RefreshRejectionReason.FETCH_FAILED)
+        } else if (!verifier.verify(bundle.manifestBytes, bundle.signatureBytes)) {
+            RefreshResult.Rejected(RefreshRejectionReason.INVALID_SIGNATURE)
+        } else {
+            refreshVerifiedBundle(bundle)
         }
+    }
 
-        val raw = String(bundle.manifestBytes, Charsets.UTF_8)
-        val candidate =
-            decodeRaw(raw) ?: return RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
-
-        if (candidate.schemaVersion != ManifestValidator.SUPPORTED_SCHEMA_VERSION) {
-            return RefreshResult.Rejected(RefreshRejectionReason.UNSUPPORTED_SCHEMA_VERSION)
+    private fun refreshVerifiedBundle(bundle: RemoteManifestBundle): RefreshResult {
+        val candidate = decodeRaw(String(bundle.manifestBytes, Charsets.UTF_8))
+        return when {
+            candidate == null -> RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+            candidate.schemaVersion != ManifestValidator.SUPPORTED_SCHEMA_VERSION ->
+                RefreshResult.Rejected(RefreshRejectionReason.UNSUPPORTED_SCHEMA_VERSION)
+            ManifestValidator.validate(candidate).isNotEmpty() ->
+                RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+            candidate.revision <= (activeManifest()?.revision ?: 0) -> RefreshResult.NotModified
+            !selfTest(candidate) -> RefreshResult.Rejected(RefreshRejectionReason.SELF_TEST_FAILED)
+            else -> activateCandidate(bundle.manifestBytes, candidate)
         }
-        if (ManifestValidator.validate(candidate).isNotEmpty()) {
-            return RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
-        }
+    }
 
-        val currentRevision = activeManifest()?.revision ?: 0
-        if (candidate.revision <= currentRevision) {
-            return RefreshResult.NotModified
-        }
-
-        if (!selfTest(candidate)) {
-            return RefreshResult.Rejected(RefreshRejectionReason.SELF_TEST_FAILED)
-        }
-
-        return try {
-            activateAtomically(bundle.manifestBytes)
+    private fun activateCandidate(
+        rawBytes: ByteArray,
+        candidate: Manifest,
+    ): RefreshResult =
+        try {
+            activateAtomically(rawBytes)
             cached = candidate
             RefreshResult.Activated(candidate.revision)
         } catch (_: IOException) {
             RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
         }
-    }
 
     /**
      * Best-effort smoke test: a manifest that fails to even construct a

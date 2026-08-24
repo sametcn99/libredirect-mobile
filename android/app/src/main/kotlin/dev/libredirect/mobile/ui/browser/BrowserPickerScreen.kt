@@ -40,7 +40,12 @@ fun BrowserPickerScreen(
             )
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).fillMaxWidth()) {
+        LazyColumn(
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxWidth(),
+        ) {
             item {
                 ListItem(
                     headlineContent = { Text("System default") },

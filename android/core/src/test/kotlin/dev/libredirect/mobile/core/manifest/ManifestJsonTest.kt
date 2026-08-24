@@ -5,64 +5,64 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
+private val ALL_STRATEGIES_MANIFEST =
+    """
+    {
+      "schemaVersion": 1,
+      "revision": 7,
+      "generatedAt": "2026-08-23T14:00:00Z",
+      "routes": [
+        {
+          "id": "youtube",
+          "name": "YouTube",
+          "hosts": ["youtube.com", "www.youtube.com"],
+          "frontends": [
+            {
+              "id": "invidious",
+              "name": "Invidious",
+              "strategy": { "type": "replace-origin" },
+              "instances": ["https://yewtu.be"]
+            },
+            {
+              "id": "official",
+              "name": "Official Site",
+              "strategy": { "type": "passthrough" }
+            }
+          ]
+        },
+        {
+          "id": "reddit",
+          "name": "Reddit",
+          "hosts": ["reddit.com"],
+          "frontends": [
+            {
+              "id": "redlib",
+              "name": "Redlib",
+              "strategy": { "type": "template", "output": "{instance}/search?q={query:q}" },
+              "instances": ["https://redlib.example.org"]
+            }
+          ]
+        },
+        {
+          "id": "some-service",
+          "name": "Some Service",
+          "hosts": ["some-service.example"],
+          "frontends": [
+            {
+              "id": "some-app",
+              "name": "Some App",
+              "strategy": { "type": "custom-scheme", "scheme": "someapp" }
+            }
+          ]
+        }
+      ]
+    }
+    """.trimIndent()
+
 class ManifestJsonTest {
     @Test
     fun `decodes a manifest covering all four strategies`() {
-        val raw =
-            """
-            {
-              "schemaVersion": 1,
-              "revision": 7,
-              "generatedAt": "2026-08-23T14:00:00Z",
-              "routes": [
-                {
-                  "id": "youtube",
-                  "name": "YouTube",
-                  "hosts": ["youtube.com", "www.youtube.com"],
-                  "frontends": [
-                    {
-                      "id": "invidious",
-                      "name": "Invidious",
-                      "strategy": { "type": "replace-origin" },
-                      "instances": ["https://yewtu.be"]
-                    },
-                    {
-                      "id": "official",
-                      "name": "Official Site",
-                      "strategy": { "type": "passthrough" }
-                    }
-                  ]
-                },
-                {
-                  "id": "reddit",
-                  "name": "Reddit",
-                  "hosts": ["reddit.com"],
-                  "frontends": [
-                    {
-                      "id": "redlib",
-                      "name": "Redlib",
-                      "strategy": { "type": "template", "output": "{instance}/search?q={query:q}" },
-                      "instances": ["https://redlib.example.org"]
-                    }
-                  ]
-                },
-                {
-                  "id": "some-service",
-                  "name": "Some Service",
-                  "hosts": ["some-service.example"],
-                  "frontends": [
-                    {
-                      "id": "some-app",
-                      "name": "Some App",
-                      "strategy": { "type": "custom-scheme", "scheme": "someapp" }
-                    }
-                  ]
-                }
-              ]
-            }
-            """.trimIndent()
-
-        val manifest = ManifestJson.decode(raw)
+        val manifest = ManifestJson.decode(ALL_STRATEGIES_MANIFEST)
 
         assertEquals(1, manifest.schemaVersion)
         assertEquals(7, manifest.revision)

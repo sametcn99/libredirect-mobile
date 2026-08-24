@@ -11,9 +11,9 @@ object AppVersion {
         candidate: String,
         current: String,
     ): Boolean {
-        val candidateParts = parse(candidate) ?: return false
-        val currentParts = parse(current) ?: return false
-        return compare(candidateParts, currentParts) > 0
+        val candidateParts = parse(candidate)
+        val currentParts = parse(current)
+        return candidateParts != null && currentParts != null && compare(candidateParts, currentParts) > 0
     }
 
     private fun parse(raw: String): List<Int>? {
@@ -23,9 +23,8 @@ object AppVersion {
                 .removePrefix("V")
                 .substringBefore('-')
                 .substringBefore('+')
-        if (cleaned.isEmpty()) return null
-        val segments = cleaned.split('.')
-        return segments.map { it.toIntOrNull() ?: return null }
+        val parsed = cleaned.takeIf(String::isNotEmpty)?.split('.')?.map { it.toIntOrNull() }
+        return parsed?.takeIf { segments -> segments.all { it != null } }?.mapNotNull { it }
     }
 
     private fun compare(

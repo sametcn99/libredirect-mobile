@@ -21,8 +21,8 @@ data class RemoteManifestBundle(
  */
 class RemoteManifestFetcher(
     private val client: OkHttpClient = defaultClient(),
-    private val maxManifestBytes: Long = 5L * 1024 * 1024,
-    private val maxSignatureBytes: Long = 4L * 1024,
+    private val maxManifestBytes: Long = DEFAULT_MAX_MANIFEST_BYTES,
+    private val maxSignatureBytes: Long = DEFAULT_MAX_SIGNATURE_BYTES,
 ) {
     suspend fun fetchBundle(
         manifestUrl: String,
@@ -37,25 +37,36 @@ class RemoteManifestFetcher(
     private fun fetchBytesBlocking(
         url: String,
         maxBytes: Long,
-    ): ByteArray? {
-        if (!url.startsWith("https://")) return null
-        return try {
+    ): ByteArray? =
+        if (!url.startsWith("https://")) {
+            null
+        } else {
+            fetchHttpsBytes(url, maxBytes)
+        }
+
+    private fun fetchHttpsBytes(
+        url: String,
+        maxBytes: Long,
+    ): ByteArray? =
+        try {
             client.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val body = response.body ?: return null
-                readUpTo(body.byteStream(), maxBytes)
+                readResponseBody(response, maxBytes)
             }
         } catch (_: IOException) {
             null
         }
-    }
+
+    private fun readResponseBody(
+        response: okhttp3.Response,
+        maxBytes: Long,
+    ): ByteArray? = if (response.isSuccessful) response.body?.let { readUpTo(it.byteStream(), maxBytes) } else null
 
     private fun readUpTo(
         stream: InputStream,
         limit: Long,
     ): ByteArray? {
         val out = ByteArrayOutputStream()
-        val chunk = ByteArray(8192)
+        val chunk = ByteArray(READ_CHUNK_SIZE)
         var total = 0L
         while (true) {
             val read = stream.read(chunk)
@@ -68,10 +79,16 @@ class RemoteManifestFetcher(
     }
 
     private companion object {
+        const val DEFAULT_MAX_MANIFEST_BYTES = 5L * 1024 * 1024
+        const val DEFAULT_MAX_SIGNATURE_BYTES = 4L * 1024
+        const val READ_CHUNK_SIZE = 8_192
+        const val DEFAULT_CONNECT_TIMEOUT_SECONDS = 10L
+        const val DEFAULT_READ_TIMEOUT_SECONDS = 15L
+
         fun defaultClient(): OkHttpClient =
             OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .build()
     }
 }

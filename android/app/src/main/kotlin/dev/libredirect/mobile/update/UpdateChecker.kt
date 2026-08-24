@@ -53,25 +53,36 @@ class UpdateChecker(
                 .url("https://api.github.com/repos/$owner/$repo/releases/latest")
                 .header("Accept", "application/vnd.github+json")
                 .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val body = response.body?.string()?.take(MAX_RESPONSE_CHARS) ?: return null
-            val release = json.decodeFromString(GitHubRelease.serializer(), body)
-            if (release.draft || release.prerelease) return null
-            return UpdateInfo(
+        return client.newCall(request).execute().use { response ->
+            parseResponse(response)
+        }
+    }
+
+    private fun parseResponse(response: okhttp3.Response): UpdateInfo? =
+        if (!response.isSuccessful) {
+            null
+        } else {
+            response.body?.string()?.take(MAX_RESPONSE_CHARS)?.let(::decodeRelease)
+        }
+
+    private fun decodeRelease(body: String): UpdateInfo? =
+        json.decodeFromString(GitHubRelease.serializer(), body).takeUnless {
+            it.draft || it.prerelease
+        }?.let { release ->
+            UpdateInfo(
                 versionName = release.tagName.removePrefix("v").removePrefix("V"),
                 releaseUrl = release.htmlUrl,
             )
         }
-    }
 
     private companion object {
         const val MAX_RESPONSE_CHARS = 200_000
+        const val DEFAULT_TIMEOUT_SECONDS = 8L
 
         fun defaultClient(): OkHttpClient =
             OkHttpClient.Builder()
-                .connectTimeout(8, TimeUnit.SECONDS)
-                .readTimeout(8, TimeUnit.SECONDS)
+                .connectTimeout(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .readTimeout(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .build()
     }
 }

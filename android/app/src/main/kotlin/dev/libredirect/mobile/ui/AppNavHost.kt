@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -19,6 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.libredirect.mobile.ui.browser.BrowserPickerScreen
 import dev.libredirect.mobile.ui.custom.CustomServicesScreen
 import dev.libredirect.mobile.ui.exceptions.ExceptionsScreen
+import dev.libredirect.mobile.ui.home.HomeActions
 import dev.libredirect.mobile.ui.home.HomeScreen
 import dev.libredirect.mobile.ui.service.ServiceDetailScreen
 
@@ -42,9 +44,30 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(navController = navController, startDestination = ROUTE_HOME) {
-            composable(ROUTE_HOME) {
-                HomeScreen(
-                    state = state,
+            addHomeDestination(navController, state, viewModel)
+            addBrowserDestination(navController, state, viewModel)
+            addExceptionsDestination(navController, state, viewModel)
+            addCustomServicesDestination(navController, state, viewModel)
+            addServiceDestination(navController, state, viewModel)
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
+}
+
+private fun NavGraphBuilder.addHomeDestination(
+    navController: NavHostController,
+    state: MainUiState,
+    viewModel: MainViewModel,
+) {
+    composable(ROUTE_HOME) {
+        HomeScreen(
+            state = state,
+            actions =
+                HomeActions(
                     onRoutingEnabledChange = viewModel::setRoutingEnabled,
                     onBrowserClick = { navController.navigate(ROUTE_BROWSERS) },
                     onServiceClick = { routeId -> navController.navigate("service/$routeId") },
@@ -52,60 +75,78 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                     onExceptionsClick = { navController.navigate(ROUTE_EXCEPTIONS) },
                     onRefreshClick = viewModel::refreshManifest,
                     onCustomServicesClick = { navController.navigate(ROUTE_CUSTOM_SERVICES) },
-                )
-            }
-
-            composable(ROUTE_BROWSERS) {
-                BrowserPickerScreen(
-                    browsers = viewModel.installedBrowsers(),
-                    selectedPackageName = state.selectedBrowserPackage,
-                    onBack = { navController.popBackStack() },
-                    onBrowserSelected = { packageName ->
-                        viewModel.setSelectedBrowser(packageName)
-                        navController.popBackStack()
-                    },
-                )
-            }
-
-            composable(ROUTE_EXCEPTIONS) {
-                ExceptionsScreen(
-                    exceptions = state.exceptions,
-                    onBack = { navController.popBackStack() },
-                    onExceptionsChange = viewModel::setExceptions,
-                )
-            }
-
-            composable(ROUTE_CUSTOM_SERVICES) {
-                CustomServicesScreen(
-                    routes = state.customRoutes,
-                    message = state.customServiceMessage,
-                    onBack = { navController.popBackStack() },
-                    onAdd = viewModel::addCustomRoute,
-                    onRemove = viewModel::removeCustomRoute,
-                )
-            }
-
-            composable(ROUTE_SERVICE) { backStackEntry ->
-                val routeId = backStackEntry.arguments?.getString("routeId")
-                val service = state.services.find { it.routeId == routeId }
-                if (service != null) {
-                    ServiceDetailScreen(
-                        service = service,
-                        onBack = { navController.popBackStack() },
-                        onFrontendSelected = { frontendId ->
-                            viewModel.setSelectedFrontend(service.routeId, frontendId)
-                        },
-                        onInstanceSelectionChange = { frontendId, selection ->
-                            viewModel.setInstanceSelection(service.routeId, frontendId, selection)
-                        },
-                    )
-                }
-            }
-        }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter),
+                ),
         )
+    }
+}
+
+private fun NavGraphBuilder.addBrowserDestination(
+    navController: NavHostController,
+    state: MainUiState,
+    viewModel: MainViewModel,
+) {
+    composable(ROUTE_BROWSERS) {
+        BrowserPickerScreen(
+            browsers = viewModel.installedBrowsers(),
+            selectedPackageName = state.selectedBrowserPackage,
+            onBack = navController::popBackStack,
+            onBrowserSelected = { packageName ->
+                viewModel.setSelectedBrowser(packageName)
+                navController.popBackStack()
+            },
+        )
+    }
+}
+
+private fun NavGraphBuilder.addExceptionsDestination(
+    navController: NavHostController,
+    state: MainUiState,
+    viewModel: MainViewModel,
+) {
+    composable(ROUTE_EXCEPTIONS) {
+        ExceptionsScreen(
+            exceptions = state.exceptions,
+            onBack = navController::popBackStack,
+            onExceptionsChange = viewModel::setExceptions,
+        )
+    }
+}
+
+private fun NavGraphBuilder.addCustomServicesDestination(
+    navController: NavHostController,
+    state: MainUiState,
+    viewModel: MainViewModel,
+) {
+    composable(ROUTE_CUSTOM_SERVICES) {
+        CustomServicesScreen(
+            routes = state.customRoutes,
+            message = state.customServiceMessage,
+            onBack = navController::popBackStack,
+            onAdd = viewModel::addCustomRoute,
+            onRemove = viewModel::removeCustomRoute,
+        )
+    }
+}
+
+private fun NavGraphBuilder.addServiceDestination(
+    navController: NavHostController,
+    state: MainUiState,
+    viewModel: MainViewModel,
+) {
+    composable(ROUTE_SERVICE) { backStackEntry ->
+        val routeId = backStackEntry.arguments?.getString("routeId")
+        val service = state.services.find { it.routeId == routeId }
+        if (service != null) {
+            ServiceDetailScreen(
+                service = service,
+                onBack = navController::popBackStack,
+                onFrontendSelected = { frontendId ->
+                    viewModel.setSelectedFrontend(service.routeId, frontendId)
+                },
+                onInstanceSelectionChange = { frontendId, selection ->
+                    viewModel.setInstanceSelection(service.routeId, frontendId, selection)
+                },
+            )
+        }
     }
 }

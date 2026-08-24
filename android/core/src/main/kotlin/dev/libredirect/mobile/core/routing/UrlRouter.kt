@@ -18,34 +18,33 @@ class UrlRouter(
     override fun resolve(
         input: String,
         context: RoutingContext,
-    ): RoutingResult {
+    ): RoutingResult =
         if (input.length > UrlValidation.MAX_INPUT_LENGTH) {
-            return RoutingResult.Failure(input, RoutingFailure.MALFORMED_URL)
-        }
-        val scheme =
-            UrlParser.parseScheme(input)
-                ?: return RoutingResult.Failure(input, RoutingFailure.MALFORMED_URL)
-
-        if (scheme !in UrlValidation.ALLOWED_INPUT_SCHEMES) {
-            return RoutingResult.Failure(input, RoutingFailure.UNSUPPORTED_SCHEME)
-        }
-
-        val url =
-            UrlParser.parse(input)
-                ?: return RoutingResult.Failure(input, RoutingFailure.MALFORMED_URL)
-
-        if (ExceptionMatcher.matches(url, context.exceptions)) {
-            return RoutingResult.Passthrough(input)
+            RoutingResult.Failure(input, RoutingFailure.MALFORMED_URL)
+        } else {
+            val scheme = UrlParser.parseScheme(input)
+            when {
+                scheme == null -> RoutingResult.Failure(input, RoutingFailure.MALFORMED_URL)
+                scheme !in UrlValidation.ALLOWED_INPUT_SCHEMES ->
+                    RoutingResult.Failure(input, RoutingFailure.UNSUPPORTED_SCHEME)
+                else -> resolveParsed(input, context)
+            }
         }
 
-        val route = routeMatcher.match(url.host) ?: return RoutingResult.Passthrough(input)
-        if (route.id in context.disabledRoutes) return RoutingResult.Passthrough(input)
-
-        val selectedFrontendId = context.selectedFrontends[route.id]
-        val frontend =
-            route.frontends.find { it.id == selectedFrontendId } ?: route.frontends.first()
-
-        return applyStrategy(input, url, route.id, frontend, context)
+    private fun resolveParsed(
+        input: String,
+        context: RoutingContext,
+    ): RoutingResult {
+        val url = UrlParser.parse(input) ?: return RoutingResult.Failure(input, RoutingFailure.MALFORMED_URL)
+        val route = routeMatcher.match(url.host)
+        val selectedFrontendId = route?.let { context.selectedFrontends[it.id] }
+        val frontend = route?.frontends?.find { it.id == selectedFrontendId } ?: route?.frontends?.firstOrNull()
+        return when {
+            ExceptionMatcher.matches(url, context.exceptions) -> RoutingResult.Passthrough(input)
+            route == null || route.id in context.disabledRoutes -> RoutingResult.Passthrough(input)
+            frontend == null -> RoutingResult.Passthrough(input)
+            else -> applyStrategy(input, url, route.id, frontend, context)
+        }
     }
 
     private fun applyStrategy(
@@ -54,30 +53,31 @@ class UrlRouter(
         routeId: String,
         frontend: Frontend,
         context: RoutingContext,
-    ): RoutingResult {
-        val redirected =
-            when (val strategy = frontend.strategy) {
-                is Strategy.Passthrough -> return RoutingResult.Passthrough(input)
+    ): RoutingResult =
+        when (val strategy = frontend.strategy) {
+            is Strategy.Passthrough -> RoutingResult.Passthrough(input)
+            is Strategy.CustomScheme -> redirectResult(input, "${strategy.scheme}://$input", routeId, frontend)
+            is Strategy.ReplaceOrigin ->
+                pickInstance(routeId, frontend, context)?.let { instance ->
+                    redirectResult(input, replaceOrigin(url, instance), routeId, frontend)
+                } ?: noInstance(input)
+            is Strategy.Template ->
+                pickInstance(routeId, frontend, context)?.let { instance ->
+                    redirectResult(input, TemplateRenderer.render(strategy.output, url, instance), routeId, frontend)
+                } ?: noInstance(input)
+        }
 
-                is Strategy.CustomScheme -> "${strategy.scheme}://$input"
-
-                is Strategy.ReplaceOrigin -> {
-                    val instance = pickInstance(routeId, frontend, context) ?: return noInstance(input)
-                    replaceOrigin(url, instance)
-                }
-
-                is Strategy.Template -> {
-                    val instance = pickInstance(routeId, frontend, context) ?: return noInstance(input)
-                    TemplateRenderer.render(strategy.output, url, instance)
-                }
-            }
-
-        return if (redirected == input) {
+    private fun redirectResult(
+        input: String,
+        redirected: String,
+        routeId: String,
+        frontend: Frontend,
+    ): RoutingResult =
+        if (redirected == input) {
             RoutingResult.Passthrough(input)
         } else {
             RoutingResult.Redirect(input, redirected, routeId, frontend.id)
         }
-    }
 
     private fun pickInstance(
         routeId: String,

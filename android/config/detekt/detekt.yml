@@ -2,5 +2,12 @@ style:
   MaxLineLength:
     maxLineLength: 120
 
-formatting:
-  active: false
+naming:
+  FunctionNaming:
+    ignoreAnnotated:
+      - Composable
+
+complexity:
+  TooManyFunctions:
+    ignorePrivate: true
+    thresholdInClasses: 12

@@ -48,7 +48,12 @@ fun ExceptionsScreen(
             )
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).fillMaxWidth()) {
+        LazyColumn(
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxWidth(),
+        ) {
             item { AddExceptionRow(onAdd = { rule -> onExceptionsChange(exceptions + rule) }) }
             item { HorizontalDivider() }
 
@@ -67,7 +72,10 @@ fun ExceptionsScreen(
 private fun AddExceptionRow(onAdd: (ExceptionRule) -> Unit) {
     var text by remember { mutableStateOf("") }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

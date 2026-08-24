@@ -14,18 +14,23 @@ object QueryString {
     fun find(
         rawQuery: String?,
         name: String,
-    ): String? {
-        if (rawQuery.isNullOrEmpty()) return null
-        for (pair in rawQuery.split("&")) {
-            if (pair.isEmpty()) continue
-            val separator = pair.indexOf('=')
-            val rawName = if (separator >= 0) pair.substring(0, separator) else pair
-            if (decode(rawName) != name) continue
-            val rawValue = if (separator >= 0) pair.substring(separator + 1) else ""
-            return decode(rawValue)
-        }
-        return null
-    }
+    ): String? =
+        rawQuery
+            ?.takeIf(String::isNotEmpty)
+            ?.split("&")
+            ?.asSequence()
+            ?.mapNotNull { pair ->
+                if (pair.isEmpty()) {
+                    null
+                } else {
+                    val separator = pair.indexOf('=')
+                    val rawName = if (separator >= 0) pair.substring(0, separator) else pair
+                    val rawValue = if (separator >= 0) pair.substring(separator + 1) else ""
+                    (decode(rawName) == name) to decode(rawValue)
+                }
+            }
+            ?.firstOrNull { it.first }
+            ?.second
 
     fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
 

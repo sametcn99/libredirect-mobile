@@ -27,17 +27,18 @@ import kotlinx.coroutines.withContext
  * (route resolution should not block on drawing anything).
  */
 class RedirectActivity : ComponentActivity() {
+    @Suppress("TooGenericExceptionCaught")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
             try {
                 val incomingUrl = extractUrl(intent)
                 if (incomingUrl != null) route(incomingUrl)
+            } catch (_: CancellationException) {
+                // Activity cancellation is expected while the lifecycle is ending.
             } catch (error: Exception) {
-                if (error !is CancellationException) {
-                    Log.e(TAG, "Could not route incoming URL", error)
-                    showMessage(R.string.redirect_cannot_open)
-                }
+                Log.e(TAG, "Could not route incoming URL", error)
+                showMessage(R.string.redirect_cannot_open)
             } finally {
                 finish()
             }
@@ -51,12 +52,15 @@ class RedirectActivity : ComponentActivity() {
             else -> null
         }
 
-    private fun extractFromSharedText(intent: Intent): String? {
-        if (intent.type != "text/plain") return null
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
-        val matcher = Patterns.WEB_URL.matcher(text)
-        return if (matcher.find()) text.substring(matcher.start(), matcher.end()) else null
-    }
+    private fun extractFromSharedText(intent: Intent): String? =
+        intent
+            .takeIf { it.type == "text/plain" }
+            ?.getStringExtra(Intent.EXTRA_TEXT)
+            ?.let { text ->
+                Patterns.WEB_URL.matcher(text).let { matcher ->
+                    if (matcher.find()) text.substring(matcher.start(), matcher.end()) else null
+                }
+            }
 
     private suspend fun route(url: String) {
         val app = applicationContext as LibRedirectApplication

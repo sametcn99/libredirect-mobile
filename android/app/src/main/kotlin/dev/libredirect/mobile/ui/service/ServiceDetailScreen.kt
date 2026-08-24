@@ -51,7 +51,12 @@ fun ServiceDetailScreen(
             )
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).fillMaxWidth()) {
+        LazyColumn(
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxWidth(),
+        ) {
             item {
                 Text(
                     text = "Frontend",
@@ -112,7 +117,10 @@ private fun InstanceSelector(
             mutableStateOf((frontend.selection as? InstanceSelection.Custom)?.instance.orEmpty())
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RadioButton(
@@ -140,7 +148,11 @@ private fun InstanceModeRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onClick)

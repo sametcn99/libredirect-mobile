@@ -37,16 +37,20 @@ object UrlParser {
      * covers the most common offender before giving up.
      */
     fun parse(input: String): ParsedUrl? {
-        val uri = tryParse(input) ?: tryParse(input.replace(" ", "%20")) ?: return null
-        val scheme = uri.scheme?.lowercase() ?: return null
-        val host = uri.host?.lowercase() ?: return null
-        return ParsedUrl(
-            scheme = scheme,
-            host = host,
-            rawPath = uri.rawPath ?: "",
-            rawQuery = uri.rawQuery,
-            rawFragment = uri.rawFragment,
-        )
+        val uri = tryParse(input) ?: tryParse(input.replace(" ", "%20"))
+        val scheme = uri?.scheme?.lowercase()
+        val host = uri?.host?.lowercase()
+        return if (scheme != null && host != null) {
+            ParsedUrl(
+                scheme = scheme,
+                host = host,
+                rawPath = uri.rawPath ?: "",
+                rawQuery = uri.rawQuery,
+                rawFragment = uri.rawFragment,
+            )
+        } else {
+            null
+        }
     }
 
     private fun tryParse(input: String): URI? =

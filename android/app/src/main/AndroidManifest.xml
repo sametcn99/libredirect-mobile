@@ -18,10 +18,10 @@
         android:name=".LibRedirectApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:theme="@style/Theme.LibRedirectMobile"
-        android:supportsRtl="true">
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LibRedirectMobile">
 
         <activity
             android:name=".MainActivity"
@@ -36,16 +36,18 @@
 
         <activity
             android:name=".redirect.RedirectActivity"
-            android:exported="true"
             android:excludeFromRecents="true"
+            android:exported="true"
             android:noHistory="true"
             android:theme="@style/Theme.LibRedirectMobile.Redirect">
 
             <!-- General URL routing: an app sends an https/http link our way (ACTION_VIEW). -->
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="http" />
                 <data android:scheme="https" />
             </intent-filter>

@@ -190,6 +190,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * result type by the repository layer) is logged and surfaced as
      * [MainUiState.errorMessage] instead of crashing the app.
      */
+    @Suppress("TooGenericExceptionCaught")
     private fun launchSafely(block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
