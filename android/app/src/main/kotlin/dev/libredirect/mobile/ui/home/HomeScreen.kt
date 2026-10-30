@@ -7,16 +7,25 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -108,6 +118,7 @@ private fun HomeContent(
     actions: HomeActions,
     input: HomeContentInput,
 ) {
+    var serviceSort by rememberSaveable { mutableStateOf(ServiceSort.POPULARITY) }
     LazyColumn(
         modifier = Modifier.padding(input.contentPadding).fillMaxWidth(),
     ) {
@@ -116,7 +127,7 @@ private fun HomeContent(
         addLinkItem(input.linkText, input.linkError, input.onLinkChange, input.onOpenLink)
         addRoutingItem(state, actions.onRoutingEnabledChange)
         addBrowserItem(state, actions.onBrowserClick)
-        addServiceItems(state, actions)
+        addServiceItems(state, actions, serviceSort, onSortChange = { serviceSort = it })
         addNavigationItems(state, actions)
         addRoutingDataItem(state, actions.onRefreshClick)
         addSourceCodeItem(input.context)
@@ -199,19 +210,52 @@ private fun LazyListScope.addBrowserItem(
 private fun LazyListScope.addServiceItems(
     state: MainUiState,
     actions: HomeActions,
+    sort: ServiceSort,
+    onSortChange: (ServiceSort) -> Unit,
 ) {
     item {
-        Text(
-            text = "Services",
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
-        )
+        ServicesHeader(sort = sort, onSortChange = onSortChange)
     }
-    items(state.services, key = ServiceUiState::routeId) { service ->
+    items(ServiceSorter.sort(state.services, sort), key = ServiceUiState::routeId) { service ->
         ServiceRow(
             service = service,
             onClick = { actions.onServiceClick(service.routeId) },
             onEnabledChange = { enabled -> actions.onServiceEnabledChange(service.routeId, enabled) },
         )
+    }
+}
+
+@Composable
+private fun ServicesHeader(
+    sort: ServiceSort,
+    onSortChange: (ServiceSort) -> Unit,
+) {
+    var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = "Services", modifier = Modifier.weight(1f))
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(Icons.Filled.Sort, contentDescription = "Sort services")
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                ServiceSort.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label) },
+                        onClick = {
+                            onSortChange(option)
+                            menuExpanded = false
+                        },
+                        trailingIcon = { if (option == sort) Icon(Icons.Filled.Check, contentDescription = null) },
+                    )
+                }
+            }
+        }
     }
 }
 
