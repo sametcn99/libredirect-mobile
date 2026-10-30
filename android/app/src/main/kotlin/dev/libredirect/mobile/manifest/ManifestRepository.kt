@@ -15,8 +15,9 @@ import java.nio.file.StandardCopyOption
 
 /**
  * Manifest priority (project plan §11/§12): Last Known Good (on-disk
- * `active.json`, then `previous.json`) over the bundled asset. A remote manifest is fetched,
- * signature-verified, decoded, revision-checked, and self-tested — and
+ * `active.json`, then `previous.json`) over the bundled asset. A refresh
+ * fetches the upstream instance data, decodes it, merges the per-frontend
+ * instance lists into the active manifest, validates, and self-tests — and
  * only written to `active.json` if every one of those steps passes. Any
  * failure leaves the existing active manifest (or the bundled asset, if
  * nothing has ever been activated) untouched and in use.
@@ -24,7 +25,6 @@ import java.nio.file.StandardCopyOption
 class ManifestRepository(
     private val context: Context,
     private val fetcher: RemoteManifestFetcher = RemoteManifestFetcher(),
-    private val verifier: ManifestVerifier = Ed25519ManifestVerifier,
     private val customServiceRepository: CustomServiceRepository = CustomServiceRepository(context),
 ) {
     @Volatile
@@ -71,40 +71,44 @@ class ManifestRepository(
 
     fun removeCustomRoute(routeId: String) = customServiceRepository.delete(routeId)
 
-    suspend fun refresh(
-        manifestUrl: String,
-        signatureUrl: String,
-    ): RefreshResult {
-        val bundle = fetcher.fetchBundle(manifestUrl, signatureUrl)
-        return if (bundle == null) {
-            RefreshResult.Rejected(RefreshRejectionReason.FETCH_FAILED)
-        } else if (!verifier.verify(bundle.manifestBytes, bundle.signatureBytes)) {
-            RefreshResult.Rejected(RefreshRejectionReason.INVALID_SIGNATURE)
-        } else {
-            refreshVerifiedBundle(bundle)
-        }
+    /**
+     * Fetches the upstream instance data and merges its per-frontend HTTPS
+     * clearnet instance lists into the base manifest. Routes, hosts and
+     * frontend structure are frozen at build time; only instances refresh.
+     */
+    suspend fun refresh(instancesUrl: String): RefreshResult {
+        val raw = fetcher.fetchBytes(instancesUrl) ?: return RefreshResult.Rejected(RefreshRejectionReason.FETCH_FAILED)
+        return refreshParsed(InstanceDataParser.parse(raw))
     }
 
-    private fun refreshVerifiedBundle(bundle: RemoteManifestBundle): RefreshResult {
-        val candidate = decodeRaw(String(bundle.manifestBytes, Charsets.UTF_8))
-        return when {
-            candidate == null -> RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+    private fun refreshParsed(instanceData: Map<String, List<String>>?): RefreshResult =
+        if (instanceData.isNullOrEmpty()) {
+            RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+        } else {
+            refreshBase(instanceData)
+        }
+
+    private fun refreshBase(instanceData: Map<String, List<String>>): RefreshResult =
+        loadBaseManifest()?.let { base ->
+            when (val candidate = InstanceMerger.merge(base, instanceData)) {
+                null -> RefreshResult.NotModified
+                else -> refreshCandidate(candidate)
+            }
+        } ?: RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+
+    private fun refreshCandidate(candidate: Manifest): RefreshResult =
+        when {
             candidate.schemaVersion != ManifestValidator.SUPPORTED_SCHEMA_VERSION ->
                 RefreshResult.Rejected(RefreshRejectionReason.UNSUPPORTED_SCHEMA_VERSION)
             ManifestValidator.validate(candidate).isNotEmpty() ->
                 RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
-            candidate.revision <= (activeManifest()?.revision ?: 0) -> RefreshResult.NotModified
             !selfTest(candidate) -> RefreshResult.Rejected(RefreshRejectionReason.SELF_TEST_FAILED)
-            else -> activateCandidate(bundle.manifestBytes, candidate)
+            else -> activateCandidate(candidate)
         }
-    }
 
-    private fun activateCandidate(
-        rawBytes: ByteArray,
-        candidate: Manifest,
-    ): RefreshResult =
+    private fun activateCandidate(candidate: Manifest): RefreshResult =
         try {
-            activateAtomically(rawBytes)
+            activateAtomically(ManifestJson.encode(candidate).toByteArray(Charsets.UTF_8))
             cached = candidate
             RefreshResult.Activated(candidate.revision)
         } catch (_: IOException) {
@@ -212,8 +216,6 @@ class ManifestRepository(
         validated.exceptionOrNull()?.let { recordLoadFailure(source, "validation failed", it) }
         return validated.getOrNull()
     }
-
-    private fun decodeRaw(raw: String): Manifest? = runCatching { ManifestJson.decode(raw) }.getOrNull()
 
     private fun recordLoadFailure(
         source: String,

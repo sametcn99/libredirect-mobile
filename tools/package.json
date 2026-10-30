@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "description": "Bun/TypeScript tooling that generates and validates the LibRedirect Mobile routing manifest.",
-  "license": "GPL-3.0-or-later",
   "type": "module",
   "engines": {
     "bun": ">=1.1.0"
@@ -15,9 +14,7 @@
     "check": "biome check .",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "generate-signing-key": "bun run src/generate-signing-key.ts",
-    "generate": "bun run src/generate-routes.ts",
-    "sign": "bun run src/sign-routes.ts"
+    "generate": "bun run src/generate-routes.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

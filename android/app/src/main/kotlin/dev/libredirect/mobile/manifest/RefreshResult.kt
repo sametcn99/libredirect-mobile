@@ -11,7 +11,6 @@ sealed interface RefreshResult {
 
 enum class RefreshRejectionReason {
     FETCH_FAILED,
-    INVALID_SIGNATURE,
     MALFORMED_MANIFEST,
     UNSUPPORTED_SCHEMA_VERSION,
     SELF_TEST_FAILED,

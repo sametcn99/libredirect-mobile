@@ -1,15 +1,12 @@
 package dev.libredirect.mobile.manifest
 
 /**
- * No hosting exists yet — Phase 10 (automated upstream sync) publishes
- * `routes.json`/`routes.sig` to GitHub Pages and must replace these with
- * the real URLs before [ManifestRepository.refresh] is called anywhere.
- * Until then, calling refresh() will simply fail closed at the HTTPS-only
- * check in [RemoteManifestFetcher] (both placeholders resolve to nothing),
- * leaving routing on the bundled/Last-Known-Good manifest — safe, but not
- * yet wired to a real update source.
+ * Live instance data source. Refreshing the routing data fetches this
+ * upstream file directly (no intermediate hosting of our own) and merges
+ * its per-frontend HTTPS clearnet instance lists into the active manifest.
+ * Routes/hosts/frontend structure come from the bundled manifest and only
+ * change with an app release.
  */
 object ManifestEndpoints {
-    const val MANIFEST_URL = "https://TODO-libredirect-mobile.example/routes.json"
-    const val SIGNATURE_URL = "https://TODO-libredirect-mobile.example/routes.sig"
+    const val INSTANCES_DATA_URL = "https://raw.githubusercontent.com/libredirect/instances/main/data.json"
 }

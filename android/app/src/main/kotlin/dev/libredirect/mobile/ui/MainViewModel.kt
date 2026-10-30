@@ -124,7 +124,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         launchSafely {
             _uiState.value = _uiState.value.copy(refreshInProgress = true, lastRefreshMessage = null)
 
-            val result = manifestRepository.refresh(ManifestEndpoints.MANIFEST_URL, ManifestEndpoints.SIGNATURE_URL)
+            val result = manifestRepository.refresh(ManifestEndpoints.INSTANCES_DATA_URL)
             manifest = loadManifest()
 
             val message =

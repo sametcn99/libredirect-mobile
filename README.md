@@ -1,16 +1,14 @@
 # LibRedirect Mobile
 
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
-
 LibRedirect Mobile is an Android app that routes links from large online services to privacy-friendly frontends. It can redirect links from services such as YouTube, Reddit, and X/Twitter to compatible Invidious, Redlib, or alternative instances before opening them in your preferred browser.
 
-The app keeps routing rules in a signed, declarative manifest. This design lets the service catalog evolve without adding service-specific routing code to the Android client.
+The app keeps routing rules in a declarative manifest. This design lets the service catalog evolve without adding service-specific routing code to the Android client.
 
 ## Features
 
 - **Privacy-focused routing**: Redirect eligible links without accounts, analytics, or a backend.
 - **Offline-first behavior**: Route links locally without making a network request during routing.
-- **Signed manifest updates**: Verify Ed25519 signatures before activating remote routing data.
+- **Live instance updates**: Refresh frontend instance lists directly from the upstream [libredirect/instances](https://github.com/libredirect/instances) repository.
 - **Safe fallback**: Open the original URL when routing fails for an eligible HTTP(S) link.
 - **Custom services**: Add local services with a source hostname and an HTTPS instance or supported URL template.
 - **Instance selection**: Choose from the instances available for each supported frontend.
@@ -31,13 +29,13 @@ The app never executes JavaScript or arbitrary expressions from the manifest. Th
 
 ## Project structure
 
-| Directory   | Purpose                                                                    |
-| ----------- | -------------------------------------------------------------------------- |
-| `android/`  | Kotlin and Jetpack Compose Android application                             |
-| `tools/`    | Bun and TypeScript tools for generating, validating, and signing manifests |
-| `schema/`   | JSON Schema for routing manifests                                          |
-| `fixtures/` | Real URL regression fixtures for the converter                             |
-| `dist/`     | Generated manifest artifacts produced by automation                        |
+| Directory     | Purpose                                                          |
+| ------------- | ---------------------------------------------------------------- |
+| `android/`  | Kotlin and Jetpack Compose Android application                   |
+| `tools/`    | Bun and TypeScript tools for generating and validating manifests |
+| `schema/`   | JSON Schema for routing manifests                                |
+| `fixtures/` | Real URL regression fixtures for the converter                   |
+| `dist/`     | Generated manifest artifacts produced by automation              |
 
 ## Requirements
 
@@ -84,18 +82,19 @@ bun run typecheck
 bun test
 ```
 
-Generate and sign routing data with the scripts defined in `tools/package.json`:
+Generate the bundled routing data with the script defined in `tools/package.json`:
 
 ```bash
 bun run generate
-bun run sign
 ```
 
-Keep private signing keys out of the repository. The signing workflow reads the private key from the `MANIFEST_SIGNING_KEY` environment or CI secret, while the Android app embeds the corresponding public key.
+## Updating routing data
+
+The bundled manifest ships routes, hosts, and frontend structure. The "Routing data → Update now" action in the app refreshes only the frontend instance lists: it fetches `data.json` directly from the upstream [libredirect/instances](https://github.com/libredirect/instances) repository, merges the HTTPS clearnet instances into the active manifest, and activates it after validation. New services and frontends arrive with app releases.
 
 ## Security model
 
-The app activates a remote manifest only after its Ed25519 signature verifies. It also rejects manifests with an older revision than the active manifest. If an update fails validation, the app keeps the last known good manifest.
+Remote updates change nothing except instance origin lists. Fetched data is parsed strictly (HTTPS-only, origin-only URLs), merged, re-validated, and self-tested before activation. If an update fails any step, the app keeps the last known good manifest.
 
 Routing accepts only safe URL schemes and rejects malformed or private/local redirect targets. For more detail, see the [security policy](SECURITY.md).
 
@@ -107,8 +106,4 @@ Do not report security vulnerabilities in a public issue. Follow the private rep
 
 ## Project status
 
-The repository currently includes the Android routing core, Compose settings UI, signed manifest repository, generated upstream service catalog, local custom-service storage, and Bun tooling for upstream conversion and signing.
-
-## License
-
-LibRedirect Mobile is distributed under the [GNU General Public License v3.0 or later](LICENSE). Third-party notices are available in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+The repository currently includes the Android routing core, Compose settings UI, manifest repository with live instance updates, generated upstream service catalog, local custom-service storage, and Bun tooling for upstream conversion.

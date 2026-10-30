@@ -17,4 +17,9 @@ object ManifestJson {
      * invariant.
      */
     fun decode(raw: String): Manifest = json.decodeFromString(Manifest.serializer(), raw)
+
+    /**
+     * @throws SerializationException if [manifest] cannot be encoded.
+     */
+    fun encode(manifest: Manifest): String = json.encodeToString(Manifest.serializer(), manifest)
 }
