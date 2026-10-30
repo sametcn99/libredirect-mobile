@@ -57,8 +57,3 @@ bun test
 
 Do not open a public issue for security vulnerabilities. See
 [SECURITY.md](SECURITY.md).
-
-## License
-
-By contributing, you agree that your contributions are licensed under the
-project's GPL-3.0-or-later license (see [LICENSE](LICENSE)).

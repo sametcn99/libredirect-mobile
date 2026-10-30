@@ -43,3 +43,5 @@ Thumbs.db
 # Editors
 .vscode/
 *.swp
+
+.zcode
