@@ -20,6 +20,9 @@ data class MainUiState(
     val customServiceMessage: String? = null,
     val errorMessage: String? = null,
     val updateAvailable: UpdateInfo? = null,
+    val appVersionName: String = "1.1.0",
+    val appVersionCode: Long = 3L,
+    val appVersionDisplay: String = "v1.1.0 (Build 3)",
 )
 
 data class ServiceUiState(

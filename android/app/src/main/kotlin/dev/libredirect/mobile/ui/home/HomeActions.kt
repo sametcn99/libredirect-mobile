@@ -8,4 +8,7 @@ data class HomeActions(
     val onExceptionsClick: () -> Unit,
     val onRefreshClick: () -> Unit,
     val onCustomServicesClick: () -> Unit,
+    val onOpenInAppBrowser: (String?) -> Unit = {},
+    val onNavigateToServices: () -> Unit = {},
+    val onNavigateToSettings: () -> Unit = {},
 )

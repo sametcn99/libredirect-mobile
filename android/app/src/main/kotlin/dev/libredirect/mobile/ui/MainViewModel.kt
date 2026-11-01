@@ -1,6 +1,7 @@
 package dev.libredirect.mobile.ui
 
 import android.app.Application
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -58,12 +59,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun currentVersionName(): String =
+    private fun versionInfo(): Triple<String, Long, String> =
         try {
-            app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: ""
-        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-            ""
+            val packageInfo = app.packageManager.getPackageInfo(app.packageName, 0)
+            val name = packageInfo.versionName ?: FALLBACK_VERSION_NAME
+            val code =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    packageInfo.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.versionCode.toLong()
+                }
+            Triple(name, code, "v$name (Build $code)")
+        } catch (_: Exception) {
+            Triple(FALLBACK_VERSION_NAME, FALLBACK_VERSION_CODE, FALLBACK_VERSION_DISPLAY)
         }
+
+    private fun currentVersionName(): String = versionInfo().first
 
     fun installedBrowsers(): List<BrowserInfo> = browsers
 
@@ -168,6 +180,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ?.let { pkg -> browsers.find { it.packageName == pkg }?.label ?: pkg }
                 ?: "System default"
 
+        val (verName, verCode, verDisplay) = versionInfo()
+
         return MainUiState(
             loading = false,
             routingEnabled = settings.routingEnabled,
@@ -183,6 +197,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             customServiceMessage = _uiState.value.customServiceMessage,
             errorMessage = _uiState.value.errorMessage,
             updateAvailable = _uiState.value.updateAvailable,
+            appVersionName = verName,
+            appVersionCode = verCode,
+            appVersionDisplay = verDisplay,
         )
     }
 
@@ -198,12 +215,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             loaded
         }
 
-    /**
-     * Every ViewModel-initiated coroutine goes through here: an unexpected
-     * exception (anything not already turned into a [Result] or sealed
-     * result type by the repository layer) is logged and surfaced as
-     * [MainUiState.errorMessage] instead of crashing the app.
-     */
     @Suppress("TooGenericExceptionCaught")
     private fun launchSafely(block: suspend () -> Unit) {
         viewModelScope.launch {
@@ -220,5 +231,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "MainViewModel"
+        const val FALLBACK_VERSION_NAME = "1.1.0"
+        const val FALLBACK_VERSION_CODE = 3L
+        const val FALLBACK_VERSION_DISPLAY = "v1.1.0 (Build 3)"
     }
 }

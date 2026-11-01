@@ -16,23 +16,28 @@ import android.net.Uri
  * or system picks.
  */
 class BrowserLauncher(private val packageManager: PackageManager, private val ownPackageName: String) {
-    fun installedBrowsers(): List<BrowserInfo> =
-        packageManager
-            .queryIntentActivities(probeIntent(), PackageManager.MATCH_ALL)
-            .map { it.activityInfo.packageName }
-            .distinct()
-            .filterNot { it == ownPackageName }
-            .map { pkg ->
-                val label =
-                    try {
-                        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
-                    } catch (_: PackageManager.NameNotFoundException) {
-                        pkg
-                    }
-                BrowserInfo(packageName = pkg, label = label)
-            }
+    fun installedBrowsers(): List<BrowserInfo> {
+        val externalBrowsers =
+            packageManager
+                .queryIntentActivities(probeIntent(), PackageManager.MATCH_ALL)
+                .map { it.activityInfo.packageName }
+                .distinct()
+                .filterNot { it == ownPackageName }
+                .map { pkg ->
+                    val label =
+                        try {
+                            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                        } catch (_: PackageManager.NameNotFoundException) {
+                            pkg
+                        }
+                    BrowserInfo(packageName = pkg, label = label)
+                }
+        return listOf(BrowserInfo(packageName = IN_APP_BROWSER_PACKAGE, label = "Dahili Tarayıcı (LibRedirect)")) +
+            externalBrowsers
+    }
 
-    fun isInstalled(packageName: String): Boolean = installedBrowsers().any { it.packageName == packageName }
+    fun isInstalled(packageName: String): Boolean =
+        packageName == IN_APP_BROWSER_PACKAGE || installedBrowsers().any { it.packageName == packageName }
 
     /**
      * @param preferredPackage a user-chosen browser (Phase 6 settings). Falls back to the
@@ -43,22 +48,30 @@ class BrowserLauncher(private val packageManager: PackageManager, private val ow
         url: String,
         preferredPackage: String?,
     ): Boolean {
-        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-
-        val target = preferredPackage?.takeIf { isInstalled(it) } ?: systemDefaultBrowserPackage()
-        if (target != null) {
-            viewIntent.setPackage(target)
-            return tryStart(context, viewIntent)
+        if (preferredPackage == IN_APP_BROWSER_PACKAGE) {
+            val intent =
+                Intent().apply {
+                    component = ComponentName(context.packageName, MAIN_ACTIVITY_CLASS_NAME)
+                    action = ACTION_OPEN_IN_APP_BROWSER
+                    data = Uri.parse(url)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+            return tryStart(context, intent)
         }
 
-        val chooser =
-            Intent.createChooser(viewIntent, null).apply {
-                putExtra(
-                    Intent.EXTRA_EXCLUDE_COMPONENTS,
-                    arrayOf(ComponentName(context.packageName, REDIRECT_ACTIVITY_CLASS_NAME)),
-                )
+        val target = preferredPackage?.takeIf { isInstalled(it) } ?: systemDefaultBrowserPackage()
+        val targetIntent =
+            if (target != null) {
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { setPackage(target) }
+            } else {
+                Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse(url)), null).apply {
+                    putExtra(
+                        Intent.EXTRA_EXCLUDE_COMPONENTS,
+                        arrayOf(ComponentName(context.packageName, REDIRECT_ACTIVITY_CLASS_NAME)),
+                    )
+                }
             }
-        return tryStart(context, chooser)
+        return tryStart(context, targetIntent)
     }
 
     private fun systemDefaultBrowserPackage(): String? {
@@ -82,7 +95,10 @@ class BrowserLauncher(private val packageManager: PackageManager, private val ow
 
     private fun probeIntent(): Intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.org"))
 
-    private companion object {
-        const val REDIRECT_ACTIVITY_CLASS_NAME = "dev.libredirect.mobile.redirect.RedirectActivity"
+    companion object {
+        const val IN_APP_BROWSER_PACKAGE = "dev.libredirect.mobile.inapp"
+        const val ACTION_OPEN_IN_APP_BROWSER = "dev.libredirect.mobile.ACTION_OPEN_IN_APP_BROWSER"
+        private const val REDIRECT_ACTIVITY_CLASS_NAME = "dev.libredirect.mobile.redirect.RedirectActivity"
+        private const val MAIN_ACTIVITY_CLASS_NAME = "dev.libredirect.mobile.MainActivity"
     }
 }

@@ -5,35 +5,51 @@ package dev.libredirect.mobile.ui.home
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,350 +58,568 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.redirect.RedirectActivity
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.ServiceUiState
-import dev.libredirect.mobile.update.UpdateInfo
+import dev.libredirect.mobile.ui.services.ServiceCard
 
-private data class HomeContentInput(
-    val linkText: String,
-    val linkError: String?,
-    val onLinkChange: (String) -> Unit,
-    val onOpenLink: () -> Unit,
-    val contentPadding: androidx.compose.foundation.layout.PaddingValues,
-    val context: Context,
-)
+private const val TOP_SERVICES_LIMIT = 5
 
 @Composable
 fun HomeScreen(
     state: MainUiState,
     actions: HomeActions,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var linkText by rememberSaveable { mutableStateOf("") }
     var linkError by rememberSaveable { mutableStateOf<String?>(null) }
 
-    fun openLink() {
-        val rawLink = linkText.trim()
-        val normalizedLink =
-            when {
-                rawLink.startsWith("https://", ignoreCase = true) ||
-                    rawLink.startsWith("http://", ignoreCase = true) -> rawLink
+    fun normalizeLink(raw: String): String =
+        when {
+            raw.startsWith("https://", ignoreCase = true) ||
+                raw.startsWith("http://", ignoreCase = true) -> raw
 
-                rawLink.isNotEmpty() -> "https://$rawLink"
-                else -> ""
-            }
-        if (normalizedLink.isEmpty()) {
-            linkError = "Enter a URL first"
-            return
+            raw.isNotEmpty() -> "https://$raw"
+            else -> ""
         }
 
+    fun openInSystemBrowser() {
+        val normalized = normalizeLink(linkText.trim())
+        if (normalized.isEmpty()) {
+            linkError = "Lütfen önce geçerli bir URL girin"
+            return
+        }
         linkError = null
         context.startActivity(
             Intent(context, RedirectActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
-                data = Uri.parse(normalizedLink)
+                data = Uri.parse(normalized)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             },
         )
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("LibRedirect Mobile") }) }) { padding ->
-        HomeContent(
-            state = state,
-            actions = actions,
-            input =
-                HomeContentInput(
-                    linkText = linkText,
-                    linkError = linkError,
-                    onLinkChange = {
-                        linkText = it
-                        linkError = null
-                    },
-                    onOpenLink = ::openLink,
-                    contentPadding = padding,
-                    context = context,
-                ),
-        )
+    fun openInAppBrowser() {
+        val normalized = normalizeLink(linkText.trim())
+        if (normalized.isEmpty()) {
+            linkError = "Lütfen önce geçerli bir URL girin"
+            return
+        }
+        linkError = null
+        actions.onOpenInAppBrowser(normalized)
     }
-}
 
-@Composable
-private fun HomeContent(
-    state: MainUiState,
-    actions: HomeActions,
-    input: HomeContentInput,
-) {
-    var serviceSort by rememberSaveable { mutableStateOf(ServiceSort.POPULARITY) }
-    LazyColumn(
-        modifier = Modifier.padding(input.contentPadding).fillMaxWidth(),
-    ) {
-        addUpdateItem(state.updateAvailable, input.context::openRelease)
-        addManifestErrorItem(state.manifestErrorMessage, actions.onRefreshClick)
-        addLinkItem(input.linkText, input.linkError, input.onLinkChange, input.onOpenLink)
-        addRoutingItem(state, actions.onRoutingEnabledChange)
-        addBrowserItem(state, actions.onBrowserClick)
-        addServiceItems(state, actions, serviceSort, onSortChange = { serviceSort = it })
-        addNavigationItems(state, actions)
-        addRoutingDataItem(state, actions.onRefreshClick)
-        addSourceCodeItem(input.context)
-    }
-}
-
-private fun LazyListScope.addManifestErrorItem(
-    error: String?,
-    onRetry: () -> Unit,
-) {
-    error ?: return
-    item {
-        ListItem(
-            headlineContent = { Text("Routing data unavailable") },
-            supportingContent = { Text(error) },
-            trailingContent = {
-                TextButton(onClick = onRetry) {
-                    Text("Retry")
-                }
-            },
-            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        )
-        HorizontalDivider()
-    }
-}
-
-private fun LazyListScope.addUpdateItem(
-    update: UpdateInfo?,
-    onClick: (String) -> Unit,
-) {
-    update ?: return
-    item {
-        UpdateAvailableRow(versionName = update.versionName, onClick = { onClick(update.releaseUrl) })
-        HorizontalDivider()
-    }
-}
-
-private fun LazyListScope.addLinkItem(
-    value: String,
-    error: String?,
-    onValueChange: (String) -> Unit,
-    onOpen: () -> Unit,
-) {
-    item {
-        LinkOpenRow(value = value, error = error, onValueChange = onValueChange, onOpen = onOpen)
-        HorizontalDivider()
-    }
-}
-
-private fun LazyListScope.addRoutingItem(
-    state: MainUiState,
-    onRoutingEnabledChange: (Boolean) -> Unit,
-) {
-    item {
-        ListItem(
-            headlineContent = { Text("Routing") },
-            supportingContent = { Text(if (state.routingEnabled) "Enabled" else "Disabled") },
-            trailingContent = {
-                Switch(checked = state.routingEnabled, onCheckedChange = onRoutingEnabledChange)
-            },
-        )
-        HorizontalDivider()
-    }
-}
-
-private fun LazyListScope.addBrowserItem(
-    state: MainUiState,
-    onBrowserClick: () -> Unit,
-) {
-    item {
-        ListItem(
-            headlineContent = { Text("Default browser") },
-            supportingContent = { Text(state.selectedBrowserLabel) },
-            modifier = Modifier.clickable(onClick = onBrowserClick),
-        )
-        HorizontalDivider()
-    }
-}
-
-private fun LazyListScope.addServiceItems(
-    state: MainUiState,
-    actions: HomeActions,
-    sort: ServiceSort,
-    onSortChange: (ServiceSort) -> Unit,
-) {
-    item {
-        ServicesHeader(sort = sort, onSortChange = onSortChange)
-    }
-    items(ServiceSorter.sort(state.services, sort), key = ServiceUiState::routeId) { service ->
-        ServiceRow(
-            service = service,
-            onClick = { actions.onServiceClick(service.routeId) },
-            onEnabledChange = { enabled -> actions.onServiceEnabledChange(service.routeId, enabled) },
-        )
-    }
-}
-
-@Composable
-private fun ServicesHeader(
-    sort: ServiceSort,
-    onSortChange: (ServiceSort) -> Unit,
-) {
-    var menuExpanded by rememberSaveable { mutableStateOf(false) }
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = "Services", modifier = Modifier.weight(1f))
-        Box {
-            IconButton(onClick = { menuExpanded = true }) {
-                Icon(Icons.Filled.Sort, contentDescription = "Sort services")
-            }
-            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                ServiceSort.entries.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.label) },
-                        onClick = {
-                            onSortChange(option)
-                            menuExpanded = false
-                        },
-                        trailingIcon = { if (option == sort) Icon(Icons.Filled.Check, contentDescription = null) },
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("LibRedirect", fontWeight = FontWeight.Bold)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                        ) {
+                            Text(
+                                text = state.appVersionDisplay,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = actions.onRefreshClick, enabled = !state.refreshInProgress) {
+                        if (state.refreshInProgress) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "Verileri Yenile")
+                        }
+                    }
+                },
+            )
+        },
+        modifier = modifier,
+    ) { padding ->
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+        ) {
+            if (state.updateAvailable != null) {
+                item {
+                    UpdateCard(
+                        versionName = state.updateAvailable.versionName,
+                        onClick = { context.openExternalUrl(state.updateAvailable.releaseUrl) },
                     )
                 }
             }
+
+            if (state.manifestErrorMessage != null) {
+                item {
+                    ManifestErrorCard(
+                        error = state.manifestErrorMessage,
+                        onRetry = actions.onRefreshClick,
+                    )
+                }
+            }
+
+            item {
+                StatusHeroCard(
+                    routingEnabled = state.routingEnabled,
+                    activeServicesCount = state.services.count { it.enabled },
+                    exceptionsCount = state.exceptions.size,
+                    onRoutingToggle = actions.onRoutingEnabledChange,
+                )
+            }
+
+            item {
+                QuickLinkCard(
+                    linkText = linkText,
+                    linkError = linkError,
+                    onLinkTextChange = {
+                        linkText = it
+                        linkError = null
+                    },
+                    onOpenInApp = ::openInAppBrowser,
+                    onOpenExternal = ::openInSystemBrowser,
+                )
+            }
+
+            item {
+                Text(
+                    text = "Hızlı İşlemler",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+
+            item {
+                QuickActionsRow(
+                    onOpenBrowser = { actions.onOpenInAppBrowser(null) },
+                    onOpenServices = actions.onNavigateToServices,
+                    onOpenExceptions = actions.onExceptionsClick,
+                    onOpenSettings = actions.onNavigateToSettings,
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Popüler Servisler",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Tümünü Gör (${state.services.size})",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable(onClick = actions.onNavigateToServices),
+                    )
+                }
+            }
+
+            val topServices = ServiceSorter.sort(state.services, ServiceSort.POPULARITY).take(TOP_SERVICES_LIMIT)
+            items(topServices, key = ServiceUiState::routeId) { service ->
+                ServiceCard(
+                    service = service,
+                    onClick = { actions.onServiceClick(service.routeId) },
+                    onEnabledChange = { enabled -> actions.onServiceEnabledChange(service.routeId, enabled) },
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+            }
         }
     }
 }
 
-private fun LazyListScope.addNavigationItems(
-    state: MainUiState,
-    actions: HomeActions,
+@Composable
+private fun StatusHeroCard(
+    routingEnabled: Boolean,
+    activeServicesCount: Int,
+    exceptionsCount: Int,
+    onRoutingToggle: (Boolean) -> Unit,
 ) {
-    item {
-        HorizontalDivider()
-        ListItem(
-            headlineContent = { Text("Exceptions") },
-            supportingContent = { Text("${state.exceptions.size} configured") },
-            modifier = Modifier.clickable(onClick = actions.onExceptionsClick),
-        )
-    }
-    item {
-        HorizontalDivider()
-        ListItem(
-            headlineContent = { Text("Custom services") },
-            supportingContent = { Text("${state.customRoutes.size} configured") },
-            modifier = Modifier.clickable(onClick = actions.onCustomServicesClick),
-        )
+    val containerColor =
+        if (routingEnabled) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        }
+
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier =
+                            Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (routingEnabled) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.outline
+                                    },
+                                ),
+                    ) {
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = if (routingEnabled) "Yönlendirme Aktif" else "Yönlendirme Kapalı",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text =
+                                if (routingEnabled) {
+                                    "Gizlilik koruması tüm servislerde açık"
+                                } else {
+                                    "Tüm istekler doğrudan iletiliyor"
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                Switch(
+                    checked = routingEnabled,
+                    onCheckedChange = onRoutingToggle,
+                    colors =
+                        SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        ),
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusStatItem(label = "Aktif Servis", value = "$activeServicesCount")
+                    StatusStatItem(label = "İstisnalar", value = "$exceptionsCount")
+                    StatusStatItem(label = "Tarayıcı", value = "Dahili & Hızlı")
+                }
+            }
+        }
     }
 }
-
-private fun LazyListScope.addSourceCodeItem(context: Context) {
-    item {
-        HorizontalDivider()
-        ListItem(
-            headlineContent = { Text("Source code") },
-            supportingContent = { Text("GitHub · sametcn99/libredirect-mobile") },
-            modifier = Modifier.clickable { context.openRelease(SOURCE_CODE_URL) },
-        )
-    }
-}
-
-private fun LazyListScope.addRoutingDataItem(
-    state: MainUiState,
-    onRefreshClick: () -> Unit,
-) {
-    item {
-        HorizontalDivider()
-        RoutingDataRow(state = state, onRefreshClick = onRefreshClick)
-    }
-}
-
-private fun android.content.Context.openRelease(url: String) {
-    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-}
-
-private const val SOURCE_CODE_URL = "https://github.com/sametcn99/libredirect-mobile"
 
 @Composable
-private fun UpdateAvailableRow(
+private fun StatusStatItem(
+    label: String,
+    value: String,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun QuickLinkCard(
+    linkText: String,
+    linkError: String?,
+    onLinkTextChange: (String) -> Unit,
+    onOpenInApp: () -> Unit,
+    onOpenExternal: () -> Unit,
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    Icons.Default.Language,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = "Hızlı Link Aç & Test Et",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            OutlinedTextField(
+                value = linkText,
+                onValueChange = onLinkTextChange,
+                placeholder = { Text("https://instagram.com/... veya youtube.com/...") },
+                singleLine = true,
+                isError = linkError != null,
+                shape = RoundedCornerShape(14.dp),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        unfocusedBorderColor = Color.Transparent,
+                    ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            AnimatedVisibility(visible = linkError != null) {
+                linkError?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onOpenInApp,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Dahili Tarayıcıda Aç")
+                }
+
+                OutlinedButton(
+                    onClick = onOpenExternal,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Dışarıda Aç")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickActionsRow(
+    onOpenBrowser: () -> Unit,
+    onOpenServices: () -> Unit,
+    onOpenExceptions: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        QuickActionItem(
+            icon = Icons.Default.Public,
+            label = "Tarayıcı",
+            onClick = onOpenBrowser,
+            modifier = Modifier.weight(1f),
+        )
+        QuickActionItem(
+            icon = Icons.Default.Tune,
+            label = "Servisler",
+            onClick = onOpenServices,
+            modifier = Modifier.weight(1f),
+        )
+        QuickActionItem(
+            icon = Icons.Default.Block,
+            label = "İstisnalar",
+            onClick = onOpenExceptions,
+            modifier = Modifier.weight(1f),
+        )
+        QuickActionItem(
+            icon = Icons.Default.Settings,
+            label = "Ayarlar",
+            onClick = onOpenSettings,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun QuickActionItem(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier.clickable(onClick = onClick),
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpdateCard(
     versionName: String,
     onClick: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = { Text("Update available") },
-        supportingContent = { Text("Version $versionName - tap to view release") },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        modifier = Modifier.clickable(onClick = onClick),
-    )
-}
-
-@Composable
-private fun LinkOpenRow(
-    value: String,
-    error: String?,
-    onValueChange: (String) -> Unit,
-    onOpen: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
     ) {
-        Text("Open a link")
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = { Text("Paste or enter a URL") },
-            placeholder = { Text("https://www.instagram.com/...") },
-            singleLine = true,
-            isError = error != null,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = onOpen,
-            modifier = Modifier.fillMaxWidth(),
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Open")
+            Icon(Icons.Default.Update, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Yeni Sürüm Mevcut!",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    text = "v$versionName güncellemesini incelemek için dokunun",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
         }
-        error?.let { Text(it) }
     }
 }
 
 @Composable
-private fun ServiceRow(
-    service: ServiceUiState,
-    onClick: () -> Unit,
-    onEnabledChange: (Boolean) -> Unit,
+private fun ManifestErrorCard(
+    error: String,
+    onRetry: () -> Unit,
 ) {
-    val selectedFrontendName =
-        service.frontends.find { it.id == service.selectedFrontendId }?.name ?: service.selectedFrontendId
-    ListItem(
-        headlineContent = { Text(service.name) },
-        supportingContent = { Text(selectedFrontendName) },
-        trailingContent = { Switch(checked = service.enabled, onCheckedChange = onEnabledChange) },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
-}
-
-@Composable
-private fun RoutingDataRow(
-    state: MainUiState,
-    onRefreshClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Text("Routing data")
-        Text("Revision ${state.manifestRevision ?: "—"}")
-        state.lastRefreshMessage?.let { Text(it) }
-        if (state.refreshInProgress) {
-            CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
-        } else {
-            TextButton(onClick = onRefreshClick, contentPadding = PaddingValues(0.dp)) {
-                Text("Update now")
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Rota Verileri Yüklenemedi",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            ) {
+                Text("Tekrar Dene")
             }
         }
+    }
+}
+
+private fun Context.openExternalUrl(url: String) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        startActivity(intent)
+    } catch (_: Exception) {
     }
 }

@@ -11,3 +11,9 @@ complexity:
   TooManyFunctions:
     ignorePrivate: true
     thresholdInClasses: 12
+  LongMethod:
+    ignoreAnnotated:
+      - Composable
+  LongParameterList:
+    ignoreAnnotated:
+      - Composable
