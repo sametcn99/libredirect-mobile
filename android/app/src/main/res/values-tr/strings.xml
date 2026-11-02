@@ -82,6 +82,9 @@
     <string name="settings_section_app_info">Uygulama Bilgileri</string>
     <string name="settings_update_available_fmt">Yeni Güncelleme Mevcut: %1$s (İndirmek için dokunun)</string>
     <string name="settings_app_up_to_date">Uygulamanız güncel</string>
+    <string name="settings_check_updates">Güncellemeleri Denetle</string>
+    <string name="settings_checking_updates">Güncellemeler denetleniyor&#8230;</string>
+    <string name="settings_check_updates_failed">Güncelleme denetimi başarısız oldu. Tekrar denemek için dokunun.</string>
     <string name="settings_github_source">Açık Kaynak Kodları (GitHub)</string>
 
     <!-- Tarayıcı Ekranı -->

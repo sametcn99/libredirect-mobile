@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
@@ -79,6 +80,7 @@ data class SettingsActions(
     val onRefreshManifest: () -> Unit,
     val onSearchEngineSelect: (SearchEngine) -> Unit = {},
     val onSaveCustomSearchEngine: (name: String, template: String) -> Unit = { _, _ -> },
+    val onCheckForUpdates: () -> Unit = {},
 )
 
 @Composable
@@ -193,6 +195,10 @@ fun SettingsScreen(
                 AppVersionCard(
                     versionDisplay = state.appVersionDisplay,
                     updateAvailable = state.updateAvailable?.versionName,
+                    isChecking = state.updateCheckInProgress,
+                    hasChecked = state.updateChecked,
+                    hasFailed = state.updateCheckFailed,
+                    onCheckForUpdates = actions.onCheckForUpdates,
                     onOpenRelease = {
                         state.updateAvailable?.releaseUrl?.let { url ->
                             context.openUrl(url)
@@ -507,6 +513,10 @@ private fun ManifestDatabaseCard(
 private fun AppVersionCard(
     versionDisplay: String,
     updateAvailable: String?,
+    isChecking: Boolean,
+    hasChecked: Boolean,
+    hasFailed: Boolean,
+    onCheckForUpdates: () -> Unit,
     onOpenRelease: () -> Unit,
     onOpenSourceCode: () -> Unit,
 ) {
@@ -569,43 +579,106 @@ private fun AppVersionCard(
                 }
             }
 
-            if (updateAvailable != null) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenRelease),
-                ) {
+            when {
+                isChecking -> {
                     Row(
-                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Default.Update, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                         Text(
-                            text = stringResource(R.string.settings_update_available_fmt, updateAvailable),
+                            text = stringResource(R.string.settings_checking_updates),
                             style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.settings_app_up_to_date),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+
+                updateAvailable != null -> {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenRelease),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Update,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_update_available_fmt, updateAvailable),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
                 }
+
+                hasFailed -> {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = onCheckForUpdates),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_check_updates_failed),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
+
+                hasChecked -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_app_up_to_date),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            Button(
+                onClick = onCheckForUpdates,
+                enabled = !isChecking,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.settings_check_updates))
             }
 
             Row(

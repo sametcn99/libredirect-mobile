@@ -13,13 +13,13 @@ import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
-import dev.libredirect.mobile.core.version.AppVersion
 import dev.libredirect.mobile.manifest.ManifestEndpoints
 import dev.libredirect.mobile.manifest.RefreshResult
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
 import dev.libredirect.mobile.ui.browser.SearchEngine
-import dev.libredirect.mobile.update.UpdateChecker
+import dev.libredirect.mobile.update.UpdateCheckResult
+import dev.libredirect.mobile.update.UpdateRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +35,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(app)
     private val manifestRepository = app.manifestRepository
     private val browserLauncher = BrowserLauncher(app)
-    private val updateChecker = UpdateChecker()
+    private val updateRepository = UpdateRepository(settingsRepository)
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -55,9 +55,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         launchSafely {
-            val latest = updateChecker.latestRelease()
-            if (latest != null && AppVersion.isNewer(latest.versionName, currentVersionName())) {
-                _uiState.value = _uiState.value.copy(updateAvailable = latest)
+            // Surface a previously found release immediately, then re-check
+            // against GitHub Releases at most once per auto-check interval.
+            val cached = updateRepository.cachedUpdate(currentVersionName())
+            if (cached != null) {
+                _uiState.value = _uiState.value.copy(updateAvailable = cached, updateChecked = true)
+            }
+            if (updateRepository.shouldAutoCheck()) {
+                checkForUpdates()
             }
         }
     }
@@ -84,6 +89,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun errorShown() {
         _uiState.value = _uiState.value.copy(errorMessage = null)
+    }
+
+    /**
+     * Checks GitHub Releases for a newer version. Triggered manually from the
+     * settings app info card and automatically (throttled) at startup.
+     */
+    fun checkForUpdates() {
+        if (_uiState.value.updateCheckInProgress) return
+        _uiState.value = _uiState.value.copy(updateCheckInProgress = true, updateCheckFailed = false)
+        launchSafely {
+            when (val result = updateRepository.checkNow(currentVersionName())) {
+                is UpdateCheckResult.Available ->
+                    _uiState.value =
+                        _uiState.value.copy(
+                            updateAvailable = result.info,
+                            updateChecked = true,
+                            updateCheckInProgress = false,
+                        )
+
+                UpdateCheckResult.UpToDate ->
+                    _uiState.value =
+                        _uiState.value.copy(
+                            updateAvailable = null,
+                            updateChecked = true,
+                            updateCheckInProgress = false,
+                        )
+
+                UpdateCheckResult.Failed ->
+                    _uiState.value =
+                        _uiState.value.copy(updateCheckFailed = true, updateCheckInProgress = false)
+            }
+        }
     }
 
     fun setRoutingEnabled(enabled: Boolean) = launchSafely { settingsRepository.setRoutingEnabled(enabled) }
@@ -214,6 +251,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             customServiceMessage = _uiState.value.customServiceMessage,
             errorMessage = _uiState.value.errorMessage,
             updateAvailable = _uiState.value.updateAvailable,
+            updateChecked = _uiState.value.updateChecked,
+            updateCheckInProgress = _uiState.value.updateCheckInProgress,
+            updateCheckFailed = _uiState.value.updateCheckFailed,
             appVersionName = verName,
             appVersionCode = verCode,
             appVersionDisplay = verDisplay,
@@ -251,8 +291,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "MainViewModel"
-        const val FALLBACK_VERSION_NAME = "1.2.1"
-        const val FALLBACK_VERSION_CODE = 5L
-        const val FALLBACK_VERSION_DISPLAY = "v1.2.1 (Build 5)"
+        const val FALLBACK_VERSION_NAME = "1.2.2"
+        const val FALLBACK_VERSION_CODE = 6L
+        const val FALLBACK_VERSION_DISPLAY = "v1.2.2 (Build 6)"
     }
 }

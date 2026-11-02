@@ -82,6 +82,9 @@
     <string name="settings_section_app_info">Application Info</string>
     <string name="settings_update_available_fmt">New Update Available: %1$s (Tap to download)</string>
     <string name="settings_app_up_to_date">Your application is up to date</string>
+    <string name="settings_check_updates">Check for Updates</string>
+    <string name="settings_checking_updates">Checking for updates&#8230;</string>
+    <string name="settings_check_updates_failed">Update check failed. Tap to retry.</string>
     <string name="settings_github_source">Open Source Code (GitHub)</string>
 
     <!-- Browser Screen -->

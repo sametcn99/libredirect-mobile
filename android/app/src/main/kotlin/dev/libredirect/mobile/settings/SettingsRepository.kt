@@ -14,10 +14,17 @@ import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+
+/** A newer release remembered from the last update check, so the banner survives restarts. */
+data class CachedUpdate(
+    val versionName: String,
+    val releaseUrl: String,
+)
 
 /**
  * A corrupted preferences file (partial write, disk error) otherwise throws
@@ -36,6 +43,7 @@ private val Context.settingsDataStore by preferencesDataStore(
  * manifest, so reusing it here avoids introducing Proto DataStore's schema
  * step for what is still a handful of small settings.
  */
+@Suppress("TooManyFunctions")
 class SettingsRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -126,6 +134,38 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    /** Epoch millis of the last successful GitHub Releases update check; 0 when never checked. */
+    suspend fun updateLastCheckAt(): Long = context.settingsDataStore.data.first()[Keys.UPDATE_LAST_CHECK_AT] ?: 0L
+
+    suspend fun setUpdateLastCheckAt(epochMillis: Long) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.UPDATE_LAST_CHECK_AT] = epochMillis }
+    }
+
+    /** Last known newer release from GitHub; null when none is cached. */
+    @Suppress("ReturnCount")
+    suspend fun cachedUpdate(): CachedUpdate? {
+        val prefs = context.settingsDataStore.data.first()
+        val version = prefs[Keys.UPDATE_CACHED_VERSION] ?: return null
+        if (version.isBlank()) return null
+        return CachedUpdate(versionName = version, releaseUrl = prefs[Keys.UPDATE_CACHED_RELEASE_URL].orEmpty())
+    }
+
+    /** Blank version clears the cache (used when the check finds nothing newer). */
+    suspend fun setCachedUpdate(
+        version: String,
+        releaseUrl: String,
+    ) {
+        context.settingsDataStore.edit { prefs ->
+            if (version.isBlank()) {
+                prefs.remove(Keys.UPDATE_CACHED_VERSION)
+                prefs.remove(Keys.UPDATE_CACHED_RELEASE_URL)
+            } else {
+                prefs[Keys.UPDATE_CACHED_VERSION] = version
+                prefs[Keys.UPDATE_CACHED_RELEASE_URL] = releaseUrl
+            }
+        }
+    }
+
     private fun toAppSettings(prefs: Preferences): AppSettings =
         AppSettings(
             routingEnabled = prefs[Keys.ROUTING_ENABLED] ?: true,
@@ -178,5 +218,8 @@ class SettingsRepository(private val context: Context) {
         val CUSTOM_SEARCH_ENGINE_URL = stringPreferencesKey("custom_search_engine_url")
         val BROWSER_PAGE_THEME = stringPreferencesKey("browser_page_theme")
         val BROWSER_AUTO_DARKEN = booleanPreferencesKey("browser_auto_darken")
+        val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
+        val UPDATE_CACHED_VERSION = stringPreferencesKey("update_cached_version")
+        val UPDATE_CACHED_RELEASE_URL = stringPreferencesKey("update_cached_release_url")
     }
 }

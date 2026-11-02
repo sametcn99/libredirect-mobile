@@ -213,6 +213,7 @@ fun AppNavHost(
                                 onSaveCustomSearchEngine = { name, template ->
                                     mainViewModel.setCustomSearchEngine(name, template)
                                 },
+                                onCheckForUpdates = mainViewModel::checkForUpdates,
                             ),
                     )
                 }
