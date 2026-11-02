@@ -57,14 +57,55 @@ class BrowserTabTest {
                 redirectedUrl = "https://proxigram.example.org/p/123",
                 serviceName = "Instagram",
                 frontendName = "Proxigram",
+                routeId = "instagram",
+                frontendId = "proxigram",
+                instance = "https://proxigram.example.org",
             )
-        val tab = BrowserTab(url = notice.redirectedUrl, lastRedirect = notice)
+        val tab =
+            BrowserTab(
+                url = notice.redirectedUrl,
+                lastRedirect = notice,
+                originalUrl = notice.originalUrl,
+            )
 
         assertEquals("https://proxigram.example.org/p/123", tab.url)
         assertNotNull(tab.lastRedirect)
         assertEquals("Instagram", tab.lastRedirect?.serviceName)
         assertEquals("Proxigram", tab.lastRedirect?.frontendName)
+        assertEquals("instagram", tab.lastRedirect?.routeId)
+        assertEquals("proxigram", tab.lastRedirect?.frontendId)
+        assertEquals("https://proxigram.example.org", tab.lastRedirect?.instance)
         assertEquals("https://instagram.com/p/123", tab.lastRedirect?.originalUrl)
+        assertEquals("https://instagram.com/p/123", tab.originalUrl)
+    }
+
+    @Test
+    fun `fresh tab keeps no original link`() {
+        val tab = BrowserTab()
+        assertNull(tab.originalUrl)
+        assertNull(tab.lastRedirect)
+    }
+
+    @Test
+    fun `external link tab keeps the original pre-redirect link`() {
+        val tab =
+            BrowserTab(
+                url = "https://redlib.example.org/search?q=cats",
+                title = "redlib.example.org",
+                originalUrl = "https://reddit.com/search?q=cats",
+                lastRedirect =
+                    RedirectNotice(
+                        originalUrl = "https://reddit.com/search?q=cats",
+                        redirectedUrl = "https://redlib.example.org/search?q=cats",
+                        serviceName = "Reddit",
+                        frontendName = "Redlib",
+                        routeId = "reddit",
+                        frontendId = "redlib",
+                        instance = "https://redlib.example.org",
+                    ),
+            )
+        assertEquals("https://reddit.com/search?q=cats", tab.originalUrl)
+        assertEquals("redlib.example.org", tab.displayHost)
     }
 
     @Test

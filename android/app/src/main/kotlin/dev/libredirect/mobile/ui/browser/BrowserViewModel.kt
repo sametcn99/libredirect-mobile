@@ -24,21 +24,33 @@ import androidx.lifecycle.viewModelScope
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.manifest.Manifest
+import dev.libredirect.mobile.core.manifest.Strategy
+import dev.libredirect.mobile.core.routing.RouteMatcher
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+
+/**
+ * Instance choices offered for the active tab's original link. Built when the
+ * browser menu opens; [currentIndex] is -1 when the instance in use is unknown.
+ */
+data class InstanceAlternatives(
+    val routeId: String,
+    val routeName: String,
+    val frontendId: String,
+    val frontendName: String,
+    val instances: List<String>,
+    val currentIndex: Int,
+)
 
 data class BrowserUiState(
     val tabs: List<BrowserTab> = emptyList(),
@@ -58,6 +70,8 @@ data class BrowserUiState(
     val findMatchCount: Int = 0,
     val findActiveMatchIndex: Int = 0,
     val isMenuSheetVisible: Boolean = false,
+    val instanceAlternatives: InstanceAlternatives? = null,
+    val isInstancePickerVisible: Boolean = false,
     val pageTheme: PageTheme = PageTheme.DEFAULT,
     val autoDarken: Boolean = true,
 ) {
@@ -72,7 +86,7 @@ data class BrowserUiState(
         }
 }
 
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LargeClass")
 class BrowserViewModel(application: Application) : AndroidViewModel(application) {
     private val app = getApplication<LibRedirectApplication>()
     private val manifestRepository = app.manifestRepository
@@ -90,8 +104,26 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         )
     val uiState: StateFlow<BrowserUiState> = _uiState.asStateFlow()
 
-    private val _openBrowserTabEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val openBrowserTabEvent: SharedFlow<Unit> = _openBrowserTabEvent.asSharedFlow()
+    /**
+     * Monotonic counter bumped whenever the browser screen should be brought
+     * to the front (e.g. a link arrived from outside the app). Backed by a
+     * StateFlow instead of a fire-and-forget event so a request emitted before
+     * the UI subscribes — cold start handling an intent — is still observed.
+     */
+    private val _browserFocusRequests = MutableStateFlow(0)
+    val browserFocusRequests: StateFlow<Int> = _browserFocusRequests.asStateFlow()
+
+    private fun requestBrowserFocus() {
+        _browserFocusRequests.update { it + 1 }
+    }
+
+    /**
+     * Per tab: URLs the tab is already heading to as the resolved destination
+     * of a LibRedirect redirect. The WebView client must not re-resolve them
+     * (they are frontend origins, not original service links) and must keep
+     * the tab's original-link metadata intact when they load.
+     */
+    private val pendingRedirectTargets = mutableMapOf<String, MutableSet<String>>()
 
     private var cachedManifest: Manifest? = null
     private var cachedSettings: AppSettings = AppSettings()
@@ -107,6 +139,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     init {
         viewModelScope.launch {
             cachedManifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
+            enrichRedirectNotices()
+            if (_uiState.value.isMenuSheetVisible) {
+                _uiState.update { it.copy(instanceAlternatives = computeInstanceAlternatives()) }
+            }
             settingsRepository.settings.collect { settings ->
                 cachedSettings = settings
                 _uiState.update {
@@ -148,7 +184,55 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 isTabsSheetVisible = false,
             )
         }
-        _openBrowserTabEvent.tryEmit(Unit)
+        requestBrowserFocus()
+    }
+
+    /**
+     * A link arriving from outside the app (share target, link handler) always
+     * gets its own new tab and brings the browser screen to the front. The tab
+     * keeps the original (pre-redirection) link plus the route/frontend/instance
+     * that produced the destination, so "try another instance" can re-route it.
+     */
+    fun openExternalLinkInNewTab(
+        url: String,
+        originalUrl: String? = null,
+        routeId: String? = null,
+        frontendId: String? = null,
+        instance: String? = null,
+    ) {
+        val origin = originalUrl ?: url
+        val notice =
+            routeId?.let { rid ->
+                val (serviceName, frontendName) = routeNames(cachedManifest, rid, frontendId)
+                RedirectNotice(
+                    originalUrl = origin,
+                    redirectedUrl = url,
+                    serviceName = serviceName,
+                    frontendName = frontendName,
+                    routeId = rid,
+                    frontendId = frontendId,
+                    instance = instance,
+                )
+            }
+        val newTab =
+            BrowserTab(
+                id = UUID.randomUUID().toString(),
+                url = url,
+                title = BrowserTab.hostOf(url),
+                lastRedirect = notice,
+                originalUrl = origin,
+            )
+        if (notice != null) {
+            pendingRedirectTargets.getOrPut(newTab.id) { mutableSetOf() }.add(url)
+        }
+        _uiState.update { current ->
+            current.copy(
+                tabs = current.tabs + newTab,
+                activeTabId = newTab.id,
+                isTabsSheetVisible = false,
+            )
+        }
+        requestBrowserFocus()
     }
 
     fun openUrlInNewOrActiveTab(url: String) {
@@ -165,11 +249,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         } else {
             navigateActiveTab(url)
         }
-        _openBrowserTabEvent.tryEmit(Unit)
+        requestBrowserFocus()
     }
 
     fun closeTab(tabId: String) {
         destroyWebView(tabId)
+        pendingRedirectTargets.remove(tabId)
 
         _uiState.update { current ->
             val remaining = current.tabs.filterNot { it.id == tabId }
@@ -203,6 +288,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun closeAllTabs() {
         webViewPool.keys.toList().forEach(::destroyWebView)
+        pendingRedirectTargets.clear()
 
         val freshTab =
             BrowserTab(
@@ -263,7 +349,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setMenuSheetVisible(visible: Boolean) {
-        _uiState.update { it.copy(isMenuSheetVisible = visible) }
+        _uiState.update {
+            it.copy(
+                isMenuSheetVisible = visible,
+                instanceAlternatives = if (visible) computeInstanceAlternatives() else null,
+            )
+        }
+    }
+
+    fun setInstancePickerVisible(visible: Boolean) {
+        _uiState.update { it.copy(isInstancePickerVisible = visible) }
     }
 
     /**
@@ -437,13 +532,28 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 else -> _uiState.value.searchEngine.buildSearchUrl(trimmed)
             }
 
-        val resolved = resolveRedirection(targetUrl) ?: targetUrl
         val currentTabId = _uiState.value.activeTabId
+        val resolved = resolveRedirection(targetUrl)
+        if (resolved == null) {
+            // A fresh, unredirected navigation: the tab is now about this link.
+            _uiState.update { current ->
+                current.copy(
+                    tabs =
+                        current.tabs.map { tab ->
+                            if (tab.id == currentTabId) {
+                                tab.copy(originalUrl = trimmed, lastRedirect = null)
+                            } else {
+                                tab
+                            }
+                        },
+                )
+            }
+        }
 
-        updateTabUrl(currentTabId, resolved)
+        updateTabUrl(currentTabId, resolved ?: targetUrl)
         val webView = webViewPool[currentTabId]
         if (webView != null) {
-            webView.loadUrl(resolved)
+            webView.loadUrl(resolved ?: targetUrl)
         }
     }
 
@@ -480,35 +590,172 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    @Suppress("ReturnCount")
     fun resolveRedirection(url: String): String? {
         val settings = cachedSettings
         val manifest = cachedManifest
         if (!settings.routingEnabled || manifest == null) return null
 
         val result = UrlRouter(manifest).resolve(url, settings.routingContext())
-        return if (result is RoutingResult.Redirect) {
-            val route = manifest.routes.find { it.id == result.routeId }
-            val serviceName = route?.name ?: result.routeId
-            val frontendName = route?.frontends?.find { it.id == result.frontendId }?.name ?: result.frontendId
-            val notice =
-                RedirectNotice(
-                    originalUrl = url,
-                    redirectedUrl = result.redirectedUrl,
-                    serviceName = serviceName,
-                    frontendName = frontendName,
-                )
-            _uiState.update { current ->
-                current.copy(
-                    activeRedirectNotice = notice,
-                    tabs =
-                        current.tabs.map { tab ->
-                            if (tab.id == current.activeTabId) tab.copy(lastRedirect = notice) else tab
-                        },
-                )
-            }
-            result.redirectedUrl
-        } else {
-            null
+        if (result !is RoutingResult.Redirect) return null
+
+        val route = manifest.routes.find { it.id == result.routeId }
+        val serviceName = route?.name ?: result.routeId
+        val frontendName = route?.frontends?.find { it.id == result.frontendId }?.name ?: result.frontendId
+        val notice =
+            RedirectNotice(
+                originalUrl = url,
+                redirectedUrl = result.redirectedUrl,
+                serviceName = serviceName,
+                frontendName = frontendName,
+                routeId = result.routeId,
+                frontendId = result.frontendId,
+                instance = result.instance,
+            )
+        val currentTabId = _uiState.value.activeTabId
+        pendingRedirectTargets.getOrPut(currentTabId) { mutableSetOf() }.add(result.redirectedUrl)
+        _uiState.update { current ->
+            current.copy(
+                activeRedirectNotice = notice,
+                tabs =
+                    current.tabs.map { tab ->
+                        if (tab.id == current.activeTabId) {
+                            tab.copy(lastRedirect = notice, originalUrl = url)
+                        } else {
+                            tab
+                        }
+                    },
+            )
+        }
+        return result.redirectedUrl
+    }
+
+    /**
+     * Re-routes the active tab's original link through another instance of its
+     * frontend. A null [selectedInstance] picks a random instance other than
+     * the one currently in use (falling back to any instance when the frontend
+     * only knows one).
+     */
+    @Suppress("ReturnCount")
+    fun tryAnotherInstance(selectedInstance: String?) {
+        val alternatives = _uiState.value.instanceAlternatives ?: return
+        val manifest = cachedManifest ?: return
+        val tab = _uiState.value.activeTab ?: return
+        val original = tab.originalUrl ?: return
+        setInstancePickerVisible(false)
+
+        val target =
+            selectedInstance ?: alternatives.instances
+                .filterIndexed { index, _ -> index != alternatives.currentIndex }
+                .ifEmpty { alternatives.instances }
+                .randomOrNull() ?: return
+
+        val context =
+            cachedSettings
+                .routingContext()
+                .copy(instanceOverrides = mapOf("${alternatives.routeId}/${alternatives.frontendId}" to target))
+        val result = UrlRouter(manifest).resolve(original, context)
+        if (result !is RoutingResult.Redirect || result.redirectedUrl == tab.url) return
+
+        val notice =
+            RedirectNotice(
+                originalUrl = original,
+                redirectedUrl = result.redirectedUrl,
+                serviceName = alternatives.routeName,
+                frontendName = alternatives.frontendName,
+                routeId = result.routeId,
+                frontendId = result.frontendId,
+                instance = result.instance,
+            )
+        pendingRedirectTargets.getOrPut(tab.id) { mutableSetOf() }.add(result.redirectedUrl)
+        _uiState.update { current ->
+            current.copy(
+                activeRedirectNotice = notice,
+                tabs =
+                    current.tabs.map { t ->
+                        if (t.id == tab.id) {
+                            t.copy(url = result.redirectedUrl, lastRedirect = notice)
+                        } else {
+                            t
+                        }
+                    },
+            )
+        }
+        webViewPool[tab.id]?.loadUrl(result.redirectedUrl)
+    }
+
+    /**
+     * Instances the active tab's original link could be served by, or null when
+     * the tab has no redirectable original link (routing off, disabled route,
+     * unknown route, or a frontend without instances).
+     */
+    @Suppress("ReturnCount")
+    private fun computeInstanceAlternatives(): InstanceAlternatives? {
+        val manifest = cachedManifest ?: return null
+        if (!cachedSettings.routingEnabled) return null
+        val tab = _uiState.value.activeTab ?: return null
+        val original = tab.originalUrl ?: return null
+        val route = RouteMatcher(manifest).match(BrowserTab.hostOf(original)) ?: return null
+        if (route.id in cachedSettings.disabledRoutes) return null
+        val frontendId = cachedSettings.selectedFrontends[route.id] ?: route.frontends.first().id
+        val frontend = route.frontends.find { it.id == frontendId } ?: route.frontends.first()
+        if (!Strategy.requiresInstances(frontend.strategy)) return null
+
+        val currentInstance =
+            tab.lastRedirect
+                ?.takeIf { it.routeId == route.id && it.frontendId == frontend.id }
+                ?.instance
+                ?: frontend.instances.firstOrNull { instance ->
+                    BrowserTab.hostOf(tab.url) == BrowserTab.hostOf(instance)
+                }
+        return InstanceAlternatives(
+            routeId = route.id,
+            routeName = route.name,
+            frontendId = frontend.id,
+            frontendName = frontend.name,
+            instances = frontend.instances,
+            currentIndex = currentInstance?.let { frontend.instances.indexOf(it) } ?: -1,
+        )
+    }
+
+    /** Resolves route/frontend display names once the manifest is available. */
+    private fun routeNames(
+        manifest: Manifest?,
+        routeId: String?,
+        frontendId: String?,
+    ): Pair<String, String> {
+        val route = routeId?.let { id -> manifest?.routes?.find { it.id == id } }
+        val frontend = frontendId?.let { fid -> route?.frontends?.find { it.id == fid } }
+        return Pair(route?.name ?: routeId.orEmpty(), frontend?.name ?: frontendId.orEmpty())
+    }
+
+    /**
+     * Tabs created from an intent may predate the manifest being cached (cold
+     * start); fill their redirect notices with proper display names once it is.
+     */
+    private fun enrichRedirectNotices() {
+        val manifest = cachedManifest ?: return
+        _uiState.update { current ->
+            val tabs =
+                current.tabs.map { tab ->
+                    val notice = tab.lastRedirect
+                    if (notice?.routeId == null) {
+                        tab
+                    } else {
+                        val (serviceName, frontendName) = routeNames(manifest, notice.routeId, notice.frontendId)
+                        tab.copy(lastRedirect = notice.copy(serviceName = serviceName, frontendName = frontendName))
+                    }
+                }
+            val banner =
+                current.activeRedirectNotice?.let { notice ->
+                    if (notice.routeId == null) {
+                        notice
+                    } else {
+                        val (serviceName, frontendName) = routeNames(manifest, notice.routeId, notice.frontendId)
+                        notice.copy(serviceName = serviceName, frontendName = frontendName)
+                    }
+                }
+            current.copy(tabs = tabs, activeRedirectNotice = banner)
         }
     }
 
@@ -533,48 +780,74 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (existing != null) destroyWebView(tabId)
 
         val tab = _uiState.value.tabs.find { it.id == tabId }
-        val isDesktop = tab?.isDesktopMode == true
-
-        val newWebView =
-            WebView(WebViewTheming.themedContext(context, darkPages)).apply {
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    loadWithOverviewMode = true
-                    useWideViewPort = true
-                    setSupportZoom(true)
-                    builtInZoomControls = true
-                    displayZoomControls = false
-                    mediaPlaybackRequiresUserGesture = false
-                }
-                WebViewTheming.applyBackground(this, darkPages)
-                WebViewTheming.applyAutoDarken(this, darkPages, _uiState.value.autoDarken)
-                applyDesktopMode(this, isDesktop)
-                setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
-                    _uiState.update {
-                        it.copy(
-                            findActiveMatchIndex = activeMatchOrdinal + 1,
-                            findMatchCount = numberOfMatches,
-                        )
-                    }
-                }
-                webViewClient = BrowserTabWebViewClient(tabId)
-                webChromeClient = BrowserTabWebChromeClient(tabId)
-                setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-                    enqueueDownload(url, userAgent, contentDisposition, mimeType)
-                }
-            }
+        val newWebView = buildWebView(tabId, context, darkPages, tab?.isDesktopMode == true)
 
         webViewPool[tabId] = newWebView
         webViewDarkModes[tabId] = darkPages
 
         val restored = savedState?.let { newWebView.restoreState(it) } != null
         if (!restored) {
-            val target = tab?.url ?: BrowserTab.DEFAULT_HOME_URL
-            val resolved = if (existing != null) target else resolveRedirection(target) ?: target
-            newWebView.loadUrl(resolved)
+            loadInitialPage(newWebView, tabId, tab, isReplacement = existing != null)
         }
         return newWebView
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun buildWebView(
+        tabId: String,
+        context: Context,
+        darkPages: Boolean,
+        isDesktop: Boolean,
+    ): WebView =
+        WebView(WebViewTheming.themedContext(context, darkPages)).apply {
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                loadWithOverviewMode = true
+                useWideViewPort = true
+                setSupportZoom(true)
+                builtInZoomControls = true
+                displayZoomControls = false
+                mediaPlaybackRequiresUserGesture = false
+            }
+            WebViewTheming.applyBackground(this, darkPages)
+            WebViewTheming.applyAutoDarken(this, darkPages, _uiState.value.autoDarken)
+            applyDesktopMode(this, isDesktop)
+            setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
+                _uiState.update {
+                    it.copy(
+                        findActiveMatchIndex = activeMatchOrdinal + 1,
+                        findMatchCount = numberOfMatches,
+                    )
+                }
+            }
+            webViewClient = BrowserTabWebViewClient(tabId)
+            webChromeClient = BrowserTabWebChromeClient(tabId)
+            setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+                enqueueDownload(url, userAgent, contentDisposition, mimeType)
+            }
+        }
+
+    private fun loadInitialPage(
+        webView: WebView,
+        tabId: String,
+        tab: BrowserTab?,
+        isReplacement: Boolean,
+    ) {
+        val target = tab?.url ?: BrowserTab.DEFAULT_HOME_URL
+        // A tab carrying redirect metadata is already sitting on a resolved
+        // destination: load it as-is instead of routing it a second time.
+        val alreadyRouted = tab?.lastRedirect != null
+        val resolved =
+            if (isReplacement || alreadyRouted) {
+                target
+            } else {
+                resolveRedirection(target) ?: target
+            }
+        if (alreadyRouted) {
+            pendingRedirectTargets.getOrPut(tabId) { mutableSetOf() }.add(resolved)
+        }
+        webView.loadUrl(resolved)
     }
 
     /**
@@ -736,7 +1009,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 }
                 true
             } else {
-                val redirected = resolveRedirection(urlString)
+                val isPendingTarget = pendingRedirectTargets[tabId]?.contains(urlString) == true
+                val redirected = if (isPendingTarget) null else resolveRedirection(urlString)
                 if (redirected != null && redirected != urlString) {
                     view?.loadUrl(redirected)
                     true
@@ -753,6 +1027,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         ) {
             super.onPageStarted(view, url, favicon)
             if (url != null) {
+                if (pendingRedirectTargets[tabId]?.contains(url) == true) {
+                    // This is the resolved destination of a redirect we already
+                    // performed: keep the tab's original-link metadata intact.
+                    updateTabUrl(tabId, url)
+                    updateTabFavicon(tabId, favicon)
+                    updateTabLoading(tabId, isLoading = true, progress = 10)
+                    if (tabId == _uiState.value.activeTabId) {
+                        _uiState.update { it.copy(findMatchCount = 0, findActiveMatchIndex = 0) }
+                    }
+                    return
+                }
                 val redirected = resolveRedirection(url)
                 if (redirected != null && redirected != url) {
                     view?.stopLoading()

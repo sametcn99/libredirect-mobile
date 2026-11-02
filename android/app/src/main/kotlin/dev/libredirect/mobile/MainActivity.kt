@@ -36,7 +36,13 @@ class MainActivity : AppCompatActivity() {
         if (intent.action == BrowserLauncher.ACTION_OPEN_IN_APP_BROWSER ||
             intent.action == Intent.ACTION_VIEW
         ) {
-            browserViewModel.openUrlInNewOrActiveTab(url)
+            browserViewModel.openExternalLinkInNewTab(
+                url = url,
+                originalUrl = intent.getStringExtra(BrowserLauncher.EXTRA_ORIGINAL_URL),
+                routeId = intent.getStringExtra(BrowserLauncher.EXTRA_ROUTE_ID),
+                frontendId = intent.getStringExtra(BrowserLauncher.EXTRA_FRONTEND_ID),
+                instance = intent.getStringExtra(BrowserLauncher.EXTRA_INSTANCE),
+            )
         }
     }
 }

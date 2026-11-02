@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserLauncher
+import dev.libredirect.mobile.browser.InAppRedirectInfo
 import dev.libredirect.mobile.core.routing.RoutingFailure
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
@@ -78,8 +79,23 @@ class RedirectActivity : ComponentActivity() {
 
         val destination = destinationFor(result) ?: return showMessage(R.string.redirect_cannot_open)
 
+        val redirectInfo =
+            (result as? RoutingResult.Redirect)?.let {
+                InAppRedirectInfo(
+                    originalUrl = it.originalUrl,
+                    routeId = it.routeId,
+                    frontendId = it.frontendId,
+                    instance = it.instance,
+                )
+            }
         val launcher = BrowserLauncher(this)
-        val launched = launcher.launch(this, destination, preferredPackage = settings.selectedBrowserPackage)
+        val launched =
+            launcher.launch(
+                this,
+                destination,
+                preferredPackage = settings.selectedBrowserPackage,
+                redirect = redirectInfo,
+            )
         if (!launched) {
             showMessage(R.string.redirect_no_browser)
         }

@@ -121,6 +121,12 @@
     <string name="browser_delete_item">Sil</string>
     <string name="browser_menu_desktop_site">Masaüstü sitesi</string>
     <string name="browser_menu_search_engine">Arama motoru</string>
+    <string name="browser_menu_try_another_instance">Başka bir instance dene</string>
+    <string name="browser_instance_picker_title">Başka bir instance dene</string>
+    <string name="browser_instance_picker_desc">Bu sekmenin orijinal bağlantısını farklı bir instance üzerinde yeniden aç</string>
+    <string name="browser_instance_random">Rastgele instance</string>
+    <string name="browser_instance_current">Mevcut instance</string>
+    <string name="browser_original_host_fmt">Orijinal: %1$s</string>
     <string name="browser_search_engine_title">Arama Motoru Seçin</string>
     <string name="browser_menu_find_in_page">Sayfada bul</string>
     <string name="browser_find_hint">Sayfada bul</string>

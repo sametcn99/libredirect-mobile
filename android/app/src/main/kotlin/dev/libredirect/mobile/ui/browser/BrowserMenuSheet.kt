@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Contrast
@@ -68,6 +69,7 @@ data class BrowserMenuActions(
     val onOpenBookmarks: () -> Unit,
     val onOpenHistory: () -> Unit,
     val onOpenSearchEngine: () -> Unit,
+    val onTryAnotherInstance: () -> Unit,
     val onOpenExternal: () -> Unit,
     val onClearBrowsingData: () -> Unit,
     val onCloseTab: () -> Unit,
@@ -81,6 +83,7 @@ fun BrowserMenuSheet(
     searchEngine: SearchEngine,
     pageTheme: PageTheme,
     autoDarken: Boolean,
+    instanceAlternatives: InstanceAlternatives?,
     actions: BrowserMenuActions,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -169,6 +172,14 @@ fun BrowserMenuSheet(
                 trailing = searchEngine.displayName,
                 onClick = dismissThen(actions.onOpenSearchEngine),
             )
+            if (instanceAlternatives != null) {
+                MenuRow(
+                    icon = Icons.Default.SwapHoriz,
+                    label = stringResource(R.string.browser_menu_try_another_instance),
+                    trailing = instanceAlternatives.frontendName,
+                    onClick = dismissThen(actions.onTryAnotherInstance),
+                )
+            }
             MenuRow(
                 icon = Icons.AutoMirrored.Filled.OpenInNew,
                 label = stringResource(R.string.browser_menu_open_external),
@@ -232,6 +243,17 @@ private fun MenuHeader(
                     text = tab?.displayHost.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // The tab is serving a redirected frontend: surface the original link it is really about.
+            val originalHost = tab?.originalUrl?.let { BrowserTab.hostOf(it) }
+            if (originalHost != null && originalHost != tab?.displayHost) {
+                Text(
+                    text = stringResource(R.string.browser_original_host_fmt, originalHost),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

@@ -13,6 +13,13 @@ data class RoutingContext(
     val selectedFrontends: Map<String, String> = emptyMap(),
     /** "$routeId/$frontendId" -> selection. Missing entry defaults to Automatic. */
     val instanceSelections: Map<String, InstanceSelection> = emptyMap(),
+    /**
+     * "$routeId/$frontendId" -> explicit instance origin for a one-off resolve
+     * (e.g. the browser's "try another instance" action). Takes precedence over
+     * [instanceSelections]; values not present in the frontend's instance list
+     * are ignored.
+     */
+    val instanceOverrides: Map<String, String> = emptyMap(),
 ) {
     fun instanceSelectionFor(
         routeId: String,

@@ -8,6 +8,9 @@ data class RedirectNotice(
     val redirectedUrl: String,
     val serviceName: String,
     val frontendName: String,
+    val routeId: String? = null,
+    val frontendId: String? = null,
+    val instance: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
 )
 
@@ -20,6 +23,8 @@ data class BrowserTab(
     val canGoBack: Boolean = false,
     val canGoForward: Boolean = false,
     val lastRedirect: RedirectNotice? = null,
+    /** The link this tab is really "about": the URL before any LibRedirect redirection. */
+    val originalUrl: String? = null,
     val isDesktopMode: Boolean = false,
     val favicon: Bitmap? = null,
 ) {

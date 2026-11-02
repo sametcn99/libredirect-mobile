@@ -35,7 +35,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.ui.browser.BrowserPickerScreen
-import dev.libredirect.mobile.ui.browser.BrowserTab
 import dev.libredirect.mobile.ui.browser.BrowserViewModel
 import dev.libredirect.mobile.ui.browser.InAppBrowserScreen
 import dev.libredirect.mobile.ui.custom.CustomServicesScreen
@@ -84,8 +83,10 @@ fun AppNavHost(
     val currentRoute = navBackStackEntry?.destination?.route
 
     LaunchedEffect(browserViewModel) {
-        browserViewModel.openBrowserTabEvent.collect {
-            if (currentRoute != ROUTE_BROWSER) {
+        // StateFlow-backed counter: replays the latest request to this collector,
+        // so focus requests emitted before composition (cold-start intents) navigate too.
+        browserViewModel.browserFocusRequests.collect {
+            if (it > 0 && currentRoute != ROUTE_BROWSER) {
                 navController.navigate(ROUTE_BROWSER) {
                     popUpTo(navController.graph.findStartDestination().id) {
                         saveState = true
@@ -158,7 +159,11 @@ fun AppNavHost(
                                 onRefreshClick = mainViewModel::refreshManifest,
                                 onCustomServicesClick = { navController.navigate(ROUTE_CUSTOM_SERVICES) },
                                 onOpenInAppBrowser = { url ->
-                                    browserViewModel.openUrlInNewOrActiveTab(url ?: BrowserTab.DEFAULT_HOME_URL)
+                                    if (url != null) {
+                                        browserViewModel.openExternalLinkInNewTab(url)
+                                    } else {
+                                        browserViewModel.openNewTab()
+                                    }
                                     navController.navigate(ROUTE_BROWSER) {
                                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                         launchSingleTop = true

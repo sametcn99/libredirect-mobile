@@ -245,6 +245,7 @@ private fun BrowserSheets(
             searchEngine = state.searchEngine,
             pageTheme = state.pageTheme,
             autoDarken = state.autoDarken,
+            instanceAlternatives = state.instanceAlternatives,
             actions =
                 BrowserMenuActions(
                     onNewTab = { viewModel.openNewTab() },
@@ -257,12 +258,24 @@ private fun BrowserSheets(
                     onOpenBookmarks = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 0) },
                     onOpenHistory = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 1) },
                     onOpenSearchEngine = { viewModel.setSearchEngineDialogVisible(true) },
+                    onTryAnotherInstance = { viewModel.setInstancePickerVisible(true) },
                     onOpenExternal = onOpenExternal,
                     onClearBrowsingData = viewModel::clearBrowsingData,
                     onCloseTab = { state.activeTab?.let { viewModel.closeTab(it.id) } },
                     onDismiss = { viewModel.setMenuSheetVisible(false) },
                 ),
         )
+    }
+
+    if (state.isInstancePickerVisible) {
+        state.instanceAlternatives?.let { alternatives ->
+            InstancePickerDialog(
+                alternatives = alternatives,
+                onPickRandom = { viewModel.tryAnotherInstance(null) },
+                onPickInstance = viewModel::tryAnotherInstance,
+                onDismiss = { viewModel.setInstancePickerVisible(false) },
+            )
+        }
     }
 
     if (state.isTabsSheetVisible) {

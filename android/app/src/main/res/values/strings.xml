@@ -121,6 +121,12 @@
     <string name="browser_delete_item">Delete</string>
     <string name="browser_menu_desktop_site">Desktop site</string>
     <string name="browser_menu_search_engine">Search engine</string>
+    <string name="browser_menu_try_another_instance">Try another instance</string>
+    <string name="browser_instance_picker_title">Try another instance</string>
+    <string name="browser_instance_picker_desc">Reopen this tab\'s original link on a different instance</string>
+    <string name="browser_instance_random">Random instance</string>
+    <string name="browser_instance_current">Current instance</string>
+    <string name="browser_original_host_fmt">Original: %1$s</string>
     <string name="browser_search_engine_title">Select Search Engine</string>
     <string name="browser_menu_find_in_page">Find in page</string>
     <string name="browser_find_hint">Find in page</string>

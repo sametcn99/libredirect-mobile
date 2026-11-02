@@ -56,14 +56,15 @@ class UrlRouter(
     ): RoutingResult =
         when (val strategy = frontend.strategy) {
             is Strategy.Passthrough -> RoutingResult.Passthrough(input)
-            is Strategy.CustomScheme -> redirectResult(input, "${strategy.scheme}://$input", routeId, frontend)
+            is Strategy.CustomScheme -> redirectResult(input, "${strategy.scheme}://$input", routeId, frontend, null)
             is Strategy.ReplaceOrigin ->
                 pickInstance(routeId, frontend, context)?.let { instance ->
-                    redirectResult(input, replaceOrigin(url, instance), routeId, frontend)
+                    redirectResult(input, replaceOrigin(url, instance), routeId, frontend, instance)
                 } ?: noInstance(input)
             is Strategy.Template ->
                 pickInstance(routeId, frontend, context)?.let { instance ->
-                    redirectResult(input, TemplateRenderer.render(strategy.output, url, instance), routeId, frontend)
+                    val rendered = TemplateRenderer.render(strategy.output, url, instance)
+                    redirectResult(input, rendered, routeId, frontend, instance)
                 } ?: noInstance(input)
         }
 
@@ -72,18 +73,24 @@ class UrlRouter(
         redirected: String,
         routeId: String,
         frontend: Frontend,
+        instance: String?,
     ): RoutingResult =
         if (redirected == input) {
             RoutingResult.Passthrough(input)
         } else {
-            RoutingResult.Redirect(input, redirected, routeId, frontend.id)
+            RoutingResult.Redirect(input, redirected, routeId, frontend.id, instance)
         }
 
     private fun pickInstance(
         routeId: String,
         frontend: Frontend,
         context: RoutingContext,
-    ): String? = instancePicker.pick(frontend, context.instanceSelectionFor(routeId, frontend.id))
+    ): String? {
+        context.instanceOverrides["$routeId/${frontend.id}"]?.takeIf { it in frontend.instances }?.let {
+            return it
+        }
+        return instancePicker.pick(frontend, context.instanceSelectionFor(routeId, frontend.id))
+    }
 
     private fun noInstance(input: String) = RoutingResult.Failure(input, RoutingFailure.NO_INSTANCE_AVAILABLE)
 

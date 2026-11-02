@@ -6,6 +6,11 @@ sealed interface RoutingResult {
         val redirectedUrl: String,
         val routeId: String,
         val frontendId: String,
+        /**
+         * The instance origin that was picked for this redirect; null when
+         * the frontend's strategy carries no instances (passthrough, custom scheme).
+         */
+        val instance: String? = null,
     ) : RoutingResult
 
     data class Passthrough(

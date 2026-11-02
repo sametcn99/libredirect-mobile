@@ -87,6 +87,7 @@ class UrlRouterTest {
                 redirectedUrl = "https://yewtu.be/watch?v=abc&t=10#comment",
                 routeId = "youtube",
                 frontendId = "invidious",
+                instance = "https://yewtu.be",
             ),
             result,
         )
@@ -101,6 +102,7 @@ class UrlRouterTest {
                 redirectedUrl = "https://yewtu.be",
                 routeId = "youtube",
                 frontendId = "invidious",
+                instance = "https://yewtu.be",
             ),
             result,
         )
@@ -118,6 +120,7 @@ class UrlRouterTest {
         val result = router.resolve("https://reddit.com/search?q=hello+world", RoutingContext())
         val redirect = result as RoutingResult.Redirect
         assertEquals("https://redlib.example.org/search?q=hello+world", redirect.redirectedUrl)
+        assertEquals("https://redlib.example.org", redirect.instance)
     }
 
     @Test
@@ -249,5 +252,51 @@ class UrlRouterTest {
         val result = router.resolve("https://youtube.com/watch?v=abc", context)
         assertTrue(result is RoutingResult.Redirect)
         assertEquals("invidious", (result as RoutingResult.Redirect).frontendId)
+    }
+
+    private val multiInstanceManifest =
+        Manifest(
+            schemaVersion = 1,
+            revision = 1,
+            generatedAt = "2026-08-23T00:00:00Z",
+            routes =
+                listOf(
+                    Route(
+                        id = "x",
+                        name = "X",
+                        hosts = listOf("x.example"),
+                        frontends =
+                            listOf(
+                                Frontend(
+                                    id = "f",
+                                    name = "F",
+                                    strategy = Strategy.ReplaceOrigin,
+                                    instances = listOf("https://a.example", "https://b.example"),
+                                ),
+                            ),
+                    ),
+                ),
+        )
+
+    @Test
+    fun `instance override forces the given instance and reports it`() {
+        val router = UrlRouter(multiInstanceManifest)
+        val context = RoutingContext(instanceOverrides = mapOf("x/f" to "https://b.example"))
+        val redirect = router.resolve("https://x.example/watch", context) as RoutingResult.Redirect
+        assertEquals("https://b.example/watch", redirect.redirectedUrl)
+        assertEquals("https://b.example", redirect.instance)
+    }
+
+    @Test
+    fun `instance override outside the instance list falls back to selection`() {
+        val router = UrlRouter(multiInstanceManifest)
+        val context =
+            RoutingContext(
+                instanceSelections = mapOf("x/f" to InstanceSelection.Pinned("https://a.example")),
+                instanceOverrides = mapOf("x/f" to "https://unrelated.example"),
+            )
+        val redirect = router.resolve("https://x.example/watch", context) as RoutingResult.Redirect
+        assertEquals("https://a.example/watch", redirect.redirectedUrl)
+        assertEquals("https://a.example", redirect.instance)
     }
 }
