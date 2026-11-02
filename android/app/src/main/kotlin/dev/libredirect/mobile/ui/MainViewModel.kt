@@ -251,8 +251,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "MainViewModel"
-        const val FALLBACK_VERSION_NAME = "1.1.0"
-        const val FALLBACK_VERSION_CODE = 3L
-        const val FALLBACK_VERSION_DISPLAY = "v1.1.0 (Build 3)"
+        const val FALLBACK_VERSION_NAME = "1.2.1"
+        const val FALLBACK_VERSION_CODE = 5L
+        const val FALLBACK_VERSION_DISPLAY = "v1.2.1 (Build 5)"
     }
 }
