@@ -71,6 +71,14 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setBrowserPageTheme(themeId: String) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.BROWSER_PAGE_THEME] = themeId }
+    }
+
+    suspend fun setBrowserAutoDarken(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.BROWSER_AUTO_DARKEN] = enabled }
+    }
+
     suspend fun setRouteEnabled(
         routeId: String,
         enabled: Boolean,
@@ -131,6 +139,8 @@ class SettingsRepository(private val context: Context) {
             searchEngine = prefs[Keys.SEARCH_ENGINE] ?: "duckduckgo",
             customSearchEngineName = prefs[Keys.CUSTOM_SEARCH_ENGINE_NAME] ?: "",
             customSearchEngineUrl = prefs[Keys.CUSTOM_SEARCH_ENGINE_URL] ?: "",
+            browserPageTheme = prefs[Keys.BROWSER_PAGE_THEME] ?: "system",
+            browserAutoDarken = prefs[Keys.BROWSER_AUTO_DARKEN] ?: true,
         )
 
     private fun decodeSet(raw: String?): Set<String> = decodeOrDefault(raw, emptySet())
@@ -166,5 +176,7 @@ class SettingsRepository(private val context: Context) {
         val SEARCH_ENGINE = stringPreferencesKey("search_engine")
         val CUSTOM_SEARCH_ENGINE_NAME = stringPreferencesKey("custom_search_engine_name")
         val CUSTOM_SEARCH_ENGINE_URL = stringPreferencesKey("custom_search_engine_url")
+        val BROWSER_PAGE_THEME = stringPreferencesKey("browser_page_theme")
+        val BROWSER_AUTO_DARKEN = booleanPreferencesKey("browser_auto_darken")
     }
 }

@@ -3,14 +3,16 @@
 package dev.libredirect.mobile.ui.browser
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,15 +23,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -53,27 +55,27 @@ fun TabSwitcherSheet(
     ModalBottomSheet(
         onDismissRequest = actions.onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 16.dp),
         ) {
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                        .padding(start = 20.dp, end = 12.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.tab_switcher_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
                     )
                     Text(
                         text = stringResource(R.string.tab_switcher_count_fmt, tabs.size),
@@ -82,24 +84,19 @@ fun TabSwitcherSheet(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (tabs.size > 1) {
-                        TextButton(onClick = actions.onCloseAll) {
-                            Icon(
-                                Icons.Default.DeleteSweep,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.tab_switcher_close_all))
-                        }
+                if (tabs.size > 1) {
+                    TextButton(onClick = actions.onCloseAll) {
+                        Text(stringResource(R.string.tab_switcher_close_all))
                     }
-                    IconButton(onClick = actions.onDismiss) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = stringResource(R.string.action_close),
-                        )
-                    }
+                }
+                Spacer(Modifier.width(4.dp))
+                FilledTonalButton(
+                    onClick = actions.onNewTab,
+                    contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.tab_switcher_new_tab))
                 }
             }
 
@@ -108,7 +105,10 @@ fun TabSwitcherSheet(
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth().height(360.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp),
             ) {
                 items(tabs, key = BrowserTab::id) { tab ->
                     TabCard(
@@ -118,19 +118,6 @@ fun TabSwitcherSheet(
                         onClose = { actions.onTabClose(tab.id) },
                     )
                 }
-            }
-
-            Button(
-                onClick = actions.onNewTab,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(14.dp),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.tab_switcher_open_new_tab))
             }
         }
     }
@@ -151,79 +138,79 @@ private fun TabCard(
     onSelect: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val borderColor =
-        if (isActive) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.outlineVariant
-        }
-    val containerColor =
-        if (isActive) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        }
-
-    OutlinedCard(
-        border = BorderStroke(if (isActive) 2.dp else 1.dp, borderColor),
-        colors = CardDefaults.outlinedCardColors(containerColor = containerColor),
-        shape = RoundedCornerShape(16.dp),
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(110.dp)
-                .clickable(onClick = onSelect),
+    val colors = MaterialTheme.colorScheme
+    Card(
+        onClick = onSelect,
+        shape = RoundedCornerShape(20.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = if (isActive) colors.primaryContainer else colors.surfaceContainerHigh,
+                contentColor = if (isActive) colors.onPrimaryContainer else colors.onSurface,
+            ),
+        border = if (isActive) BorderStroke(2.dp, colors.primary) else null,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(
+        Row(
             modifier =
                 Modifier
-                    .padding(12.dp)
-                    .fillMaxWidth(),
-            verticalArrangement = Arrangement.SpaceBetween,
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 2.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
-            ) {
+            SiteIcon(tab = tab, size = 18.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = tab.title.ifBlank { stringResource(R.string.tab_switcher_new_tab) },
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
                 Icon(
-                    Icons.Outlined.Language,
-                    contentDescription = null,
-                    tint =
-                        if (isActive) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    modifier = Modifier.size(20.dp),
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.tab_switcher_close_tab),
+                    modifier = Modifier.size(16.dp),
                 )
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier.size(24.dp),
+            }
+        }
+
+        // Preview area: the site's icon front and center, with its host underneath.
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(104.dp)
+                    .padding(start = 6.dp, end = 6.dp, bottom = 6.dp)
+                    .background(
+                        color = if (isActive) colors.surfaceContainerLowest else colors.surfaceContainerLow,
+                        shape = RoundedCornerShape(16.dp),
+                    ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                SiteIcon(tab = tab, size = 40.dp)
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 10.dp),
                 ) {
                     Icon(
-                        Icons.Default.Close,
-                        contentDescription = stringResource(R.string.tab_switcher_close_tab),
-                        modifier = Modifier.size(16.dp),
+                        imageVector = if (tab.isSecure) Icons.Default.Lock else Icons.Outlined.LockOpen,
+                        contentDescription = null,
+                        tint = if (tab.isSecure) colors.onSurfaceVariant else colors.error,
+                        modifier = Modifier.size(11.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = tab.displayHost,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-            }
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = tab.title.ifBlank { stringResource(R.string.tab_switcher_new_tab) },
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = tab.url.removePrefix("https://").removePrefix("http://"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
     }

@@ -21,6 +21,10 @@ data class AppSettings(
     /** Custom search engine; an empty URL means none is configured. */
     val customSearchEngineName: String = "",
     val customSearchEngineUrl: String = "",
+    /** In-app browser page color scheme: "system", "light" or "dark". */
+    val browserPageTheme: String = "system",
+    /** Darken pages that ship no dark theme of their own while the page theme is dark. */
+    val browserAutoDarken: Boolean = true,
 ) {
     fun isRouteEnabled(routeId: String): Boolean = routeId !in disabledRoutes
 

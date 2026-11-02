@@ -172,4 +172,17 @@
     <string name="service_detail_frontend_header">Arayüz</string>
     <string name="service_detail_instance_auto">Otomatik</string>
     <string name="service_detail_instance_custom">Özel sunucu adresi</string>
+
+    <!-- Browser: page appearance & chrome -->
+    <string name="browser_page_appearance">Sayfa görünümü</string>
+    <string name="browser_page_theme_system">Sistem</string>
+    <string name="browser_page_theme_light">Açık</string>
+    <string name="browser_page_theme_dark">Koyu</string>
+    <string name="browser_auto_darken">Tüm siteleri koyulaştır</string>
+    <string name="browser_auto_darken_desc">Koyu modda, kendi koyu teması olmayan siteleri de koyulaştırır</string>
+    <string name="browser_not_secure">Güvenli değil</string>
+    <string name="browser_quick_share">Paylaş</string>
+    <string name="browser_quick_find">Bul</string>
+    <string name="browser_quick_desktop">Masaüstü</string>
+    <string name="browser_redirect_from_to_fmt">%1$s → %2$s</string>
 </resources>

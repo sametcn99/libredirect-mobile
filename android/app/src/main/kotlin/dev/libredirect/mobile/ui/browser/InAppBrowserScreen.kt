@@ -5,71 +5,63 @@ package dev.libredirect.mobile.ui.browser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.DesktopWindows
-import androidx.compose.material.icons.filled.FindInPage
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Tab
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,17 +69,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.libredirect.mobile.R
+import kotlinx.coroutines.delay
+
+private const val REDIRECT_NOTICE_DURATION_MS = 5_000L
+private const val PROGRESS_MAX = 100f
+private const val DISABLED_ALPHA = 0.38f
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -99,9 +101,13 @@ fun InAppBrowserScreen(
     val activeTab = state.activeTab
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val darkPages = state.pageTheme.isDark(isSystemInDarkTheme())
+    var isAddressFocused by remember { mutableStateOf(false) }
 
     val canHandleBack =
-        state.isTabsSheetVisible ||
+        isAddressFocused ||
+            state.isMenuSheetVisible ||
+            state.isTabsSheetVisible ||
             state.isBookmarksHistorySheetVisible ||
             state.isSearchEngineDialogVisible ||
             state.isFindInPageVisible ||
@@ -109,6 +115,8 @@ fun InAppBrowserScreen(
 
     BackHandler(enabled = canHandleBack) {
         when {
+            isAddressFocused -> focusManager.clearFocus()
+            state.isMenuSheetVisible -> viewModel.setMenuSheetVisible(false)
             state.isTabsSheetVisible -> viewModel.setTabsSheetVisible(false)
             state.isBookmarksHistorySheetVisible -> viewModel.setBookmarksHistorySheetVisible(false)
             state.isSearchEngineDialogVisible -> viewModel.setSearchEngineDialogVisible(false)
@@ -117,59 +125,23 @@ fun InAppBrowserScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface),
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
             BrowserTopBar(
                 tab = activeTab,
-                tabCount = state.tabs.size,
-                isBookmarked = state.isCurrentPageBookmarked,
-                isDesktopMode = activeTab?.isDesktopMode == true,
-                searchEngine = state.searchEngine,
                 onNavigate = { query ->
                     viewModel.navigateActiveTab(query)
                     focusManager.clearFocus()
                 },
                 onReload = viewModel::reloadActiveTab,
                 onStop = viewModel::stopActiveTab,
-                onToggleBookmark = viewModel::toggleBookmarkActivePage,
-                onToggleDesktopMode = viewModel::toggleDesktopModeActiveTab,
-                onOpenBookmarks = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 0) },
-                onOpenHistory = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 1) },
-                onOpenSearchEngine = { viewModel.setSearchEngineDialogVisible(true) },
-                onOpenFindInPage = { viewModel.setFindInPageVisible(true) },
-                onClearBrowsingData = viewModel::clearBrowsingData,
-                onOpenTabs = { viewModel.setTabsSheetVisible(true) },
-                onNewTab = { viewModel.openNewTab() },
-                onShare = {
-                    activeTab?.url?.let {
-                        context.shareUrl(it, context.getString(R.string.browser_share_link_title))
-                    }
-                },
-                onOpenExternal = { activeTab?.url?.let { context.openExternalUrl(it) } },
-                onCloseTab = { activeTab?.let { viewModel.closeTab(it.id) } },
+                onFocusChange = { isAddressFocused = it },
             )
-
-            if (activeTab?.isLoading == true) {
-                LinearProgressIndicator(
-                    progress = { activeTab.progress / 100f },
-                    modifier = Modifier.fillMaxWidth().height(3.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                )
-            }
-
-            AnimatedVisibility(
-                visible = state.activeRedirectNotice != null,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
-            ) {
-                state.activeRedirectNotice?.let { notice ->
-                    RedirectBanner(
-                        notice = notice,
-                        onDismiss = viewModel::dismissRedirectNotice,
-                    )
-                }
-            }
 
             AnimatedVisibility(
                 visible = state.isFindInPageVisible,
@@ -187,14 +159,25 @@ fun InAppBrowserScreen(
                 )
             }
 
-            BrowserWebView(
-                activeTab = activeTab,
-                viewModel = viewModel,
+            Box(
                 modifier =
                     Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-            )
+            ) {
+                BrowserWebView(
+                    activeTab = activeTab,
+                    darkPages = darkPages,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                RedirectNoticeOverlay(
+                    notice = state.activeRedirectNotice,
+                    onDismiss = viewModel::dismissRedirectNotice,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            }
 
             BrowserBottomBar(
                 canGoBack = activeTab?.canGoBack == true,
@@ -204,35 +187,43 @@ fun InAppBrowserScreen(
                 onForward = { viewModel.goForwardActiveTab() },
                 onHome = { viewModel.navigateActiveTab(state.searchEngine.homeUrl) },
                 onTabs = { viewModel.setTabsSheetVisible(true) },
-                onNewTab = { viewModel.openNewTab() },
+                onMenu = {
+                    focusManager.clearFocus()
+                    viewModel.setMenuSheetVisible(true)
+                },
             )
         }
 
         BrowserSheets(
             state = state,
             viewModel = viewModel,
+            onShare = {
+                activeTab?.url?.let {
+                    context.shareUrl(it, context.getString(R.string.browser_share_link_title))
+                }
+            },
+            onOpenExternal = { activeTab?.url?.let { context.openExternalUrl(it) } },
         )
     }
 }
 
+/**
+ * Keyed on the effective page theme as well as the tab: flipping between light
+ * and dark recreates the AndroidView, and [BrowserViewModel.getOrCreateWebView]
+ * swaps in a WebView themed to match.
+ */
 @Composable
 private fun BrowserWebView(
     activeTab: BrowserTab?,
+    darkPages: Boolean,
     viewModel: BrowserViewModel,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
         if (activeTab != null) {
-            key(activeTab.id) {
+            key(activeTab.id, darkPages) {
                 AndroidView(
-                    factory = { ctx ->
-                        viewModel.getOrCreateWebView(activeTab.id, ctx)
-                    },
-                    update = { webView ->
-                        if (webView.parent != null && webView.parent is ViewGroup) {
-                            // Managed by Compose layout
-                        }
-                    },
+                    factory = { ctx -> viewModel.getOrCreateWebView(activeTab.id, ctx, darkPages) },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -244,7 +235,36 @@ private fun BrowserWebView(
 private fun BrowserSheets(
     state: BrowserUiState,
     viewModel: BrowserViewModel,
+    onShare: () -> Unit,
+    onOpenExternal: () -> Unit,
 ) {
+    if (state.isMenuSheetVisible) {
+        BrowserMenuSheet(
+            tab = state.activeTab,
+            isBookmarked = state.isCurrentPageBookmarked,
+            searchEngine = state.searchEngine,
+            pageTheme = state.pageTheme,
+            autoDarken = state.autoDarken,
+            actions =
+                BrowserMenuActions(
+                    onNewTab = { viewModel.openNewTab() },
+                    onToggleBookmark = viewModel::toggleBookmarkActivePage,
+                    onShare = onShare,
+                    onFindInPage = { viewModel.setFindInPageVisible(true) },
+                    onToggleDesktopMode = viewModel::toggleDesktopModeActiveTab,
+                    onPageThemeChange = viewModel::setPageTheme,
+                    onAutoDarkenChange = viewModel::setAutoDarken,
+                    onOpenBookmarks = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 0) },
+                    onOpenHistory = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 1) },
+                    onOpenSearchEngine = { viewModel.setSearchEngineDialogVisible(true) },
+                    onOpenExternal = onOpenExternal,
+                    onClearBrowsingData = viewModel::clearBrowsingData,
+                    onCloseTab = { state.activeTab?.let { viewModel.closeTab(it.id) } },
+                    onDismiss = { viewModel.setMenuSheetVisible(false) },
+                ),
+        )
+    }
+
     if (state.isTabsSheetVisible) {
         TabSwitcherSheet(
             tabs = state.tabs,
@@ -294,293 +314,242 @@ private fun BrowserSheets(
 @Composable
 private fun BrowserTopBar(
     tab: BrowserTab?,
-    tabCount: Int,
-    isBookmarked: Boolean,
-    isDesktopMode: Boolean,
-    searchEngine: SearchEngine,
     onNavigate: (String) -> Unit,
     onReload: () -> Unit,
     onStop: () -> Unit,
-    onToggleBookmark: () -> Unit,
-    onToggleDesktopMode: () -> Unit,
-    onOpenBookmarks: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenSearchEngine: () -> Unit,
-    onOpenFindInPage: () -> Unit,
-    onClearBrowsingData: () -> Unit,
-    onOpenTabs: () -> Unit,
-    onNewTab: () -> Unit,
-    onShare: () -> Unit,
-    onOpenExternal: () -> Unit,
-    onCloseTab: () -> Unit,
+    onFocusChange: (Boolean) -> Unit,
 ) {
-    var urlText by rememberSaveable(tab?.id) { mutableStateOf(tab?.url.orEmpty()) }
-    var isFocused by remember { mutableStateOf(false) }
-    var menuExpanded by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(tab?.url) {
-        if (!isFocused && tab != null) {
-            urlText = tab.url
-        }
-    }
+    val isLoading = tab?.isLoading == true
+    val progress by animateFloatAsState(
+        targetValue = (tab?.progress ?: 0) / PROGRESS_MAX,
+        label = "pageLoadProgress",
+    )
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            OutlinedTextField(
-                value = urlText,
-                onValueChange = { urlText = it },
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { isFocused = it.isFocused },
-                singleLine = true,
-                placeholder = { Text(stringResource(R.string.browser_search_placeholder)) },
-                leadingIcon = {
-                    val isHttps = tab?.url?.startsWith("https://", ignoreCase = true) == true
-                    Icon(
-                        Icons.Default.Lock,
-                        contentDescription = stringResource(R.string.browser_secure_connection),
-                        tint = if (isHttps) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-                trailingIcon = {
-                    if (isFocused && urlText.isNotEmpty()) {
-                        IconButton(onClick = { urlText = "" }) {
-                            Icon(
-                                Icons.Default.Clear,
-                                contentDescription = stringResource(R.string.action_clear),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    } else if (tab?.isLoading == true) {
-                        IconButton(onClick = onStop) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = stringResource(R.string.action_stop),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    } else {
-                        IconButton(onClick = onReload) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.action_reload),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                },
-                keyboardOptions =
-                    KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Go,
-                    ),
-                keyboardActions = KeyboardActions(onGo = { onNavigate(urlText) }),
-                shape = RoundedCornerShape(24.dp),
-                colors =
-                    OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    ),
-            )
-
-            IconButton(
-                onClick = onToggleBookmark,
-                modifier = Modifier.size(36.dp),
-            ) {
-                Icon(
-                    imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription =
-                        stringResource(
-                            if (isBookmarked) {
-                                R.string.browser_action_remove_bookmark
-                            } else {
-                                R.string.browser_action_bookmark
-                            },
-                        ),
-                    tint =
-                        if (isBookmarked) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-
+        Column {
             Box(
-                contentAlignment = Alignment.Center,
                 modifier =
                     Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(1.5.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenTabs),
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Text(
-                    text = tabCount.toString(),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                AddressBar(
+                    tab = tab,
+                    onNavigate = onNavigate,
+                    onReload = onReload,
+                    onStop = onStop,
+                    onFocusChange = onFocusChange,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.action_menu),
+            // Fixed-height slot so the page doesn't jump when loading starts or ends.
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                if (isLoading) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        gapSize = 0.dp,
+                        drawStopIndicator = {},
+                    )
+                } else {
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     )
                 }
-                BrowserTopBarMenu(
-                    expanded = menuExpanded,
-                    isDesktopMode = isDesktopMode,
-                    searchEngine = searchEngine,
-                    onDismissRequest = { menuExpanded = false },
-                    onNewTab = {
-                        menuExpanded = false
-                        onNewTab()
-                    },
-                    onOpenBookmarks = {
-                        menuExpanded = false
-                        onOpenBookmarks()
-                    },
-                    onOpenHistory = {
-                        menuExpanded = false
-                        onOpenHistory()
-                    },
-                    onOpenSearchEngine = {
-                        menuExpanded = false
-                        onOpenSearchEngine()
-                    },
-                    onToggleDesktopMode = {
-                        menuExpanded = false
-                        onToggleDesktopMode()
-                    },
-                    onOpenFindInPage = {
-                        menuExpanded = false
-                        onOpenFindInPage()
-                    },
-                    onClearBrowsingData = {
-                        menuExpanded = false
-                        onClearBrowsingData()
-                    },
-                    onShare = {
-                        menuExpanded = false
-                        onShare()
-                    },
-                    onOpenExternal = {
-                        menuExpanded = false
-                        onOpenExternal()
-                    },
-                    onCloseTab = {
-                        menuExpanded = false
-                        onCloseTab()
-                    },
-                )
             }
         }
     }
 }
 
 @Composable
-private fun BrowserTopBarMenu(
-    expanded: Boolean,
-    isDesktopMode: Boolean,
-    searchEngine: SearchEngine,
-    onDismissRequest: () -> Unit,
-    onNewTab: () -> Unit,
-    onOpenBookmarks: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenSearchEngine: () -> Unit,
-    onToggleDesktopMode: () -> Unit,
-    onOpenFindInPage: () -> Unit,
-    onClearBrowsingData: () -> Unit,
-    onShare: () -> Unit,
-    onOpenExternal: () -> Unit,
-    onCloseTab: () -> Unit,
+private fun AddressBar(
+    tab: BrowserTab?,
+    onNavigate: (String) -> Unit,
+    onReload: () -> Unit,
+    onStop: () -> Unit,
+    onFocusChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_new_tab)) },
-            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-            onClick = onNewTab,
+    val url = tab?.url.orEmpty()
+    var isFocused by remember { mutableStateOf(false) }
+    var fieldValue by remember(tab?.id) { mutableStateOf(TextFieldValue(url)) }
+
+    LaunchedEffect(url, isFocused) {
+        if (!isFocused) fieldValue = TextFieldValue(url)
+    }
+    // Select the whole URL once focused so typing replaces it; done after the
+    // focus frame so the tap that focused the field doesn't reset the selection.
+    LaunchedEffect(isFocused) {
+        if (isFocused) fieldValue = fieldValue.copy(selection = TextRange(0, fieldValue.text.length))
+    }
+
+    val shape = CircleShape
+    val shownValue = if (isFocused) fieldValue else TextFieldValue(tab?.displayHost.orEmpty())
+    val textStyle =
+        MaterialTheme.typography.bodyLarge.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (isFocused) FontWeight.Normal else FontWeight.Medium,
         )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_bookmarks_title)) },
-            leadingIcon = { Icon(Icons.Filled.Bookmark, contentDescription = null) },
-            onClick = onOpenBookmarks,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_history_title)) },
-            leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null) },
-            onClick = onOpenHistory,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_search_engine)) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = {
-                Text(
-                    text = searchEngine.displayName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+
+    BasicTextField(
+        value = shownValue,
+        onValueChange = { fieldValue = it },
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        keyboardOptions =
+            KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Go,
+                autoCorrectEnabled = false,
+            ),
+        keyboardActions = KeyboardActions(onGo = { onNavigate(fieldValue.text) }),
+        modifier =
+            modifier.onFocusChanged {
+                if (it.isFocused != isFocused) {
+                    isFocused = it.isFocused
+                    onFocusChange(it.isFocused)
+                }
             },
-            onClick = onOpenSearchEngine,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_desktop_site)) },
-            leadingIcon = { Icon(Icons.Default.DesktopWindows, contentDescription = null) },
-            trailingIcon = {
-                Checkbox(
-                    checked = isDesktopMode,
-                    onCheckedChange = null,
+        decorationBox = { innerTextField ->
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(shape)
+                        .background(
+                            if (isFocused) {
+                                MaterialTheme.colorScheme.surfaceContainerHighest
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            },
+                        ).then(
+                            if (isFocused) {
+                                Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, shape)
+                            } else {
+                                Modifier
+                            },
+                        ).padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SiteSecurityIcon(tab = tab, isEditing = isFocused)
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (shownValue.text.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.browser_search_placeholder),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    innerTextField()
+                }
+                AddressBarTrailingAction(
+                    isEditing = isFocused,
+                    hasText = fieldValue.text.isNotEmpty(),
+                    isLoading = tab?.isLoading == true,
+                    onClear = { fieldValue = TextFieldValue("") },
+                    onReload = onReload,
+                    onStop = onStop,
                 )
-            },
-            onClick = onToggleDesktopMode,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_find_in_page)) },
-            leadingIcon = { Icon(Icons.Default.FindInPage, contentDescription = null) },
-            onClick = onOpenFindInPage,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_clear_cookies_cache)) },
-            leadingIcon = { Icon(Icons.Default.DeleteSweep, contentDescription = null) },
-            onClick = onClearBrowsingData,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_share_page)) },
-            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-            onClick = onShare,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_open_external)) },
-            leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
-            onClick = onOpenExternal,
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.browser_menu_close_tab)) },
-            leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
-            onClick = onCloseTab,
-        )
+            }
+        },
+    )
+}
+
+@Composable
+private fun SiteSecurityIcon(
+    tab: BrowserTab?,
+    isEditing: Boolean,
+) {
+    val (icon, tint, description) =
+        when {
+            isEditing || tab == null ->
+                Triple(Icons.Default.Search, MaterialTheme.colorScheme.onSurfaceVariant, null)
+
+            tab.isSecure ->
+                Triple(
+                    Icons.Default.Lock,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    stringResource(R.string.browser_secure_connection),
+                )
+
+            else ->
+                Triple(
+                    Icons.Outlined.LockOpen,
+                    MaterialTheme.colorScheme.error,
+                    stringResource(R.string.browser_not_secure),
+                )
+        }
+    Icon(
+        imageVector = icon,
+        contentDescription = description,
+        tint = tint,
+        modifier = Modifier.size(18.dp),
+    )
+}
+
+@Composable
+private fun AddressBarTrailingAction(
+    isEditing: Boolean,
+    hasText: Boolean,
+    isLoading: Boolean,
+    onClear: () -> Unit,
+    onReload: () -> Unit,
+    onStop: () -> Unit,
+) {
+    when {
+        isEditing && hasText ->
+            IconButton(onClick = onClear) {
+                Icon(
+                    Icons.Outlined.Cancel,
+                    contentDescription = stringResource(R.string.action_clear),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+        isEditing -> Spacer(Modifier.width(12.dp))
+
+        isLoading ->
+            IconButton(onClick = onStop) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.action_stop),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+        else ->
+            IconButton(onClick = onReload) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.action_reload),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
     }
 }
 
@@ -602,129 +571,198 @@ private fun FindBar(
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
+        Column {
+            Row(
                 modifier =
                     Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester),
-                singleLine = true,
-                placeholder = { Text(stringResource(R.string.browser_find_hint)) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onNext() }),
-                shape = RoundedCornerShape(24.dp),
-                colors =
-                    OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    ),
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onNext() }),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester),
+                    decorationBox = { innerTextField ->
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(42.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                if (query.isEmpty()) {
+                                    Text(
+                                        text = stringResource(R.string.browser_find_hint),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                innerTextField()
+                            }
+                            if (query.isNotEmpty()) {
+                                Text(
+                                    text =
+                                        stringResource(
+                                            R.string.browser_find_matches_fmt,
+                                            activeMatchIndex,
+                                            matchCount,
+                                        ),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color =
+                                        if (matchCount > 0) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        } else {
+                                            MaterialTheme.colorScheme.error
+                                        },
+                                )
+                            }
+                        }
+                    },
+                )
+
+                IconButton(onClick = onPrevious, enabled = matchCount > 0) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowUp,
+                        contentDescription = stringResource(R.string.browser_find_previous),
+                    )
+                }
+                IconButton(onClick = onNext, enabled = matchCount > 0) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = stringResource(R.string.browser_find_next),
+                    )
+                }
+                IconButton(onClick = onClose) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.action_close),
+                    )
+                }
+            }
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
             )
+        }
+    }
+}
 
-            Text(
-                text = stringResource(R.string.browser_find_matches_fmt, activeMatchIndex, matchCount),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+/**
+ * Floats over the top of the page instead of pushing it down, and hides
+ * itself after a few seconds.
+ */
+@Composable
+private fun RedirectNoticeOverlay(
+    notice: RedirectNotice?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Keep showing the last notice while the exit animation runs.
+    var lastNotice by remember { mutableStateOf(notice) }
+    if (notice != null) lastNotice = notice
 
-            IconButton(onClick = onPrevious, enabled = matchCount > 0, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Filled.KeyboardArrowUp,
-                    contentDescription = stringResource(R.string.browser_find_previous),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+    LaunchedEffect(notice?.timestamp) {
+        if (notice != null) {
+            delay(REDIRECT_NOTICE_DURATION_MS)
+            onDismiss()
+        }
+    }
 
-            IconButton(onClick = onNext, enabled = matchCount > 0, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Filled.KeyboardArrowDown,
-                    contentDescription = stringResource(R.string.browser_find_next),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-
-            IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = stringResource(R.string.action_close),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+    AnimatedVisibility(
+        visible = notice != null,
+        enter = fadeIn() + slideInVertically { -it },
+        exit = fadeOut() + slideOutVertically { -it },
+        modifier = modifier,
+    ) {
+        lastNotice?.let { shown ->
+            RedirectNoticeCard(notice = shown, onDismiss = onDismiss)
         }
     }
 }
 
 @Composable
-private fun RedirectBanner(
+private fun RedirectNoticeCard(
     notice: RedirectNotice,
     onDismiss: () -> Unit,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        shadowElevation = 6.dp,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Box(
+                modifier =
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.inversePrimary),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.SwapHoriz,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-                Column {
-                    Text(
-                        text = "${notice.serviceName} \u2794 ${notice.frontendName}",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = stringResource(R.string.browser_redirect_banner_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Icon(
+                    Icons.Default.SwapHoriz,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.inverseSurface,
+                    modifier = Modifier.size(20.dp),
+                )
             }
-
-            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text =
+                        stringResource(
+                            R.string.browser_redirect_from_to_fmt,
+                            notice.serviceName,
+                            notice.frontendName,
+                        ),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(R.string.browser_redirect_banner_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onDismiss) {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = stringResource(R.string.action_close),
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
@@ -740,68 +778,79 @@ private fun BrowserBottomBar(
     onForward: () -> Unit,
     onHome: () -> Unit,
     onTabs: () -> Unit,
-    onNewTab: () -> Unit,
+    onMenu: () -> Unit,
 ) {
+    // Same container as the app's NavigationBar below it, so the two read as one surface.
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack, enabled = canGoBack) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+        Column {
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            )
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ToolbarButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = stringResource(R.string.action_back),
-                    tint =
-                        if (canGoBack) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        },
+                    enabled = canGoBack,
+                    onClick = onBack,
                 )
-            }
-
-            IconButton(onClick = onForward, enabled = canGoForward) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
+                ToolbarButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = stringResource(R.string.action_forward),
-                    tint =
-                        if (canGoForward) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        },
+                    enabled = canGoForward,
+                    onClick = onForward,
                 )
-            }
-
-            IconButton(onClick = onHome) {
-                Icon(
-                    Icons.Default.Home,
+                ToolbarButton(
+                    icon = Icons.Outlined.Home,
                     contentDescription = stringResource(R.string.action_home),
+                    onClick = onHome,
                 )
-            }
-
-            IconButton(onClick = onTabs) {
-                Icon(
-                    Icons.Outlined.Tab,
-                    contentDescription = stringResource(R.string.browser_tabs_fmt, tabCount),
-                )
-            }
-
-            IconButton(onClick = onNewTab) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = stringResource(R.string.tab_switcher_new_tab),
+                val tabsDescription = stringResource(R.string.browser_tabs_fmt, tabCount)
+                IconButton(
+                    onClick = onTabs,
+                    modifier = Modifier.semantics { contentDescription = tabsDescription },
+                ) {
+                    TabCountBadge(count = tabCount)
+                }
+                ToolbarButton(
+                    icon = Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.action_menu),
+                    onClick = onMenu,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ToolbarButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    IconButton(onClick = onClick, enabled = enabled) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint =
+                if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_ALPHA)
+                },
+        )
     }
 }
 
@@ -824,15 +873,5 @@ private fun Context.openExternalUrl(url: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         startActivity(intent)
     } catch (_: Exception) {
-    }
-}
-
-@Composable
-private fun key(
-    key: Any?,
-    content: @Composable () -> Unit,
-) {
-    androidx.compose.runtime.key(key) {
-        content()
     }
 }

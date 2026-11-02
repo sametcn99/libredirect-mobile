@@ -20,6 +20,33 @@ class BrowserTabTest {
         assertNull(tab.lastRedirect)
         assertNotNull(tab.id)
         assertFalse(tab.isDesktopMode)
+        assertNull(tab.favicon)
+        assertEquals("duckduckgo.com", tab.displayHost)
+        assertTrue(tab.isSecure)
+    }
+
+    @Test
+    fun `displayHost and security parse schemes correctly`() {
+        val secureTab = BrowserTab(url = "https://www.wikipedia.org/wiki/Kotlin")
+        assertEquals("wikipedia.org", secureTab.displayHost)
+        assertTrue(secureTab.isSecure)
+
+        val insecureTab = BrowserTab(url = "http://example.org/test")
+        assertEquals("example.org", insecureTab.displayHost)
+        assertFalse(insecureTab.isSecure)
+    }
+
+    @Test
+    fun `page theme resolves correct dark mode preference`() {
+        assertEquals(PageTheme.SYSTEM, PageTheme.fromId("system"))
+        assertEquals(PageTheme.LIGHT, PageTheme.fromId("light"))
+        assertEquals(PageTheme.DARK, PageTheme.fromId("dark"))
+        assertEquals(PageTheme.SYSTEM, PageTheme.fromId("unknown"))
+
+        assertTrue(PageTheme.DARK.isDark(systemInDarkTheme = false))
+        assertFalse(PageTheme.LIGHT.isDark(systemInDarkTheme = true))
+        assertTrue(PageTheme.SYSTEM.isDark(systemInDarkTheme = true))
+        assertFalse(PageTheme.SYSTEM.isDark(systemInDarkTheme = false))
     }
 
     @Test

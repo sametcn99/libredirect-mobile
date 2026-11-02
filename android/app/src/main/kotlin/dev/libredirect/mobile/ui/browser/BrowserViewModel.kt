@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Bundle
 import android.os.Environment
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -56,6 +57,9 @@ data class BrowserUiState(
     val findQuery: String = "",
     val findMatchCount: Int = 0,
     val findActiveMatchIndex: Int = 0,
+    val isMenuSheetVisible: Boolean = false,
+    val pageTheme: PageTheme = PageTheme.DEFAULT,
+    val autoDarken: Boolean = true,
 ) {
     val activeTab: BrowserTab?
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
@@ -94,6 +98,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private val webViewPool = mutableMapOf<String, WebView>()
 
+    /** Whether each pooled WebView was created with a dark theme; see [WebViewTheming]. */
+    private val webViewDarkModes = mutableMapOf<String, Boolean>()
+
+    /** Last auto-darken value pushed to the WebViews, so unrelated settings changes don't reload pages. */
+    private var appliedAutoDarken: Boolean? = null
+
     init {
         viewModelScope.launch {
             cachedManifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
@@ -109,8 +119,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                             ),
                         customSearchEngineName = settings.customSearchEngineName,
                         customSearchEngineUrl = settings.customSearchEngineUrl,
+                        pageTheme = PageTheme.fromId(settings.browserPageTheme),
+                        autoDarken = settings.browserAutoDarken,
                     )
                 }
+                applyAutoDarkenToAll(settings.browserAutoDarken)
             }
         }
         viewModelScope.launch {
@@ -156,11 +169,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun closeTab(tabId: String) {
-        webViewPool.remove(tabId)?.let { webView ->
-            (webView.parent as? ViewGroup)?.removeView(webView)
-            webView.stopLoading()
-            webView.destroy()
-        }
+        destroyWebView(tabId)
 
         _uiState.update { current ->
             val remaining = current.tabs.filterNot { it.id == tabId }
@@ -170,11 +179,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         id = UUID.randomUUID().toString(),
                         url = current.searchEngine.homeUrl,
                     )
-                BrowserUiState(
+                current.copy(
                     tabs = listOf(freshTab),
                     activeTabId = freshTab.id,
                     isTabsSheetVisible = false,
-                    searchEngine = current.searchEngine,
+                    activeRedirectNotice = null,
+                    isFindInPageVisible = false,
                 )
             } else {
                 val nextActiveId =
@@ -192,25 +202,31 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun closeAllTabs() {
-        webViewPool.values.forEach { webView ->
-            (webView.parent as? ViewGroup)?.removeView(webView)
-            webView.stopLoading()
-            webView.destroy()
-        }
-        webViewPool.clear()
+        webViewPool.keys.toList().forEach(::destroyWebView)
 
         val freshTab =
             BrowserTab(
                 id = UUID.randomUUID().toString(),
                 url = _uiState.value.searchEngine.homeUrl,
             )
-        _uiState.value =
-            BrowserUiState(
+        _uiState.update { current ->
+            current.copy(
                 tabs = listOf(freshTab),
                 activeTabId = freshTab.id,
                 isTabsSheetVisible = false,
-                searchEngine = _uiState.value.searchEngine,
+                activeRedirectNotice = null,
+                isFindInPageVisible = false,
             )
+        }
+    }
+
+    private fun destroyWebView(tabId: String) {
+        webViewDarkModes.remove(tabId)
+        webViewPool.remove(tabId)?.let { webView ->
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            webView.stopLoading()
+            webView.destroy()
+        }
     }
 
     fun selectTab(tabId: String) {
@@ -244,6 +260,42 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun setSearchEngineDialogVisible(visible: Boolean) {
         _uiState.update { it.copy(isSearchEngineDialogVisible = visible) }
+    }
+
+    fun setMenuSheetVisible(visible: Boolean) {
+        _uiState.update { it.copy(isMenuSheetVisible = visible) }
+    }
+
+    /**
+     * Pooled WebViews keep the theme they were created with; the screen
+     * re-keys its AndroidView on the effective page theme, and
+     * [getOrCreateWebView] rebuilds any WebView whose theme no longer matches.
+     */
+    fun setPageTheme(theme: PageTheme) {
+        _uiState.update { it.copy(pageTheme = theme) }
+        viewModelScope.launch {
+            settingsRepository.setBrowserPageTheme(theme.id)
+        }
+    }
+
+    fun setAutoDarken(enabled: Boolean) {
+        _uiState.update { it.copy(autoDarken = enabled) }
+        applyAutoDarkenToAll(enabled)
+        viewModelScope.launch {
+            settingsRepository.setBrowserAutoDarken(enabled)
+        }
+    }
+
+    private fun applyAutoDarkenToAll(enabled: Boolean) {
+        if (appliedAutoDarken == enabled) return
+        val isFirstApply = appliedAutoDarken == null
+        appliedAutoDarken = enabled
+        webViewPool.forEach { (tabId, webView) ->
+            val dark = webViewDarkModes[tabId] == true
+            WebViewTheming.applyAutoDarken(webView, dark, enabled)
+            // Darkening only affects pages rendered with a dark theme; reload those so it takes effect.
+            if (dark && !isFirstApply) webView.reload()
+        }
     }
 
     fun setSearchEngine(engine: SearchEngine) {
@@ -464,18 +516,27 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun getOrCreateWebView(
         tabId: String,
         context: Context,
+        darkPages: Boolean,
     ): WebView {
         val existing = webViewPool[tabId]
-        if (existing != null) {
+        if (existing != null && webViewDarkModes[tabId] == darkPages) {
             (existing.parent as? ViewGroup)?.removeView(existing)
             return existing
         }
+
+        // A WebView's page theme is fixed at creation; carry its back/forward
+        // history over to the replacement built with the new theme.
+        val savedState =
+            existing?.let { webView ->
+                Bundle().also { webView.saveState(it) }
+            }
+        if (existing != null) destroyWebView(tabId)
 
         val tab = _uiState.value.tabs.find { it.id == tabId }
         val isDesktop = tab?.isDesktopMode == true
 
         val newWebView =
-            WebView(context).apply {
+            WebView(WebViewTheming.themedContext(context, darkPages)).apply {
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -486,6 +547,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     displayZoomControls = false
                     mediaPlaybackRequiresUserGesture = false
                 }
+                WebViewTheming.applyBackground(this, darkPages)
+                WebViewTheming.applyAutoDarken(this, darkPages, _uiState.value.autoDarken)
                 applyDesktopMode(this, isDesktop)
                 setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
                     _uiState.update {
@@ -502,11 +565,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
 
-        val target = tab?.url ?: BrowserTab.DEFAULT_HOME_URL
-        val resolved = resolveRedirection(target) ?: target
-        newWebView.loadUrl(resolved)
-
         webViewPool[tabId] = newWebView
+        webViewDarkModes[tabId] = darkPages
+
+        val restored = savedState?.let { newWebView.restoreState(it) } != null
+        if (!restored) {
+            val target = tab?.url ?: BrowserTab.DEFAULT_HOME_URL
+            val resolved = if (existing != null) target else resolveRedirection(target) ?: target
+            newWebView.loadUrl(resolved)
+        }
         return newWebView
     }
 
@@ -582,6 +649,20 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 tabs =
                     current.tabs.map { tab ->
                         if (tab.id == tabId) tab.copy(title = title) else tab
+                    },
+            )
+        }
+    }
+
+    private fun updateTabFavicon(
+        tabId: String,
+        favicon: Bitmap?,
+    ) {
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map { tab ->
+                        if (tab.id == tabId) tab.copy(favicon = favicon) else tab
                     },
             )
         }
@@ -679,6 +760,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     return
                 }
                 updateTabUrl(tabId, url)
+                updateTabFavicon(tabId, favicon)
                 updateTabLoading(tabId, isLoading = true, progress = 10)
             }
             if (tabId == _uiState.value.activeTabId) {
@@ -735,6 +817,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             super.onReceivedTitle(view, title)
             if (!title.isNullOrBlank()) {
                 updateTabTitle(tabId, title)
+            }
+        }
+
+        override fun onReceivedIcon(
+            view: WebView?,
+            icon: Bitmap?,
+        ) {
+            super.onReceivedIcon(view, icon)
+            if (icon != null) {
+                updateTabFavicon(tabId, icon)
             }
         }
     }
