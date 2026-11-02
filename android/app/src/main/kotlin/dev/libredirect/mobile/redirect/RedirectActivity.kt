@@ -78,7 +78,7 @@ class RedirectActivity : ComponentActivity() {
 
         val destination = destinationFor(result) ?: return showMessage(R.string.redirect_cannot_open)
 
-        val launcher = BrowserLauncher(packageManager, packageName)
+        val launcher = BrowserLauncher(this)
         val launched = launcher.launch(this, destination, preferredPackage = settings.selectedBrowserPackage)
         if (!launched) {
             showMessage(R.string.redirect_no_browser)

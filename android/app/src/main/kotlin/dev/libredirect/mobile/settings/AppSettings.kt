@@ -1,12 +1,13 @@
 package dev.libredirect.mobile.settings
 
+import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.routing.RoutingContext
 
 data class AppSettings(
     val routingEnabled: Boolean = true,
-    val selectedBrowserPackage: String? = null,
+    val selectedBrowserPackage: String? = BrowserLauncher.IN_APP_BROWSER_PACKAGE,
     /** Route ids the user has turned off; a route not in this set is enabled by default. */
     val disabledRoutes: Set<String> = emptySet(),
     /** routeId -> frontendId. Missing entry defaults to the route's first frontend. */

@@ -41,6 +41,8 @@ fun BrowserPickerScreen(
     onBrowserSelected: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isSystemDefault = selectedPackageName == BrowserLauncher.SYSTEM_DEFAULT_PACKAGE
+
     Scaffold(
         contentWindowInsets = WindowInsets.statusBars,
         topBar = {
@@ -69,15 +71,19 @@ fun BrowserPickerScreen(
                     headlineContent = { Text(stringResource(R.string.browser_picker_system_default)) },
                     supportingContent = { Text(stringResource(R.string.browser_picker_system_default_desc)) },
                     leadingContent = {
-                        RadioButton(selected = selectedPackageName == null, onClick = { onBrowserSelected(null) })
+                        RadioButton(
+                            selected = isSystemDefault,
+                            onClick = { onBrowserSelected(BrowserLauncher.SYSTEM_DEFAULT_PACKAGE) },
+                        )
                     },
-                    modifier = Modifier.clickable { onBrowserSelected(null) },
+                    modifier = Modifier.clickable { onBrowserSelected(BrowserLauncher.SYSTEM_DEFAULT_PACKAGE) },
                 )
                 HorizontalDivider()
             }
 
             items(browsers, key = BrowserInfo::packageName) { browser ->
                 val isInApp = browser.packageName == BrowserLauncher.IN_APP_BROWSER_PACKAGE
+                val isSelected = !isSystemDefault && browser.packageName == selectedPackageName
                 ListItem(
                     headlineContent = {
                         Row(
@@ -109,7 +115,7 @@ fun BrowserPickerScreen(
                     },
                     leadingContent = {
                         RadioButton(
-                            selected = browser.packageName == selectedPackageName,
+                            selected = isSelected,
                             onClick = { onBrowserSelected(browser.packageName) },
                         )
                     },

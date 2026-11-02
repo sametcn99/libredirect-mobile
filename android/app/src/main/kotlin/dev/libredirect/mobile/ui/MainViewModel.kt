@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.libredirect.mobile.LibRedirectApplication
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserInfo
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.core.manifest.Manifest
@@ -31,7 +32,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = getApplication<LibRedirectApplication>()
     private val settingsRepository = SettingsRepository(app)
     private val manifestRepository = app.manifestRepository
-    private val browserLauncher = BrowserLauncher(app.packageManager, app.packageName)
+    private val browserLauncher = BrowserLauncher(app)
     private val updateChecker = UpdateChecker()
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -176,9 +177,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } ?: emptyList()
 
         val browserLabel =
-            settings.selectedBrowserPackage
-                ?.let { pkg -> browsers.find { it.packageName == pkg }?.label ?: pkg }
-                ?: "System default"
+            when (settings.selectedBrowserPackage) {
+                null, BrowserLauncher.SYSTEM_DEFAULT_PACKAGE -> app.getString(R.string.browser_picker_system_default)
+                BrowserLauncher.IN_APP_BROWSER_PACKAGE -> app.getString(R.string.browser_in_app_label)
+                else ->
+                    browsers.find { it.packageName == settings.selectedBrowserPackage }?.label
+                        ?: settings.selectedBrowserPackage
+            }
 
         val (verName, verCode, verDisplay) = versionInfo()
 

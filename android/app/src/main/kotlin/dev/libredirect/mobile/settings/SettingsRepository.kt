@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import kotlinx.coroutines.flow.Flow
@@ -100,7 +101,7 @@ class SettingsRepository(private val context: Context) {
     private fun toAppSettings(prefs: Preferences): AppSettings =
         AppSettings(
             routingEnabled = prefs[Keys.ROUTING_ENABLED] ?: true,
-            selectedBrowserPackage = prefs[Keys.SELECTED_BROWSER],
+            selectedBrowserPackage = prefs[Keys.SELECTED_BROWSER] ?: BrowserLauncher.IN_APP_BROWSER_PACKAGE,
             disabledRoutes = decodeSet(prefs[Keys.DISABLED_ROUTES]),
             selectedFrontends = decodeStringMap(prefs[Keys.SELECTED_FRONTENDS]),
             instanceSelections = decodeInstanceSelections(prefs[Keys.INSTANCE_SELECTIONS]),

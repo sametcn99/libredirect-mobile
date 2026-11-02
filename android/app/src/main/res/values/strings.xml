@@ -80,6 +80,7 @@
     <string name="settings_github_source">Open Source Code (GitHub)</string>
 
     <!-- Browser Screen -->
+    <string name="browser_in_app_label">LibRedirect Browser</string>
     <string name="browser_search_placeholder">Enter URL or search term&#8230;</string>
     <string name="browser_secure_connection">Secure Connection</string>
     <string name="browser_menu_new_tab">New Tab</string>

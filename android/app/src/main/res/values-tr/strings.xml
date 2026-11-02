@@ -80,6 +80,7 @@
     <string name="settings_github_source">Açık Kaynak Kod (GitHub)</string>
 
     <!-- Browser Screen -->
+    <string name="browser_in_app_label">Dahili Tarayıcı (LibRedirect)</string>
     <string name="browser_search_placeholder">URL veya arama terimi girin&#8230;</string>
     <string name="browser_secure_connection">Güvenli Bağlantı</string>
     <string name="browser_menu_new_tab">Yeni Sekme</string>

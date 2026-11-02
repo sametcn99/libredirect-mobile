@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import dev.libredirect.mobile.R
 
 /**
  * Redirect-loop prevention (project plan §19) lives here: the launch intent
@@ -15,7 +16,17 @@ import android.net.Uri
  * app can never end up back in its own hands regardless of what the user
  * or system picks.
  */
-class BrowserLauncher(private val packageManager: PackageManager, private val ownPackageName: String) {
+class BrowserLauncher(
+    private val packageManager: PackageManager,
+    private val ownPackageName: String,
+    private val inAppBrowserLabel: String = "LibRedirect Browser",
+) {
+    constructor(context: Context) : this(
+        packageManager = context.packageManager,
+        ownPackageName = context.packageName,
+        inAppBrowserLabel = context.getString(R.string.browser_in_app_label),
+    )
+
     fun installedBrowsers(): List<BrowserInfo> {
         val externalBrowsers =
             packageManager
@@ -32,12 +43,13 @@ class BrowserLauncher(private val packageManager: PackageManager, private val ow
                         }
                     BrowserInfo(packageName = pkg, label = label)
                 }
-        return listOf(BrowserInfo(packageName = IN_APP_BROWSER_PACKAGE, label = "Dahili Tarayıcı (LibRedirect)")) +
+        return listOf(BrowserInfo(packageName = IN_APP_BROWSER_PACKAGE, label = inAppBrowserLabel)) +
             externalBrowsers
     }
 
     fun isInstalled(packageName: String): Boolean =
-        packageName == IN_APP_BROWSER_PACKAGE || installedBrowsers().any { it.packageName == packageName }
+        packageName == IN_APP_BROWSER_PACKAGE ||
+            (packageName != SYSTEM_DEFAULT_PACKAGE && installedBrowsers().any { it.packageName == packageName })
 
     /**
      * @param preferredPackage a user-chosen browser (Phase 6 settings). Falls back to the
@@ -97,6 +109,7 @@ class BrowserLauncher(private val packageManager: PackageManager, private val ow
 
     companion object {
         const val IN_APP_BROWSER_PACKAGE = "dev.libredirect.mobile.inapp"
+        const val SYSTEM_DEFAULT_PACKAGE = "system"
         const val ACTION_OPEN_IN_APP_BROWSER = "dev.libredirect.mobile.ACTION_OPEN_IN_APP_BROWSER"
         private const val REDIRECT_ACTIVITY_CLASS_NAME = "dev.libredirect.mobile.redirect.RedirectActivity"
         private const val MAIN_ACTIVITY_CLASS_NAME = "dev.libredirect.mobile.MainActivity"
