@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
@@ -42,6 +43,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -89,11 +92,16 @@ fun InAppBrowserScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    BackHandler(enabled = state.isTabsSheetVisible || (activeTab?.canGoBack == true)) {
-        if (state.isTabsSheetVisible) {
-            viewModel.setTabsSheetVisible(false)
-        } else if (activeTab?.canGoBack == true) {
-            viewModel.goBackActiveTab()
+    val canHandleBack =
+        state.isTabsSheetVisible ||
+            state.isBookmarksHistorySheetVisible ||
+            (activeTab?.canGoBack == true)
+
+    BackHandler(enabled = canHandleBack) {
+        when {
+            state.isTabsSheetVisible -> viewModel.setTabsSheetVisible(false)
+            state.isBookmarksHistorySheetVisible -> viewModel.setBookmarksHistorySheetVisible(false)
+            activeTab?.canGoBack == true -> viewModel.goBackActiveTab()
         }
     }
 
@@ -102,12 +110,16 @@ fun InAppBrowserScreen(
             BrowserTopBar(
                 tab = activeTab,
                 tabCount = state.tabs.size,
+                isBookmarked = state.isCurrentPageBookmarked,
                 onNavigate = { query ->
                     viewModel.navigateActiveTab(query)
                     focusManager.clearFocus()
                 },
                 onReload = viewModel::reloadActiveTab,
                 onStop = viewModel::stopActiveTab,
+                onToggleBookmark = viewModel::toggleBookmarkActivePage,
+                onOpenBookmarks = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 0) },
+                onOpenHistory = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 1) },
                 onOpenTabs = { viewModel.setTabsSheetVisible(true) },
                 onNewTab = viewModel::openNewTab,
                 onShare = {
@@ -141,28 +153,14 @@ fun InAppBrowserScreen(
                 }
             }
 
-            Box(
+            BrowserWebView(
+                activeTab = activeTab,
+                viewModel = viewModel,
                 modifier =
                     Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-            ) {
-                if (activeTab != null) {
-                    key(activeTab.id) {
-                        AndroidView(
-                            factory = { ctx ->
-                                viewModel.getOrCreateWebView(activeTab.id, ctx)
-                            },
-                            update = { webView ->
-                                if (webView.parent != null && webView.parent is ViewGroup) {
-                                    // Managed by Compose layout
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                }
-            }
+            )
 
             BrowserBottomBar(
                 canGoBack = activeTab?.canGoBack == true,
@@ -176,20 +174,71 @@ fun InAppBrowserScreen(
             )
         }
 
-        if (state.isTabsSheetVisible) {
-            TabSwitcherSheet(
-                tabs = state.tabs,
-                activeTabId = state.activeTabId,
-                actions =
-                    TabSwitcherActions(
-                        onTabSelect = viewModel::selectTab,
-                        onTabClose = viewModel::closeTab,
-                        onNewTab = viewModel::openNewTab,
-                        onCloseAll = viewModel::closeAllTabs,
-                        onDismiss = { viewModel.setTabsSheetVisible(false) },
-                    ),
-            )
+        BrowserSheets(
+            state = state,
+            viewModel = viewModel,
+        )
+    }
+}
+
+@Composable
+private fun BrowserWebView(
+    activeTab: BrowserTab?,
+    viewModel: BrowserViewModel,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier) {
+        if (activeTab != null) {
+            key(activeTab.id) {
+                AndroidView(
+                    factory = { ctx ->
+                        viewModel.getOrCreateWebView(activeTab.id, ctx)
+                    },
+                    update = { webView ->
+                        if (webView.parent != null && webView.parent is ViewGroup) {
+                            // Managed by Compose layout
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun BrowserSheets(
+    state: BrowserUiState,
+    viewModel: BrowserViewModel,
+) {
+    if (state.isTabsSheetVisible) {
+        TabSwitcherSheet(
+            tabs = state.tabs,
+            activeTabId = state.activeTabId,
+            actions =
+                TabSwitcherActions(
+                    onTabSelect = viewModel::selectTab,
+                    onTabClose = viewModel::closeTab,
+                    onNewTab = viewModel::openNewTab,
+                    onCloseAll = viewModel::closeAllTabs,
+                    onDismiss = { viewModel.setTabsSheetVisible(false) },
+                ),
+        )
+    }
+
+    if (state.isBookmarksHistorySheetVisible) {
+        BookmarksHistorySheet(
+            bookmarks = state.bookmarks,
+            history = state.history,
+            initialTab = state.bookmarksHistoryInitialTab,
+            onOpenUrl = { url ->
+                viewModel.openUrlInNewOrActiveTab(url)
+            },
+            onDeleteBookmark = viewModel::deleteBookmark,
+            onDeleteHistoryItem = viewModel::deleteHistoryItem,
+            onClearHistory = viewModel::clearHistory,
+            onDismiss = { viewModel.setBookmarksHistorySheetVisible(false) },
+        )
     }
 }
 
@@ -197,9 +246,13 @@ fun InAppBrowserScreen(
 private fun BrowserTopBar(
     tab: BrowserTab?,
     tabCount: Int,
+    isBookmarked: Boolean,
     onNavigate: (String) -> Unit,
     onReload: () -> Unit,
     onStop: () -> Unit,
+    onToggleBookmark: () -> Unit,
+    onOpenBookmarks: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenTabs: () -> Unit,
     onNewTab: () -> Unit,
     onShare: () -> Unit,
@@ -293,6 +346,30 @@ private fun BrowserTopBar(
                     ),
             )
 
+            IconButton(
+                onClick = onToggleBookmark,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription =
+                        stringResource(
+                            if (isBookmarked) {
+                                R.string.browser_action_remove_bookmark
+                            } else {
+                                R.string.browser_action_bookmark
+                            },
+                        ),
+                    tint =
+                        if (isBookmarked) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
             Box(
                 contentAlignment = Alignment.Center,
                 modifier =
@@ -324,6 +401,22 @@ private fun BrowserTopBar(
                         onClick = {
                             menuExpanded = false
                             onNewTab()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_bookmarks_title)) },
+                        leadingIcon = { Icon(Icons.Filled.Bookmark, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenBookmarks()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_history_title)) },
+                        leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onOpenHistory()
                         },
                     )
                     DropdownMenuItem(
@@ -396,7 +489,7 @@ private fun RedirectBanner(
                 }
                 Column {
                     Text(
-                        text = "${notice.serviceName} ➔ ${notice.frontendName}",
+                        text = "${notice.serviceName} \u2794 ${notice.frontendName}",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                     )

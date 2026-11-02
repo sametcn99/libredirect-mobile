@@ -90,6 +90,20 @@
     <string name="browser_tabs_fmt">Sekmeler (%1$d)</string>
     <string name="browser_redirect_banner_desc">Gizlilik arayüzüne otomatik yönlendirildi</string>
     <string name="browser_share_link_title">Bağlantıyı Paylaş</string>
+    <string name="browser_menu_bookmarks">Yer İmleri</string>
+    <string name="browser_menu_history">Geçmiş</string>
+    <string name="browser_bookmarks_title">Yer İmleri</string>
+    <string name="browser_history_title">Geçmiş</string>
+    <string name="browser_bookmark_added">Yer imlerine eklendi</string>
+    <string name="browser_bookmark_removed">Yer imi kaldırıldı</string>
+    <string name="browser_action_bookmark">Bu sayfayı yer imlerine ekle</string>
+    <string name="browser_action_remove_bookmark">Yer imini kaldır</string>
+    <string name="browser_bookmarks_empty">Henüz yer imi eklenmedi</string>
+    <string name="browser_bookmarks_empty_desc">Sık ziyaret ettiğiniz sayfaları yer imlerine ekleyebilirsiniz.</string>
+    <string name="browser_history_empty">Tarama geçmişi boş</string>
+    <string name="browser_history_empty_desc">Ziyaret ettiğiniz siteler burada listelenir.</string>
+    <string name="browser_clear_history">Geçmişi Temizle</string>
+    <string name="browser_delete_item">Sil</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Açık Sekmeler</string>

@@ -37,9 +37,20 @@ data class BrowserUiState(
     val activeTabId: String = "",
     val isTabsSheetVisible: Boolean = false,
     val activeRedirectNotice: RedirectNotice? = null,
+    val bookmarks: List<BrowserBookmark> = emptyList(),
+    val history: List<BrowserHistoryItem> = emptyList(),
+    val isBookmarksHistorySheetVisible: Boolean = false,
+    val bookmarksHistoryInitialTab: Int = 0,
 ) {
     val activeTab: BrowserTab?
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
+
+    val isCurrentPageBookmarked: Boolean
+        get() {
+            val url = activeTab?.url ?: return false
+            if (url == BrowserTab.DEFAULT_HOME_URL || url.isBlank()) return false
+            return bookmarks.any { it.url == url }
+        }
 }
 
 @Suppress("TooManyFunctions")
@@ -47,6 +58,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val app = getApplication<LibRedirectApplication>()
     private val manifestRepository = app.manifestRepository
     private val settingsRepository = SettingsRepository(app)
+    private val browserDataRepository = BrowserDataRepository(app)
 
     private val initialTab = BrowserTab(id = UUID.randomUUID().toString(), url = BrowserTab.DEFAULT_HOME_URL)
 
@@ -72,6 +84,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             cachedManifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
             settingsRepository.settings.collect { settings ->
                 cachedSettings = settings
+            }
+        }
+        viewModelScope.launch {
+            browserDataRepository.bookmarks.collect { bookmarks ->
+                _uiState.update { it.copy(bookmarks = bookmarks) }
+            }
+        }
+        viewModelScope.launch {
+            browserDataRepository.history.collect { history ->
+                _uiState.update { it.copy(history = history) }
             }
         }
     }
@@ -159,6 +181,52 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun setTabsSheetVisible(visible: Boolean) {
         _uiState.update { it.copy(isTabsSheetVisible = visible) }
+    }
+
+    fun setBookmarksHistorySheetVisible(
+        visible: Boolean,
+        initialTab: Int = 0,
+    ) {
+        _uiState.update {
+            it.copy(
+                isBookmarksHistorySheetVisible = visible,
+                bookmarksHistoryInitialTab = initialTab,
+            )
+        }
+    }
+
+    fun toggleBookmarkActivePage() {
+        val active = _uiState.value.activeTab ?: return
+        val url = active.url
+        if (url.isBlank() || url == BrowserTab.DEFAULT_HOME_URL) return
+
+        val isBookmarked = _uiState.value.isCurrentPageBookmarked
+        viewModelScope.launch {
+            if (isBookmarked) {
+                browserDataRepository.removeBookmarkByUrl(url)
+            } else {
+                val title = active.title.ifBlank { url }
+                browserDataRepository.addBookmark(title, url)
+            }
+        }
+    }
+
+    fun deleteBookmark(id: String) {
+        viewModelScope.launch {
+            browserDataRepository.removeBookmark(id)
+        }
+    }
+
+    fun deleteHistoryItem(id: String) {
+        viewModelScope.launch {
+            browserDataRepository.removeHistoryItem(id)
+        }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            browserDataRepository.clearHistory()
+        }
     }
 
     fun dismissRedirectNotice() {
@@ -423,8 +491,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         ) {
             super.onPageFinished(view, url)
             if (url != null) {
+                val pageTitle = view?.title ?: url
                 updateTabUrl(tabId, url)
-                updateTabTitle(tabId, view?.title ?: url)
+                updateTabTitle(tabId, pageTitle)
+                if (url != BrowserTab.DEFAULT_HOME_URL && !url.equals("about:blank", ignoreCase = true)) {
+                    viewModelScope.launch {
+                        browserDataRepository.addHistory(pageTitle, url)
+                    }
+                }
             }
             updateTabLoading(tabId, isLoading = false, progress = 100)
             updateTabNavigation(

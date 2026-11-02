@@ -90,6 +90,20 @@
     <string name="browser_tabs_fmt">Tabs (%1$d)</string>
     <string name="browser_redirect_banner_desc">Automatically redirected to privacy frontend</string>
     <string name="browser_share_link_title">Share Link</string>
+    <string name="browser_menu_bookmarks">Bookmarks</string>
+    <string name="browser_menu_history">History</string>
+    <string name="browser_bookmarks_title">Bookmarks</string>
+    <string name="browser_history_title">History</string>
+    <string name="browser_bookmark_added">Bookmark added</string>
+    <string name="browser_bookmark_removed">Bookmark removed</string>
+    <string name="browser_action_bookmark">Bookmark this page</string>
+    <string name="browser_action_remove_bookmark">Remove bookmark</string>
+    <string name="browser_bookmarks_empty">No bookmarks yet</string>
+    <string name="browser_bookmarks_empty_desc">Frequently visited pages you bookmark will appear here.</string>
+    <string name="browser_history_empty">Browsing history is empty</string>
+    <string name="browser_history_empty_desc">Websites you visit will appear here.</string>
+    <string name="browser_clear_history">Clear History</string>
+    <string name="browser_delete_item">Delete</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Open Tabs</string>
