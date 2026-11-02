@@ -21,6 +21,7 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.libredirect.mobile.LibRedirectApplication
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter

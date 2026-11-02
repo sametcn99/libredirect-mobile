@@ -66,6 +66,9 @@
     <string name="settings_default_browser">Varsayılan Tarayıcı</string>
     <string name="settings_badge_in_app">Dahili Tarayıcı</string>
     <string name="settings_search_engine">Arama Motoru</string>
+    <string name="settings_language">Dil</string>
+    <string name="settings_language_title">Dil Seçin</string>
+    <string name="settings_language_system_default">Sistem varsayılanı</string>
     <string name="settings_exceptions">Yönlendirme İstisnaları</string>
     <string name="settings_exceptions_subtitle_fmt">%1$d özel kural yapılandırıldı</string>
     <string name="settings_custom_services">Özel Servisler</string>

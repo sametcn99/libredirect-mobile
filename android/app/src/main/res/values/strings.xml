@@ -66,6 +66,9 @@
     <string name="settings_default_browser">Default Browser</string>
     <string name="settings_badge_in_app">Built-in Browser</string>
     <string name="settings_search_engine">Search Engine</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_title">Select Language</string>
+    <string name="settings_language_system_default">System default</string>
     <string name="settings_exceptions">Routing Exceptions</string>
     <string name="settings_exceptions_subtitle_fmt">%1$d custom rules configured</string>
     <string name="settings_custom_services">Custom Services</string>

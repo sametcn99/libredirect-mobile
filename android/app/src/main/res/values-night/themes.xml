@@ -2,7 +2,7 @@
 <resources>
     <!-- Dark counterpart of values/themes.xml's Theme.LibRedirectMobile; see the comment
          there for why android:windowBackground is set explicitly. -->
-    <style name="Theme.LibRedirectMobile" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.LibRedirectMobile" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowBackground">#FF1C1B1F</item>
     </style>
 </resources>

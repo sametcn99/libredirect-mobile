@@ -5,6 +5,7 @@ package dev.libredirect.mobile.ui.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,16 +35,20 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Update
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.os.LocaleListCompat
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.ui.MainUiState
@@ -83,6 +89,8 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var isSearchEngineDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var isLanguageDialogVisible by rememberSaveable { mutableStateOf(false) }
+    val currentLanguageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
 
     Scaffold(
         contentWindowInsets = WindowInsets.statusBars,
@@ -114,6 +122,20 @@ fun SettingsScreen(
                     subtitle = state.selectedBrowserLabel,
                     badge = badge,
                     onClick = actions.onBrowserClick,
+                )
+            }
+
+            item {
+                SettingsCardItem(
+                    icon = Icons.Default.Translate,
+                    title = stringResource(R.string.settings_language),
+                    subtitle =
+                        when {
+                            currentLanguageTag.isBlank() -> stringResource(R.string.settings_language_system_default)
+                            currentLanguageTag.startsWith("tr", ignoreCase = true) -> "Türkçe"
+                            else -> "English"
+                        },
+                    onClick = { isLanguageDialogVisible = true },
                 )
             }
 
@@ -188,6 +210,23 @@ fun SettingsScreen(
         }
     }
 
+    if (isLanguageDialogVisible) {
+        LanguageDialog(
+            currentTag = currentLanguageTag,
+            onSelect = { tag ->
+                isLanguageDialogVisible = false
+                val locales =
+                    if (tag == null) {
+                        LocaleListCompat.getEmptyLocaleList()
+                    } else {
+                        LocaleListCompat.forLanguageTags(tag)
+                    }
+                AppCompatDelegate.setApplicationLocales(locales)
+            },
+            onDismiss = { isLanguageDialogVisible = false },
+        )
+    }
+
     if (isSearchEngineDialogVisible) {
         SearchEngineDialog(
             currentEngine =
@@ -208,6 +247,71 @@ fun SettingsScreen(
             onDismiss = { isSearchEngineDialogVisible = false },
         )
     }
+}
+
+@Composable
+private fun LanguageDialog(
+    currentTag: String,
+    onSelect: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options =
+        listOf(
+            null to stringResource(R.string.settings_language_system_default),
+            "en" to "English",
+            "tr" to "Türkçe",
+        )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.settings_language_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                options.forEach { (tag, label) ->
+                    val isSelected =
+                        if (tag == null) {
+                            currentTag.isBlank()
+                        } else {
+                            currentTag.startsWith(tag, ignoreCase = true)
+                        }
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(tag) }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { onSelect(tag) },
+                        )
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_close))
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+    )
 }
 
 @Composable

@@ -8,7 +8,9 @@
       wrong color even though Compose's own MaterialTheme (Theme.kt) already follows system
       dark mode correctly.
     -->
-    <style name="Theme.LibRedirectMobile" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- AppCompat parent is required for MainActivity (an AppCompatActivity) and for
+         per-app language switching via AppCompatDelegate on API < 33. -->
+    <style name="Theme.LibRedirectMobile" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowBackground">#FFFFFBFE</item>
     </style>
 
