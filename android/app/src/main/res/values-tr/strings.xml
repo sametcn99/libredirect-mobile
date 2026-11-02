@@ -25,6 +25,7 @@
     <string name="action_remove">Kaldır</string>
     <string name="action_retry">Tekrar dene</string>
     <string name="action_detail">Detay</string>
+    <string name="action_save">Kaydet</string>
 
     <!-- Ana Sayfa (Home) -->
     <string name="home_update_available_title">Yeni Sürüm Mevcut!</string>
@@ -117,6 +118,19 @@
     <string name="browser_menu_desktop_site">Masaüstü sitesi</string>
     <string name="browser_menu_search_engine">Arama motoru</string>
     <string name="browser_search_engine_title">Arama Motoru Seçin</string>
+    <string name="browser_menu_find_in_page">Sayfada bul</string>
+    <string name="browser_find_hint">Sayfada bul</string>
+    <string name="browser_find_matches_fmt">%1$d/%2$d</string>
+    <string name="browser_find_previous">Önceki eşleşme</string>
+    <string name="browser_find_next">Sonraki eşleşme</string>
+    <string name="browser_menu_clear_cookies_cache">Çerezleri ve önbelleği temizle</string>
+    <string name="browser_search_engine_custom_title">Özel Arama Motoru</string>
+    <string name="browser_search_engine_add_custom">Özel motor ekle</string>
+    <string name="browser_search_engine_edit_custom">Özel motoru düzenle</string>
+    <string name="browser_search_engine_custom_name">Motor adı</string>
+    <string name="browser_search_engine_custom_template">Arama URL şablonu</string>
+    <string name="browser_search_engine_custom_template_hint">Arama teriminin yazılacağı yere %s koyun</string>
+    <string name="browser_search_engine_custom_invalid">Şablon http(s):// ile başlamalı ve %s içermeli</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Açık Sekmeler</string>

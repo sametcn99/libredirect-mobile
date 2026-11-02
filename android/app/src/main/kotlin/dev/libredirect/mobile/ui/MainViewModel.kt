@@ -18,6 +18,7 @@ import dev.libredirect.mobile.manifest.ManifestEndpoints
 import dev.libredirect.mobile.manifest.RefreshResult
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
+import dev.libredirect.mobile.ui.browser.SearchEngine
 import dev.libredirect.mobile.update.UpdateChecker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSelectedBrowser(packageName: String?) = launchSafely { settingsRepository.setSelectedBrowser(packageName) }
 
     fun setSearchEngine(id: String) = launchSafely { settingsRepository.setSearchEngine(id) }
+
+    fun setCustomSearchEngine(
+        name: String,
+        url: String,
+    ) = launchSafely {
+        settingsRepository.setCustomSearchEngine(name, url)
+        settingsRepository.setSearchEngine(SearchEngine.CUSTOM_ID)
+    }
 
     fun setRouteEnabled(
         routeId: String,
@@ -209,6 +218,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appVersionCode = verCode,
             appVersionDisplay = verDisplay,
             searchEngine = settings.searchEngine,
+            customSearchEngineName = settings.customSearchEngineName,
+            customSearchEngineUrl = settings.customSearchEngineUrl,
         )
     }
 

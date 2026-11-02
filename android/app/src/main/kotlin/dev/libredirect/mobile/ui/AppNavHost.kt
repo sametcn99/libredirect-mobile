@@ -205,6 +205,9 @@ fun AppNavHost(
                                 onCustomServicesClick = { navController.navigate(ROUTE_CUSTOM_SERVICES) },
                                 onRefreshManifest = mainViewModel::refreshManifest,
                                 onSearchEngineSelect = { engine -> mainViewModel.setSearchEngine(engine.id) },
+                                onSaveCustomSearchEngine = { name, template ->
+                                    mainViewModel.setCustomSearchEngine(name, template)
+                                },
                             ),
                     )
                 }

@@ -25,6 +25,8 @@ data class MainUiState(
     val appVersionCode: Long = 3L,
     val appVersionDisplay: String = "v1.1.0 (Build 3)",
     val searchEngine: String = "duckduckgo",
+    val customSearchEngineName: String = "",
+    val customSearchEngineUrl: String = "",
 )
 
 data class ServiceUiState(

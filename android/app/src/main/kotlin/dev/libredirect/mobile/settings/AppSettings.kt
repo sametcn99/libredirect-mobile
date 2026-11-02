@@ -18,6 +18,9 @@ data class AppSettings(
     val manifestRevision: Int? = null,
     val manifestUpdatedAtEpochMillis: Long? = null,
     val searchEngine: String = "duckduckgo",
+    /** Custom search engine; an empty URL means none is configured. */
+    val customSearchEngineName: String = "",
+    val customSearchEngineUrl: String = "",
 ) {
     fun isRouteEnabled(routeId: String): Boolean = routeId !in disabledRoutes
 

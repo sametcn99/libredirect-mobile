@@ -25,6 +25,7 @@
     <string name="action_remove">Remove</string>
     <string name="action_retry">Retry</string>
     <string name="action_detail">Detail</string>
+    <string name="action_save">Save</string>
 
     <!-- Home Screen -->
     <string name="home_update_available_title">New Version Available!</string>
@@ -117,6 +118,19 @@
     <string name="browser_menu_desktop_site">Desktop site</string>
     <string name="browser_menu_search_engine">Search engine</string>
     <string name="browser_search_engine_title">Select Search Engine</string>
+    <string name="browser_menu_find_in_page">Find in page</string>
+    <string name="browser_find_hint">Find in page</string>
+    <string name="browser_find_matches_fmt">%1$d/%2$d</string>
+    <string name="browser_find_previous">Previous match</string>
+    <string name="browser_find_next">Next match</string>
+    <string name="browser_menu_clear_cookies_cache">Clear cookies and cache</string>
+    <string name="browser_search_engine_custom_title">Custom Search Engine</string>
+    <string name="browser_search_engine_add_custom">Add custom engine</string>
+    <string name="browser_search_engine_edit_custom">Edit custom engine</string>
+    <string name="browser_search_engine_custom_name">Engine name</string>
+    <string name="browser_search_engine_custom_template">Search URL template</string>
+    <string name="browser_search_engine_custom_template_hint">Use %s where the search term goes</string>
+    <string name="browser_search_engine_custom_invalid">Template must start with http(s):// and contain %s</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Open Tabs</string>

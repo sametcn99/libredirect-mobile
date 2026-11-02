@@ -72,6 +72,7 @@ data class SettingsActions(
     val onCustomServicesClick: () -> Unit,
     val onRefreshManifest: () -> Unit,
     val onSearchEngineSelect: (SearchEngine) -> Unit = {},
+    val onSaveCustomSearchEngine: (name: String, template: String) -> Unit = { _, _ -> },
 )
 
 @Composable
@@ -120,7 +121,12 @@ fun SettingsScreen(
                 SettingsCardItem(
                     icon = Icons.Default.Search,
                     title = stringResource(R.string.settings_search_engine),
-                    subtitle = SearchEngine.fromId(state.searchEngine).displayName,
+                    subtitle =
+                        SearchEngine.resolve(
+                            selectedId = state.searchEngine,
+                            customName = state.customSearchEngineName,
+                            customUrl = state.customSearchEngineUrl,
+                        ).displayName,
                     onClick = { isSearchEngineDialogVisible = true },
                 )
             }
@@ -184,9 +190,19 @@ fun SettingsScreen(
 
     if (isSearchEngineDialogVisible) {
         SearchEngineDialog(
-            currentEngine = SearchEngine.fromId(state.searchEngine),
+            currentEngine =
+                SearchEngine.resolve(
+                    selectedId = state.searchEngine,
+                    customName = state.customSearchEngineName,
+                    customUrl = state.customSearchEngineUrl,
+                ),
+            customEngine = SearchEngine.customOrNull(state.customSearchEngineName, state.customSearchEngineUrl),
             onSelectEngine = { engine ->
                 actions.onSearchEngineSelect(engine)
+                isSearchEngineDialogVisible = false
+            },
+            onSaveCustom = { name, template ->
+                actions.onSaveCustomSearchEngine(name, template)
                 isSearchEngineDialogVisible = false
             },
             onDismiss = { isSearchEngineDialogVisible = false },

@@ -61,6 +61,16 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setCustomSearchEngine(
+        name: String,
+        url: String,
+    ) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[Keys.CUSTOM_SEARCH_ENGINE_NAME] = name
+            prefs[Keys.CUSTOM_SEARCH_ENGINE_URL] = url
+        }
+    }
+
     suspend fun setRouteEnabled(
         routeId: String,
         enabled: Boolean,
@@ -119,6 +129,8 @@ class SettingsRepository(private val context: Context) {
             manifestRevision = prefs[Keys.MANIFEST_REVISION],
             manifestUpdatedAtEpochMillis = prefs[Keys.MANIFEST_UPDATED_AT],
             searchEngine = prefs[Keys.SEARCH_ENGINE] ?: "duckduckgo",
+            customSearchEngineName = prefs[Keys.CUSTOM_SEARCH_ENGINE_NAME] ?: "",
+            customSearchEngineUrl = prefs[Keys.CUSTOM_SEARCH_ENGINE_URL] ?: "",
         )
 
     private fun decodeSet(raw: String?): Set<String> = decodeOrDefault(raw, emptySet())
@@ -152,5 +164,7 @@ class SettingsRepository(private val context: Context) {
         val MANIFEST_REVISION = intPreferencesKey("manifest_revision")
         val MANIFEST_UPDATED_AT = longPreferencesKey("manifest_updated_at")
         val SEARCH_ENGINE = stringPreferencesKey("search_engine")
+        val CUSTOM_SEARCH_ENGINE_NAME = stringPreferencesKey("custom_search_engine_name")
+        val CUSTOM_SEARCH_ENGINE_URL = stringPreferencesKey("custom_search_engine_url")
     }
 }

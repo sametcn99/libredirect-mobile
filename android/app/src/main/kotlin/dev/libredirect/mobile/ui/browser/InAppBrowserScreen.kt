@@ -37,8 +37,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -85,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.libredirect.mobile.R
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun InAppBrowserScreen(
     viewModel: BrowserViewModel,
@@ -99,6 +104,7 @@ fun InAppBrowserScreen(
         state.isTabsSheetVisible ||
             state.isBookmarksHistorySheetVisible ||
             state.isSearchEngineDialogVisible ||
+            state.isFindInPageVisible ||
             (activeTab?.canGoBack == true)
 
     BackHandler(enabled = canHandleBack) {
@@ -106,6 +112,7 @@ fun InAppBrowserScreen(
             state.isTabsSheetVisible -> viewModel.setTabsSheetVisible(false)
             state.isBookmarksHistorySheetVisible -> viewModel.setBookmarksHistorySheetVisible(false)
             state.isSearchEngineDialogVisible -> viewModel.setSearchEngineDialogVisible(false)
+            state.isFindInPageVisible -> viewModel.setFindInPageVisible(false)
             activeTab?.canGoBack == true -> viewModel.goBackActiveTab()
         }
     }
@@ -129,6 +136,8 @@ fun InAppBrowserScreen(
                 onOpenBookmarks = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 0) },
                 onOpenHistory = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 1) },
                 onOpenSearchEngine = { viewModel.setSearchEngineDialogVisible(true) },
+                onOpenFindInPage = { viewModel.setFindInPageVisible(true) },
+                onClearBrowsingData = viewModel::clearBrowsingData,
                 onOpenTabs = { viewModel.setTabsSheetVisible(true) },
                 onNewTab = { viewModel.openNewTab() },
                 onShare = {
@@ -160,6 +169,22 @@ fun InAppBrowserScreen(
                         onDismiss = viewModel::dismissRedirectNotice,
                     )
                 }
+            }
+
+            AnimatedVisibility(
+                visible = state.isFindInPageVisible,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                FindBar(
+                    query = state.findQuery,
+                    matchCount = state.findMatchCount,
+                    activeMatchIndex = state.findActiveMatchIndex,
+                    onQueryChange = viewModel::findInPage,
+                    onPrevious = { viewModel.findNextInPage(false) },
+                    onNext = { viewModel.findNextInPage(true) },
+                    onClose = { viewModel.setFindInPageVisible(false) },
+                )
             }
 
             BrowserWebView(
@@ -258,7 +283,9 @@ private fun BrowserSheets(
     if (state.isSearchEngineDialogVisible) {
         SearchEngineDialog(
             currentEngine = state.searchEngine,
+            customEngine = SearchEngine.customOrNull(state.customSearchEngineName, state.customSearchEngineUrl),
             onSelectEngine = viewModel::setSearchEngine,
+            onSaveCustom = viewModel::saveCustomSearchEngine,
             onDismiss = { viewModel.setSearchEngineDialogVisible(false) },
         )
     }
@@ -279,6 +306,8 @@ private fun BrowserTopBar(
     onOpenBookmarks: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSearchEngine: () -> Unit,
+    onOpenFindInPage: () -> Unit,
+    onClearBrowsingData: () -> Unit,
     onOpenTabs: () -> Unit,
     onNewTab: () -> Unit,
     onShare: () -> Unit,
@@ -445,6 +474,14 @@ private fun BrowserTopBar(
                         menuExpanded = false
                         onToggleDesktopMode()
                     },
+                    onOpenFindInPage = {
+                        menuExpanded = false
+                        onOpenFindInPage()
+                    },
+                    onClearBrowsingData = {
+                        menuExpanded = false
+                        onClearBrowsingData()
+                    },
                     onShare = {
                         menuExpanded = false
                         onShare()
@@ -474,6 +511,8 @@ private fun BrowserTopBarMenu(
     onOpenHistory: () -> Unit,
     onOpenSearchEngine: () -> Unit,
     onToggleDesktopMode: () -> Unit,
+    onOpenFindInPage: () -> Unit,
+    onClearBrowsingData: () -> Unit,
     onShare: () -> Unit,
     onOpenExternal: () -> Unit,
     onCloseTab: () -> Unit,
@@ -518,6 +557,16 @@ private fun BrowserTopBarMenu(
             onClick = onToggleDesktopMode,
         )
         DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_find_in_page)) },
+            leadingIcon = { Icon(Icons.Default.FindInPage, contentDescription = null) },
+            onClick = onOpenFindInPage,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_clear_cookies_cache)) },
+            leadingIcon = { Icon(Icons.Default.DeleteSweep, contentDescription = null) },
+            onClick = onClearBrowsingData,
+        )
+        DropdownMenuItem(
             text = { Text(stringResource(R.string.browser_menu_share_page)) },
             leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
             onClick = onShare,
@@ -532,6 +581,89 @@ private fun BrowserTopBarMenu(
             leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
             onClick = onCloseTab,
         )
+    }
+}
+
+@Composable
+private fun FindBar(
+    query: String,
+    matchCount: Int,
+    activeMatchIndex: Int,
+    onQueryChange: (String) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester),
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.browser_find_hint)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onNext() }),
+                shape = RoundedCornerShape(24.dp),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    ),
+            )
+
+            Text(
+                text = stringResource(R.string.browser_find_matches_fmt, activeMatchIndex, matchCount),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            IconButton(onClick = onPrevious, enabled = matchCount > 0, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.KeyboardArrowUp,
+                    contentDescription = stringResource(R.string.browser_find_previous),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            IconButton(onClick = onNext, enabled = matchCount > 0, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = stringResource(R.string.browser_find_next),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.action_close),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
     }
 }
 

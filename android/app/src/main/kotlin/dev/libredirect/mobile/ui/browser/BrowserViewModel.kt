@@ -6,9 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.lifecycle.AndroidViewModel
@@ -42,6 +44,12 @@ data class BrowserUiState(
     val bookmarksHistoryInitialTab: Int = 0,
     val searchEngine: SearchEngine = SearchEngine.DEFAULT,
     val isSearchEngineDialogVisible: Boolean = false,
+    val customSearchEngineName: String = "",
+    val customSearchEngineUrl: String = "",
+    val isFindInPageVisible: Boolean = false,
+    val findQuery: String = "",
+    val findMatchCount: Int = 0,
+    val findActiveMatchIndex: Int = 0,
 ) {
     val activeTab: BrowserTab?
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
@@ -85,7 +93,18 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             cachedManifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
             settingsRepository.settings.collect { settings ->
                 cachedSettings = settings
-                _uiState.update { it.copy(searchEngine = SearchEngine.fromId(settings.searchEngine)) }
+                _uiState.update {
+                    it.copy(
+                        searchEngine =
+                            SearchEngine.resolve(
+                                selectedId = settings.searchEngine,
+                                customName = settings.customSearchEngineName,
+                                customUrl = settings.customSearchEngineUrl,
+                            ),
+                        customSearchEngineName = settings.customSearchEngineName,
+                        customSearchEngineUrl = settings.customSearchEngineUrl,
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -189,7 +208,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectTab(tabId: String) {
-        _uiState.update { it.copy(activeTabId = tabId, isTabsSheetVisible = false) }
+        webViewPool[_uiState.value.activeTabId]?.clearMatches()
+        _uiState.update {
+            it.copy(
+                activeTabId = tabId,
+                isTabsSheetVisible = false,
+                isFindInPageVisible = false,
+                findMatchCount = 0,
+                findActiveMatchIndex = 0,
+            )
+        }
     }
 
     fun setTabsSheetVisible(visible: Boolean) {
@@ -215,6 +243,54 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun setSearchEngine(engine: SearchEngine) {
         viewModelScope.launch {
             settingsRepository.setSearchEngine(engine.id)
+        }
+    }
+
+    fun saveCustomSearchEngine(
+        name: String,
+        template: String,
+    ) {
+        viewModelScope.launch {
+            settingsRepository.setCustomSearchEngine(name.trim(), template.trim())
+            settingsRepository.setSearchEngine(SearchEngine.CUSTOM_ID)
+        }
+    }
+
+    fun setFindInPageVisible(visible: Boolean) {
+        if (!visible) {
+            webViewPool[_uiState.value.activeTabId]?.clearMatches()
+        }
+        _uiState.update {
+            it.copy(
+                isFindInPageVisible = visible,
+                findMatchCount = 0,
+                findActiveMatchIndex = 0,
+            )
+        }
+    }
+
+    fun findInPage(query: String) {
+        _uiState.update { it.copy(findQuery = query) }
+        val webView = webViewPool[_uiState.value.activeTabId] ?: return
+        if (query.isBlank()) {
+            webView.clearMatches()
+            _uiState.update { it.copy(findMatchCount = 0, findActiveMatchIndex = 0) }
+        } else {
+            webView.findAllAsync(query)
+        }
+    }
+
+    fun findNextInPage(forward: Boolean) {
+        webViewPool[_uiState.value.activeTabId]?.findNext(forward)
+    }
+
+    fun clearBrowsingData() {
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.removeAllCookies(null)
+        cookieManager.flush()
+        WebStorage.getInstance().deleteAllData()
+        webViewPool.values.forEach { webView ->
+            webView.clearCache(true)
         }
     }
 
@@ -405,6 +481,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     mediaPlaybackRequiresUserGesture = false
                 }
                 applyDesktopMode(this, isDesktop)
+                setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
+                    _uiState.update {
+                        it.copy(
+                            findActiveMatchIndex = activeMatchOrdinal + 1,
+                            findMatchCount = numberOfMatches,
+                        )
+                    }
+                }
                 webViewClient = BrowserTabWebViewClient(tabId)
                 webChromeClient = BrowserTabWebChromeClient(tabId)
             }
@@ -554,6 +638,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 updateTabUrl(tabId, url)
                 updateTabLoading(tabId, isLoading = true, progress = 10)
             }
+            if (tabId == _uiState.value.activeTabId) {
+                _uiState.update { it.copy(findMatchCount = 0, findActiveMatchIndex = 0) }
+            }
         }
 
         override fun onPageFinished(
@@ -577,6 +664,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 canGoBack = view?.canGoBack() == true,
                 canGoForward = view?.canGoForward() == true,
             )
+            val findState = _uiState.value
+            if (tabId == findState.activeTabId && findState.isFindInPageVisible && findState.findQuery.isNotBlank()) {
+                view?.findAllAsync(findState.findQuery)
+            }
         }
     }
 
