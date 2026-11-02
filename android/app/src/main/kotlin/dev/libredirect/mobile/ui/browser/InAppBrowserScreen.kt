@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Tab
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -111,6 +113,7 @@ fun InAppBrowserScreen(
                 tab = activeTab,
                 tabCount = state.tabs.size,
                 isBookmarked = state.isCurrentPageBookmarked,
+                isDesktopMode = activeTab?.isDesktopMode == true,
                 onNavigate = { query ->
                     viewModel.navigateActiveTab(query)
                     focusManager.clearFocus()
@@ -118,6 +121,7 @@ fun InAppBrowserScreen(
                 onReload = viewModel::reloadActiveTab,
                 onStop = viewModel::stopActiveTab,
                 onToggleBookmark = viewModel::toggleBookmarkActivePage,
+                onToggleDesktopMode = viewModel::toggleDesktopModeActiveTab,
                 onOpenBookmarks = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 0) },
                 onOpenHistory = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 1) },
                 onOpenTabs = { viewModel.setTabsSheetVisible(true) },
@@ -247,10 +251,12 @@ private fun BrowserTopBar(
     tab: BrowserTab?,
     tabCount: Int,
     isBookmarked: Boolean,
+    isDesktopMode: Boolean,
     onNavigate: (String) -> Unit,
     onReload: () -> Unit,
     onStop: () -> Unit,
     onToggleBookmark: () -> Unit,
+    onToggleDesktopMode: () -> Unit,
     onOpenBookmarks: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenTabs: () -> Unit,
@@ -394,58 +400,99 @@ private fun BrowserTopBar(
                         contentDescription = stringResource(R.string.action_menu),
                     )
                 }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_menu_new_tab)) },
-                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onNewTab()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_bookmarks_title)) },
-                        leadingIcon = { Icon(Icons.Filled.Bookmark, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onOpenBookmarks()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_history_title)) },
-                        leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onOpenHistory()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_menu_share_page)) },
-                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onShare()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_menu_open_external)) },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onOpenExternal()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_menu_close_tab)) },
-                        leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onCloseTab()
-                        },
-                    )
-                }
+                BrowserTopBarMenu(
+                    expanded = menuExpanded,
+                    isDesktopMode = isDesktopMode,
+                    onDismissRequest = { menuExpanded = false },
+                    onNewTab = {
+                        menuExpanded = false
+                        onNewTab()
+                    },
+                    onOpenBookmarks = {
+                        menuExpanded = false
+                        onOpenBookmarks()
+                    },
+                    onOpenHistory = {
+                        menuExpanded = false
+                        onOpenHistory()
+                    },
+                    onToggleDesktopMode = {
+                        menuExpanded = false
+                        onToggleDesktopMode()
+                    },
+                    onShare = {
+                        menuExpanded = false
+                        onShare()
+                    },
+                    onOpenExternal = {
+                        menuExpanded = false
+                        onOpenExternal()
+                    },
+                    onCloseTab = {
+                        menuExpanded = false
+                        onCloseTab()
+                    },
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun BrowserTopBarMenu(
+    expanded: Boolean,
+    isDesktopMode: Boolean,
+    onDismissRequest: () -> Unit,
+    onNewTab: () -> Unit,
+    onOpenBookmarks: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onToggleDesktopMode: () -> Unit,
+    onShare: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onCloseTab: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_new_tab)) },
+            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+            onClick = onNewTab,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_bookmarks_title)) },
+            leadingIcon = { Icon(Icons.Filled.Bookmark, contentDescription = null) },
+            onClick = onOpenBookmarks,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_history_title)) },
+            leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null) },
+            onClick = onOpenHistory,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_desktop_site)) },
+            leadingIcon = { Icon(Icons.Default.DesktopWindows, contentDescription = null) },
+            trailingIcon = {
+                Checkbox(
+                    checked = isDesktopMode,
+                    onCheckedChange = null,
+                )
+            },
+            onClick = onToggleDesktopMode,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_share_page)) },
+            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+            onClick = onShare,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_open_external)) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
+            onClick = onOpenExternal,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_close_tab)) },
+            leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
+            onClick = onCloseTab,
+        )
     }
 }
 

@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BrowserTabTest {
@@ -18,6 +19,7 @@ class BrowserTabTest {
         assertFalse(tab.canGoForward)
         assertNull(tab.lastRedirect)
         assertNotNull(tab.id)
+        assertFalse(tab.isDesktopMode)
     }
 
     @Test
@@ -36,5 +38,13 @@ class BrowserTabTest {
         assertEquals("Instagram", tab.lastRedirect?.serviceName)
         assertEquals("Proxigram", tab.lastRedirect?.frontendName)
         assertEquals("https://instagram.com/p/123", tab.lastRedirect?.originalUrl)
+    }
+
+    @Test
+    fun `desktop mode toggles properly and defines desktop user agent`() {
+        val tab = BrowserTab(isDesktopMode = true)
+        assertTrue(tab.isDesktopMode)
+        assertTrue(BrowserTab.DESKTOP_USER_AGENT.contains("Mozilla/5.0"))
+        assertTrue(BrowserTab.DESKTOP_USER_AGENT.contains("Linux x86_64"))
     }
 }

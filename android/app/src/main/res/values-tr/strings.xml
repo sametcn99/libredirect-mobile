@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- App -->
+    <!-- Uygulama -->
     <string name="app_name">LibRedirect Mobile</string>
     <string name="redirect_cannot_open">Bu bağlantı açılamadı.</string>
     <string name="redirect_no_browser">Bu bağlantıyı açabilecek bir tarayıcı bulunamadı.</string>
 
-    <!-- Navigation -->
+    <!-- Navigasyon -->
     <string name="nav_home">Ana Sayfa</string>
     <string name="nav_browser">Tarayıcı</string>
     <string name="nav_services">Servisler</string>
     <string name="nav_settings">Ayarlar</string>
 
-    <!-- General Actions -->
-    <string name="action_refresh_data">Verileri Yenile</string>
+    <!-- Genel Aksiyonlar -->
+    <string name="action_refresh_data">Verileri yenile</string>
     <string name="action_clear">Temizle</string>
     <string name="action_close">Kapat</string>
     <string name="action_back">Geri</string>
@@ -23,65 +23,65 @@
     <string name="action_menu">Menü</string>
     <string name="action_add">Ekle</string>
     <string name="action_remove">Kaldır</string>
-    <string name="action_retry">Tekrar Dene</string>
+    <string name="action_retry">Tekrar dene</string>
     <string name="action_detail">Detay</string>
 
-    <!-- Home Screen -->
+    <!-- Ana Sayfa (Home) -->
     <string name="home_update_available_title">Yeni Sürüm Mevcut!</string>
     <string name="home_update_available_desc">v%1$s güncellemesini incelemek için dokunun</string>
-    <string name="home_manifest_error_title">Rota Verileri Yüklenemedi</string>
+    <string name="home_manifest_error_title">Yönlendirme verileri yüklenemedi</string>
     <string name="home_routing_active">Yönlendirme Aktif</string>
-    <string name="home_routing_disabled">Yönlendirme Kapalı</string>
-    <string name="home_routing_active_desc">Gizlilik koruması tüm servislerde açık</string>
+    <string name="home_routing_disabled">Yönlendirme Devre Dışı</string>
+    <string name="home_routing_active_desc">Tüm servisler için gizlilik koruması devrede</string>
     <string name="home_routing_disabled_desc">Tüm istekler doğrudan iletiliyor</string>
     <string name="home_stat_active_services">Aktif Servis</string>
-    <string name="home_stat_exceptions">İstisnalar</string>
+    <string name="home_stat_exceptions">İstisna</string>
     <string name="home_stat_browser">Tarayıcı</string>
     <string name="home_stat_browser_value">Dahili &amp; Hızlı</string>
-    <string name="home_quick_link_title">Hızlı Link Aç &amp; Test Et</string>
+    <string name="home_quick_link_title">Hızlı Bağlantı Aç &amp; Test Et</string>
     <string name="home_quick_link_placeholder">https://instagram.com/&#8230; veya youtube.com/&#8230;</string>
     <string name="home_quick_link_error">Lütfen önce geçerli bir URL girin</string>
     <string name="home_quick_link_open_in_app">Dahili Tarayıcıda Aç</string>
-    <string name="home_quick_link_open_external">Dışarıda Aç</string>
+    <string name="home_quick_link_open_external">Harici Aç</string>
     <string name="home_quick_actions_title">Hızlı İşlemler</string>
     <string name="home_popular_services_title">Popüler Servisler</string>
     <string name="home_see_all_services">Tümünü Gör (%1$d)</string>
 
-    <!-- Services Screen -->
+    <!-- Servisler Ekranı -->
     <string name="services_title">Yönlendirme Servisleri</string>
     <string name="services_search_placeholder">Servis ara (örn. YouTube, Instagram&#8230;)</string>
     <string name="services_filter_all">Tümü</string>
     <string name="services_filter_enabled">Aktif</string>
-    <string name="services_filter_disabled">Kapalı</string>
+    <string name="services_filter_disabled">Devre Dışı</string>
     <string name="services_sort_popularity">Popülerlik</string>
     <string name="services_sort_name_asc">A-Z Sıralı</string>
     <string name="services_count_fmt">%1$d servis listeleniyor</string>
     <string name="service_status_active">Aktif</string>
-    <string name="service_status_disabled">Devre Dışı</string>
+    <string name="service_status_disabled">Pasif</string>
 
-    <!-- Settings Screen -->
+    <!-- Ayarlar Ekranı -->
     <string name="settings_title">Ayarlar &amp; Bilgi</string>
-    <string name="settings_section_browser_routing">Tarayıcı ve Yönlendirme Tercihleri</string>
+    <string name="settings_section_browser_routing">Tarayıcı &amp; Yönlendirme Tercihleri</string>
     <string name="settings_default_browser">Varsayılan Tarayıcı</string>
     <string name="settings_badge_in_app">Dahili Tarayıcı</string>
     <string name="settings_exceptions">Yönlendirme İstisnaları</string>
     <string name="settings_exceptions_subtitle_fmt">%1$d özel kural yapılandırıldı</string>
     <string name="settings_custom_services">Özel Servisler</string>
-    <string name="settings_custom_services_subtitle_fmt">%1$d özel rota tanımlandı</string>
+    <string name="settings_custom_services_subtitle_fmt">%1$d özel yönlendirme tanımlı</string>
     <string name="settings_section_routing_db">Yönlendirme Veritabanı</string>
     <string name="settings_routing_db_title">Rota Veritabanı</string>
     <string name="settings_db_revision_fmt">Revizyon %1$s</string>
-    <string name="settings_db_up_to_date">En güncel alternatif arayüzler ve rota kuralları yüklü.</string>
+    <string name="settings_db_up_to_date">En güncel alternatif arayüzler ve yönlendirme kuralları yüklü.</string>
     <string name="settings_db_updating">Güncelleniyor&#8230;</string>
     <string name="settings_db_update_now">Verileri Şimdi Güncelle</string>
-    <string name="settings_section_app_info">Uygulama Bilgisi</string>
+    <string name="settings_section_app_info">Uygulama Bilgileri</string>
     <string name="settings_update_available_fmt">Yeni Güncelleme Mevcut: %1$s (İndirmek için dokunun)</string>
-    <string name="settings_app_up_to_date">Uygulamanız en güncel sürümde</string>
-    <string name="settings_github_source">Açık Kaynak Kod (GitHub)</string>
+    <string name="settings_app_up_to_date">Uygulamanız güncel</string>
+    <string name="settings_github_source">Açık Kaynak Kodları (GitHub)</string>
 
-    <!-- Browser Screen -->
-    <string name="browser_in_app_label">Dahili Tarayıcı (LibRedirect)</string>
-    <string name="browser_search_placeholder">URL veya arama terimi girin&#8230;</string>
+    <!-- Tarayıcı Ekranı -->
+    <string name="browser_in_app_label">LibRedirect Tarayıcı</string>
+    <string name="browser_search_placeholder">URL girin veya arama yapın&#8230;</string>
     <string name="browser_secure_connection">Güvenli Bağlantı</string>
     <string name="browser_menu_new_tab">Yeni Sekme</string>
     <string name="browser_menu_share_page">Sayfayı Paylaş</string>
@@ -104,39 +104,40 @@
     <string name="browser_history_empty_desc">Ziyaret ettiğiniz siteler burada listelenir.</string>
     <string name="browser_clear_history">Geçmişi Temizle</string>
     <string name="browser_delete_item">Sil</string>
+    <string name="browser_menu_desktop_site">Masaüstü sitesi</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Açık Sekmeler</string>
-    <string name="tab_switcher_count_fmt">%1$d sekme açık</string>
+    <string name="tab_switcher_count_fmt">%1$d açık sekme</string>
     <string name="tab_switcher_close_all">Tümünü Kapat</string>
     <string name="tab_switcher_new_tab">Yeni Sekme</string>
     <string name="tab_switcher_open_new_tab">Yeni Sekme Aç</string>
     <string name="tab_switcher_close_tab">Sekmeyi Kapat</string>
 
-    <!-- Browser Picker Screen -->
+    <!-- Browser Picker Ekranı -->
     <string name="browser_picker_title">Varsayılan Tarayıcı</string>
     <string name="browser_picker_system_default">Sistem Varsayılanı</string>
     <string name="browser_picker_system_default_desc">Cihazınızın sistem düzeyindeki varsayılan tarayıcısını kullanır</string>
     <string name="browser_picker_recommended">Önerilen</string>
-    <string name="browser_picker_in_app_desc">Açılan bağlantılar LibRedirect\'in çok sekmeli dahili tarayıcısında açılır</string>
+    <string name="browser_picker_in_app_desc">Bağlantılar LibRedirect\'in çok sekmeli dahili tarayıcısında açılır</string>
 
-    <!-- Exceptions Screen -->
+    <!-- Exceptions Ekranı -->
     <string name="exceptions_title">İstisnalar</string>
-    <string name="exceptions_input_placeholder">example.com veya example.com/yol</string>
+    <string name="exceptions_input_placeholder">example.com veya example.com/path</string>
 
-    <!-- Custom Services Screen -->
-    <string name="custom_services_title">Özel Servisler</string>
+    <!-- Özel Servisler Ekranı -->
+    <string name="custom_services_title">Özel servisler</string>
     <string name="custom_services_add_header">Servis ekle</string>
-    <string name="custom_services_instructions">Her satıra bir alan adı girin. Şablon isteğe bağlıdır; {instance}, {path}, {query:name} ve {fragment} desteklenir.</string>
+    <string name="custom_services_instructions">Her satıra bir ana makine adı yazın. Şablon isteğe bağlıdır ve {instance}, {path}, {query:name} ile {fragment} destekler.</string>
     <string name="custom_services_field_name">Servis adı</string>
     <string name="custom_services_field_hosts">Kaynak alan adları</string>
     <string name="custom_services_field_frontend">Arayüz adı</string>
-    <string name="custom_services_field_instance">HTTPS örnek (instance) adresi</string>
+    <string name="custom_services_field_instance">HTTPS servis adresi</string>
     <string name="custom_services_field_template">İsteğe bağlı çıktı şablonu</string>
-    <string name="custom_services_btn_add">Servis Ekle</string>
+    <string name="custom_services_btn_add">Servis ekle</string>
 
-    <!-- Service Detail Screen -->
+    <!-- Servis Detay Ekranı -->
     <string name="service_detail_frontend_header">Arayüz</string>
     <string name="service_detail_instance_auto">Otomatik</string>
-    <string name="service_detail_instance_custom">Özel sunucu (instance)</string>
+    <string name="service_detail_instance_custom">Özel sunucu adresi</string>
 </resources>

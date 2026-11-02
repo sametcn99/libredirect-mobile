@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.lifecycle.AndroidViewModel
@@ -211,6 +212,24 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun toggleDesktopModeActiveTab() {
+        val active = _uiState.value.activeTab ?: return
+        val newMode = !active.isDesktopMode
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map { tab ->
+                        if (tab.id == active.id) tab.copy(isDesktopMode = newMode) else tab
+                    },
+            )
+        }
+        val webView = webViewPool[active.id]
+        if (webView != null) {
+            applyDesktopMode(webView, newMode)
+            webView.reload()
+        }
+    }
+
     fun deleteBookmark(id: String) {
         viewModelScope.launch {
             browserDataRepository.removeBookmark(id)
@@ -336,6 +355,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             return existing
         }
 
+        val tab = _uiState.value.tabs.find { it.id == tabId }
+        val isDesktop = tab?.isDesktopMode == true
+
         val newWebView =
             WebView(context).apply {
                 settings.apply {
@@ -348,17 +370,32 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     displayZoomControls = false
                     mediaPlaybackRequiresUserGesture = false
                 }
+                applyDesktopMode(this, isDesktop)
                 webViewClient = BrowserTabWebViewClient(tabId)
                 webChromeClient = BrowserTabWebChromeClient(tabId)
             }
 
-        val tab = _uiState.value.tabs.find { it.id == tabId }
         val target = tab?.url ?: BrowserTab.DEFAULT_HOME_URL
         val resolved = resolveRedirection(target) ?: target
         newWebView.loadUrl(resolved)
 
         webViewPool[tabId] = newWebView
         return newWebView
+    }
+
+    private fun applyDesktopMode(
+        webView: WebView,
+        isDesktopMode: Boolean,
+    ) {
+        val userAgent =
+            if (isDesktopMode) {
+                BrowserTab.DESKTOP_USER_AGENT
+            } else {
+                WebSettings.getDefaultUserAgent(webView.context)
+            }
+        webView.settings.userAgentString = userAgent
+        webView.settings.useWideViewPort = isDesktopMode
+        webView.settings.loadWithOverviewMode = isDesktopMode
     }
 
     private fun updateTabUrl(

@@ -104,6 +104,7 @@
     <string name="browser_history_empty_desc">Websites you visit will appear here.</string>
     <string name="browser_clear_history">Clear History</string>
     <string name="browser_delete_item">Delete</string>
+    <string name="browser_menu_desktop_site">Desktop site</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Open Tabs</string>

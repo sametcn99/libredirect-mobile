@@ -19,8 +19,11 @@ data class BrowserTab(
     val canGoBack: Boolean = false,
     val canGoForward: Boolean = false,
     val lastRedirect: RedirectNotice? = null,
+    val isDesktopMode: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_HOME_URL = "https://duckduckgo.com"
+        const val DESKTOP_USER_AGENT =
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
     }
 }
