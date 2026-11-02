@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Update
@@ -45,6 +46,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.ui.MainUiState
+import dev.libredirect.mobile.ui.browser.SearchEngine
+import dev.libredirect.mobile.ui.browser.SearchEngineDialog
 
 private const val GITHUB_REPO_URL = "https://github.com/sametcn99/libredirect-mobile"
 
@@ -64,6 +71,7 @@ data class SettingsActions(
     val onExceptionsClick: () -> Unit,
     val onCustomServicesClick: () -> Unit,
     val onRefreshManifest: () -> Unit,
+    val onSearchEngineSelect: (SearchEngine) -> Unit = {},
 )
 
 @Composable
@@ -73,6 +81,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    var isSearchEngineDialogVisible by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets = WindowInsets.statusBars,
@@ -104,6 +113,15 @@ fun SettingsScreen(
                     subtitle = state.selectedBrowserLabel,
                     badge = badge,
                     onClick = actions.onBrowserClick,
+                )
+            }
+
+            item {
+                SettingsCardItem(
+                    icon = Icons.Default.Search,
+                    title = stringResource(R.string.settings_search_engine),
+                    subtitle = SearchEngine.fromId(state.searchEngine).displayName,
+                    onClick = { isSearchEngineDialogVisible = true },
                 )
             }
 
@@ -162,6 +180,17 @@ fun SettingsScreen(
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+
+    if (isSearchEngineDialogVisible) {
+        SearchEngineDialog(
+            currentEngine = SearchEngine.fromId(state.searchEngine),
+            onSelectEngine = { engine ->
+                actions.onSearchEngineSelect(engine)
+                isSearchEngineDialogVisible = false
+            },
+            onDismiss = { isSearchEngineDialogVisible = false },
+        )
     }
 }
 

@@ -24,6 +24,7 @@ data class MainUiState(
     val appVersionName: String = "1.1.0",
     val appVersionCode: Long = 3L,
     val appVersionDisplay: String = "v1.1.0 (Build 3)",
+    val searchEngine: String = "duckduckgo",
 )
 
 data class ServiceUiState(

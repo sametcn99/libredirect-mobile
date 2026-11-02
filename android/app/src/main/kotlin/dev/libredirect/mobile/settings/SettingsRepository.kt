@@ -47,7 +47,17 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setSelectedBrowser(packageName: String?) {
         context.settingsDataStore.edit { prefs ->
-            if (packageName == null) prefs.remove(Keys.SELECTED_BROWSER) else prefs[Keys.SELECTED_BROWSER] = packageName
+            if (packageName == null) {
+                prefs.remove(Keys.SELECTED_BROWSER)
+            } else {
+                prefs[Keys.SELECTED_BROWSER] = packageName
+            }
+        }
+    }
+
+    suspend fun setSearchEngine(engineId: String) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[Keys.SEARCH_ENGINE] = engineId
         }
     }
 
@@ -108,6 +118,7 @@ class SettingsRepository(private val context: Context) {
             exceptions = decodeList(prefs[Keys.EXCEPTIONS]),
             manifestRevision = prefs[Keys.MANIFEST_REVISION],
             manifestUpdatedAtEpochMillis = prefs[Keys.MANIFEST_UPDATED_AT],
+            searchEngine = prefs[Keys.SEARCH_ENGINE] ?: "duckduckgo",
         )
 
     private fun decodeSet(raw: String?): Set<String> = decodeOrDefault(raw, emptySet())
@@ -140,5 +151,6 @@ class SettingsRepository(private val context: Context) {
         val EXCEPTIONS = stringPreferencesKey("exceptions_json")
         val MANIFEST_REVISION = intPreferencesKey("manifest_revision")
         val MANIFEST_UPDATED_AT = longPreferencesKey("manifest_updated_at")
+        val SEARCH_ENGINE = stringPreferencesKey("search_engine")
     }
 }

@@ -17,6 +17,7 @@ data class AppSettings(
     val exceptions: List<ExceptionRule> = emptyList(),
     val manifestRevision: Int? = null,
     val manifestUpdatedAtEpochMillis: Long? = null,
+    val searchEngine: String = "duckduckgo",
 ) {
     fun isRouteEnabled(routeId: String): Boolean = routeId !in disabledRoutes
 

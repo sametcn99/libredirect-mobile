@@ -204,6 +204,7 @@ fun AppNavHost(
                                 onExceptionsClick = { navController.navigate(ROUTE_EXCEPTIONS) },
                                 onCustomServicesClick = { navController.navigate(ROUTE_CUSTOM_SERVICES) },
                                 onRefreshManifest = mainViewModel::refreshManifest,
+                                onSearchEngineSelect = { engine -> mainViewModel.setSearchEngine(engine.id) },
                             ),
                     )
                 }

@@ -29,8 +29,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 data class BrowserUiState(
@@ -42,6 +40,8 @@ data class BrowserUiState(
     val history: List<BrowserHistoryItem> = emptyList(),
     val isBookmarksHistorySheetVisible: Boolean = false,
     val bookmarksHistoryInitialTab: Int = 0,
+    val searchEngine: SearchEngine = SearchEngine.DEFAULT,
+    val isSearchEngineDialogVisible: Boolean = false,
 ) {
     val activeTab: BrowserTab?
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
@@ -85,6 +85,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             cachedManifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
             settingsRepository.settings.collect { settings ->
                 cachedSettings = settings
+                _uiState.update { it.copy(searchEngine = SearchEngine.fromId(settings.searchEngine)) }
             }
         }
         viewModelScope.launch {
@@ -99,8 +100,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun openNewTab(url: String = BrowserTab.DEFAULT_HOME_URL) {
-        val newTab = BrowserTab(id = UUID.randomUUID().toString(), url = url, title = "Yeni Sekme")
+    fun openNewTab(url: String? = null) {
+        val targetUrl = url ?: _uiState.value.searchEngine.homeUrl
+        val newTab = BrowserTab(id = UUID.randomUUID().toString(), url = targetUrl, title = "Yeni Sekme")
         _uiState.update { current ->
             current.copy(
                 tabs = current.tabs + newTab,
@@ -138,11 +140,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { current ->
             val remaining = current.tabs.filterNot { it.id == tabId }
             if (remaining.isEmpty()) {
-                val freshTab = BrowserTab(id = UUID.randomUUID().toString(), url = BrowserTab.DEFAULT_HOME_URL)
+                val freshTab =
+                    BrowserTab(
+                        id = UUID.randomUUID().toString(),
+                        url = current.searchEngine.homeUrl,
+                    )
                 BrowserUiState(
                     tabs = listOf(freshTab),
                     activeTabId = freshTab.id,
                     isTabsSheetVisible = false,
+                    searchEngine = current.searchEngine,
                 )
             } else {
                 val nextActiveId =
@@ -167,12 +174,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
         webViewPool.clear()
 
-        val freshTab = BrowserTab(id = UUID.randomUUID().toString(), url = BrowserTab.DEFAULT_HOME_URL)
+        val freshTab =
+            BrowserTab(
+                id = UUID.randomUUID().toString(),
+                url = _uiState.value.searchEngine.homeUrl,
+            )
         _uiState.value =
             BrowserUiState(
                 tabs = listOf(freshTab),
                 activeTabId = freshTab.id,
                 isTabsSheetVisible = false,
+                searchEngine = _uiState.value.searchEngine,
             )
     }
 
@@ -193,6 +205,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 isBookmarksHistorySheetVisible = visible,
                 bookmarksHistoryInitialTab = initialTab,
             )
+        }
+    }
+
+    fun setSearchEngineDialogVisible(visible: Boolean) {
+        _uiState.update { it.copy(isSearchEngineDialogVisible = visible) }
+    }
+
+    fun setSearchEngine(engine: SearchEngine) {
+        viewModelScope.launch {
+            settingsRepository.setSearchEngine(engine.id)
         }
     }
 
@@ -263,10 +285,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
                 trimmed.contains('.') && !trimmed.contains(' ') -> "https://$trimmed"
 
-                else -> {
-                    val encoded = URLEncoder.encode(trimmed, StandardCharsets.UTF_8.toString())
-                    "https://duckduckgo.com/?q=$encoded"
-                }
+                else -> _uiState.value.searchEngine.buildSearchUrl(trimmed)
             }
 
         val resolved = resolveRedirection(targetUrl) ?: targetUrl

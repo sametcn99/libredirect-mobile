@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -97,12 +98,14 @@ fun InAppBrowserScreen(
     val canHandleBack =
         state.isTabsSheetVisible ||
             state.isBookmarksHistorySheetVisible ||
+            state.isSearchEngineDialogVisible ||
             (activeTab?.canGoBack == true)
 
     BackHandler(enabled = canHandleBack) {
         when {
             state.isTabsSheetVisible -> viewModel.setTabsSheetVisible(false)
             state.isBookmarksHistorySheetVisible -> viewModel.setBookmarksHistorySheetVisible(false)
+            state.isSearchEngineDialogVisible -> viewModel.setSearchEngineDialogVisible(false)
             activeTab?.canGoBack == true -> viewModel.goBackActiveTab()
         }
     }
@@ -114,6 +117,7 @@ fun InAppBrowserScreen(
                 tabCount = state.tabs.size,
                 isBookmarked = state.isCurrentPageBookmarked,
                 isDesktopMode = activeTab?.isDesktopMode == true,
+                searchEngine = state.searchEngine,
                 onNavigate = { query ->
                     viewModel.navigateActiveTab(query)
                     focusManager.clearFocus()
@@ -124,8 +128,9 @@ fun InAppBrowserScreen(
                 onToggleDesktopMode = viewModel::toggleDesktopModeActiveTab,
                 onOpenBookmarks = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 0) },
                 onOpenHistory = { viewModel.setBookmarksHistorySheetVisible(true, initialTab = 1) },
+                onOpenSearchEngine = { viewModel.setSearchEngineDialogVisible(true) },
                 onOpenTabs = { viewModel.setTabsSheetVisible(true) },
-                onNewTab = viewModel::openNewTab,
+                onNewTab = { viewModel.openNewTab() },
                 onShare = {
                     activeTab?.url?.let {
                         context.shareUrl(it, context.getString(R.string.browser_share_link_title))
@@ -172,9 +177,9 @@ fun InAppBrowserScreen(
                 tabCount = state.tabs.size,
                 onBack = { viewModel.goBackActiveTab() },
                 onForward = { viewModel.goForwardActiveTab() },
-                onHome = { viewModel.navigateActiveTab(BrowserTab.DEFAULT_HOME_URL) },
+                onHome = { viewModel.navigateActiveTab(state.searchEngine.homeUrl) },
                 onTabs = { viewModel.setTabsSheetVisible(true) },
-                onNewTab = viewModel::openNewTab,
+                onNewTab = { viewModel.openNewTab() },
             )
         }
 
@@ -223,7 +228,7 @@ private fun BrowserSheets(
                 TabSwitcherActions(
                     onTabSelect = viewModel::selectTab,
                     onTabClose = viewModel::closeTab,
-                    onNewTab = viewModel::openNewTab,
+                    onNewTab = { viewModel.openNewTab() },
                     onCloseAll = viewModel::closeAllTabs,
                     onDismiss = { viewModel.setTabsSheetVisible(false) },
                 ),
@@ -244,6 +249,14 @@ private fun BrowserSheets(
             onDismiss = { viewModel.setBookmarksHistorySheetVisible(false) },
         )
     }
+
+    if (state.isSearchEngineDialogVisible) {
+        SearchEngineDialog(
+            currentEngine = state.searchEngine,
+            onSelectEngine = viewModel::setSearchEngine,
+            onDismiss = { viewModel.setSearchEngineDialogVisible(false) },
+        )
+    }
 }
 
 @Composable
@@ -252,6 +265,7 @@ private fun BrowserTopBar(
     tabCount: Int,
     isBookmarked: Boolean,
     isDesktopMode: Boolean,
+    searchEngine: SearchEngine,
     onNavigate: (String) -> Unit,
     onReload: () -> Unit,
     onStop: () -> Unit,
@@ -259,6 +273,7 @@ private fun BrowserTopBar(
     onToggleDesktopMode: () -> Unit,
     onOpenBookmarks: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenSearchEngine: () -> Unit,
     onOpenTabs: () -> Unit,
     onNewTab: () -> Unit,
     onShare: () -> Unit,
@@ -403,6 +418,7 @@ private fun BrowserTopBar(
                 BrowserTopBarMenu(
                     expanded = menuExpanded,
                     isDesktopMode = isDesktopMode,
+                    searchEngine = searchEngine,
                     onDismissRequest = { menuExpanded = false },
                     onNewTab = {
                         menuExpanded = false
@@ -415,6 +431,10 @@ private fun BrowserTopBar(
                     onOpenHistory = {
                         menuExpanded = false
                         onOpenHistory()
+                    },
+                    onOpenSearchEngine = {
+                        menuExpanded = false
+                        onOpenSearchEngine()
                     },
                     onToggleDesktopMode = {
                         menuExpanded = false
@@ -442,10 +462,12 @@ private fun BrowserTopBar(
 private fun BrowserTopBarMenu(
     expanded: Boolean,
     isDesktopMode: Boolean,
+    searchEngine: SearchEngine,
     onDismissRequest: () -> Unit,
     onNewTab: () -> Unit,
     onOpenBookmarks: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenSearchEngine: () -> Unit,
     onToggleDesktopMode: () -> Unit,
     onShare: () -> Unit,
     onOpenExternal: () -> Unit,
@@ -466,6 +488,18 @@ private fun BrowserTopBarMenu(
             text = { Text(stringResource(R.string.browser_history_title)) },
             leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null) },
             onClick = onOpenHistory,
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.browser_menu_search_engine)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                Text(
+                    text = searchEngine.displayName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            },
+            onClick = onOpenSearchEngine,
         )
         DropdownMenuItem(
             text = { Text(stringResource(R.string.browser_menu_desktop_site)) },

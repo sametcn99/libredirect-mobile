@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@Suppress("TooManyFunctions")
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = getApplication<LibRedirectApplication>()
     private val settingsRepository = SettingsRepository(app)
@@ -87,6 +88,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setRoutingEnabled(enabled: Boolean) = launchSafely { settingsRepository.setRoutingEnabled(enabled) }
 
     fun setSelectedBrowser(packageName: String?) = launchSafely { settingsRepository.setSelectedBrowser(packageName) }
+
+    fun setSearchEngine(id: String) = launchSafely { settingsRepository.setSearchEngine(id) }
 
     fun setRouteEnabled(
         routeId: String,
@@ -205,6 +208,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appVersionName = verName,
             appVersionCode = verCode,
             appVersionDisplay = verDisplay,
+            searchEngine = settings.searchEngine,
         )
     }
 
