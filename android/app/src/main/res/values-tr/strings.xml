@@ -125,6 +125,8 @@
     <string name="browser_find_previous">Önceki eşleşme</string>
     <string name="browser_find_next">Sonraki eşleşme</string>
     <string name="browser_menu_clear_cookies_cache">Çerezleri ve önbelleği temizle</string>
+    <string name="browser_download_started">İndirme başlatıldı</string>
+    <string name="browser_download_failed">İndirme başlatılamadı</string>
     <string name="browser_search_engine_custom_title">Özel Arama Motoru</string>
     <string name="browser_search_engine_add_custom">Özel motor ekle</string>
     <string name="browser_search_engine_edit_custom">Özel motoru düzenle</string>

@@ -2,17 +2,22 @@ package dev.libredirect.mobile.ui.browser
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Environment
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.libredirect.mobile.LibRedirectApplication
@@ -491,6 +496,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 }
                 webViewClient = BrowserTabWebViewClient(tabId)
                 webChromeClient = BrowserTabWebChromeClient(tabId)
+                setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+                    enqueueDownload(url, userAgent, contentDisposition, mimeType)
+                }
             }
 
         val target = tab?.url ?: BrowserTab.DEFAULT_HOME_URL
@@ -499,6 +507,40 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
         webViewPool[tabId] = newWebView
         return newWebView
+    }
+
+    /**
+     * Hands downloads to the system DownloadManager so they show up in the
+     * system's Downloads list with a progress notification. On API < 29 the
+     * shared Downloads directory needs a storage permission we don't request;
+     * there the file falls back to the app-specific downloads directory.
+     */
+    private fun enqueueDownload(
+        url: String,
+        userAgent: String,
+        contentDisposition: String?,
+        mimeType: String?,
+    ) {
+        val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+        val request =
+            DownloadManager.Request(Uri.parse(url)).apply {
+                setMimeType(mimeType)
+                setTitle(fileName)
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                addRequestHeader("User-Agent", userAgent)
+                CookieManager.getInstance().getCookie(url)?.let { addRequestHeader("Cookie", it) }
+            }
+        try {
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+        } catch (_: SecurityException) {
+            request.setDestinationInExternalFilesDir(app, Environment.DIRECTORY_DOWNLOADS, fileName)
+        }
+        try {
+            app.getSystemService(DownloadManager::class.java).enqueue(request)
+            Toast.makeText(app, R.string.browser_download_started, Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(app, R.string.browser_download_failed, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun applyDesktopMode(

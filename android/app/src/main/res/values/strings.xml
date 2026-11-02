@@ -125,6 +125,8 @@
     <string name="browser_find_previous">Previous match</string>
     <string name="browser_find_next">Next match</string>
     <string name="browser_menu_clear_cookies_cache">Clear cookies and cache</string>
+    <string name="browser_download_started">Download started</string>
+    <string name="browser_download_failed">Download failed</string>
     <string name="browser_search_engine_custom_title">Custom Search Engine</string>
     <string name="browser_search_engine_add_custom">Add custom engine</string>
     <string name="browser_search_engine_edit_custom">Edit custom engine</string>
