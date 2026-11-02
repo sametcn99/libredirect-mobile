@@ -258,6 +258,21 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun importBookmarks(
+        content: String,
+        onComplete: ((Int) -> Unit)? = null,
+    ) {
+        viewModelScope.launch {
+            val parsed = BookmarkCodec.parseBookmarks(content)
+            val added = browserDataRepository.importBookmarks(parsed)
+            onComplete?.invoke(added)
+        }
+    }
+
+    fun exportBookmarksHtml(): String = BookmarkCodec.exportToHtml(_uiState.value.bookmarks)
+
+    fun exportBookmarksJson(): String = BookmarkCodec.exportToJson(_uiState.value.bookmarks)
+
     fun deleteHistoryItem(id: String) {
         viewModelScope.launch {
             browserDataRepository.removeHistoryItem(id)

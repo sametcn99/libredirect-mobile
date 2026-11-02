@@ -101,6 +101,15 @@
     <string name="browser_action_remove_bookmark">Yer imini kaldır</string>
     <string name="browser_bookmarks_empty">Henüz yer imi eklenmedi</string>
     <string name="browser_bookmarks_empty_desc">Sık ziyaret ettiğiniz sayfaları yer imlerine ekleyebilirsiniz.</string>
+    <string name="browser_bookmarks_count_fmt">%1$d yer imi</string>
+    <string name="browser_bookmarks_import">İçe Aktar</string>
+    <string name="browser_bookmarks_export">Dışa Aktar</string>
+    <string name="browser_bookmarks_export_html">HTML (standart)</string>
+    <string name="browser_bookmarks_export_json">JSON</string>
+    <string name="browser_bookmarks_imported_count">%1$d yer imi içe aktarıldı</string>
+    <string name="browser_bookmarks_import_failed">Yer imleri içe aktarılamadı</string>
+    <string name="browser_bookmarks_export_success">Yer imleri başarıyla dışa aktarıldı</string>
+    <string name="browser_bookmarks_export_failed">Yer imleri dışa aktarılamadı</string>
     <string name="browser_history_empty">Tarama geçmişi boş</string>
     <string name="browser_history_empty_desc">Ziyaret ettiğiniz siteler burada listelenir.</string>
     <string name="browser_clear_history">Geçmişi Temizle</string>

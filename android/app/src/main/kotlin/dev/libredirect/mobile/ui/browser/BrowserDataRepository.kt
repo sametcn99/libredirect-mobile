@@ -49,6 +49,24 @@ class BrowserDataRepository(private val context: Context) {
         }
     }
 
+    suspend fun importBookmarks(imported: List<BrowserBookmark>): Int {
+        if (imported.isEmpty()) return 0
+        var addedCount = 0
+        context.browserDataStore.edit { prefs ->
+            val current = decodeList<BrowserBookmark>(prefs[Keys.BOOKMARKS])
+            val existingUrls = current.map { it.url }.toSet()
+            val newItems =
+                imported
+                    .filter { it.url.isNotBlank() && it.url !in existingUrls }
+                    .distinctBy { it.url }
+            addedCount = newItems.size
+            if (newItems.isNotEmpty()) {
+                prefs[Keys.BOOKMARKS] = json.encodeToString(newItems + current)
+            }
+        }
+        return addedCount
+    }
+
     suspend fun removeBookmark(id: String) {
         context.browserDataStore.edit { prefs ->
             val current = decodeList<BrowserBookmark>(prefs[Keys.BOOKMARKS])

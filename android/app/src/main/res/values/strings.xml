@@ -101,6 +101,15 @@
     <string name="browser_action_remove_bookmark">Remove bookmark</string>
     <string name="browser_bookmarks_empty">No bookmarks yet</string>
     <string name="browser_bookmarks_empty_desc">Frequently visited pages you bookmark will appear here.</string>
+    <string name="browser_bookmarks_count_fmt">%1$d bookmarks</string>
+    <string name="browser_bookmarks_import">Import</string>
+    <string name="browser_bookmarks_export">Export</string>
+    <string name="browser_bookmarks_export_html">HTML (standard)</string>
+    <string name="browser_bookmarks_export_json">JSON</string>
+    <string name="browser_bookmarks_imported_count">Imported %1$d bookmark(s)</string>
+    <string name="browser_bookmarks_import_failed">Failed to import bookmarks</string>
+    <string name="browser_bookmarks_export_success">Bookmarks exported successfully</string>
+    <string name="browser_bookmarks_export_failed">Failed to export bookmarks</string>
     <string name="browser_history_empty">Browsing history is empty</string>
     <string name="browser_history_empty_desc">Websites you visit will appear here.</string>
     <string name="browser_clear_history">Clear History</string>

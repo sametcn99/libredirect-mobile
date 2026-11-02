@@ -246,6 +246,11 @@ private fun BrowserSheets(
             onDeleteBookmark = viewModel::deleteBookmark,
             onDeleteHistoryItem = viewModel::deleteHistoryItem,
             onClearHistory = viewModel::clearHistory,
+            onImportBookmarks = { content, onDone ->
+                viewModel.importBookmarks(content, onDone)
+            },
+            onExportBookmarksHtml = viewModel::exportBookmarksHtml,
+            onExportBookmarksJson = viewModel::exportBookmarksJson,
             onDismiss = { viewModel.setBookmarksHistorySheetVisible(false) },
         )
     }
