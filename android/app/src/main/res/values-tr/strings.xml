@@ -114,6 +114,7 @@
     <string name="browser_history_empty">Tarama geçmişi boş</string>
     <string name="browser_history_empty_desc">Ziyaret ettiğiniz siteler burada listelenir.</string>
     <string name="browser_clear_history">Geçmişi Temizle</string>
+    <string name="browser_clear_history_confirm">Tüm tarama geçmişi silinecek. Bu işlem geri alınamaz.</string>
     <string name="browser_delete_item">Sil</string>
     <string name="browser_menu_desktop_site">Masaüstü sitesi</string>
     <string name="browser_menu_search_engine">Arama motoru</string>

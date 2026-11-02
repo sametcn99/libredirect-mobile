@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -449,6 +450,43 @@ private fun HistoryTabContent(
     onDelete: (String) -> Unit,
     onClearAll: () -> Unit,
 ) {
+    var isClearHistoryConfirmVisible by rememberSaveable { mutableStateOf(false) }
+
+    if (isClearHistoryConfirmVisible) {
+        AlertDialog(
+            onDismissRequest = { isClearHistoryConfirmVisible = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.browser_clear_history),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(text = stringResource(R.string.browser_clear_history_confirm))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        isClearHistoryConfirmVisible = false
+                        onClearAll()
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_clear),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { isClearHistoryConfirmVisible = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+            shape = RoundedCornerShape(20.dp),
+        )
+    }
+
     if (history.isEmpty()) {
         EmptyStateView(
             icon = Icons.Outlined.History,
@@ -471,7 +509,7 @@ private fun HistoryTabContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                TextButton(onClick = onClearAll) {
+                TextButton(onClick = { isClearHistoryConfirmVisible = true }) {
                     Icon(
                         Icons.Default.DeleteSweep,
                         contentDescription = null,

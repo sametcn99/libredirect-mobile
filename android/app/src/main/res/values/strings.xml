@@ -114,6 +114,7 @@
     <string name="browser_history_empty">Browsing history is empty</string>
     <string name="browser_history_empty_desc">Websites you visit will appear here.</string>
     <string name="browser_clear_history">Clear History</string>
+    <string name="browser_clear_history_confirm">All browsing history will be deleted. This cannot be undone.</string>
     <string name="browser_delete_item">Delete</string>
     <string name="browser_menu_desktop_site">Desktop site</string>
     <string name="browser_menu_search_engine">Search engine</string>
