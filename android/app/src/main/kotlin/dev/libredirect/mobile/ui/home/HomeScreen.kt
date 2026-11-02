@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -62,8 +64,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.redirect.RedirectActivity
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.ServiceUiState
@@ -80,6 +84,7 @@ fun HomeScreen(
     val context = LocalContext.current
     var linkText by rememberSaveable { mutableStateOf("") }
     var linkError by rememberSaveable { mutableStateOf<String?>(null) }
+    val emptyLinkErrorMessage = stringResource(R.string.home_quick_link_error)
 
     fun normalizeLink(raw: String): String =
         when {
@@ -93,7 +98,7 @@ fun HomeScreen(
     fun openInSystemBrowser() {
         val normalized = normalizeLink(linkText.trim())
         if (normalized.isEmpty()) {
-            linkError = "Lütfen önce geçerli bir URL girin"
+            linkError = emptyLinkErrorMessage
             return
         }
         linkError = null
@@ -109,7 +114,7 @@ fun HomeScreen(
     fun openInAppBrowser() {
         val normalized = normalizeLink(linkText.trim())
         if (normalized.isEmpty()) {
-            linkError = "Lütfen önce geçerli bir URL girin"
+            linkError = emptyLinkErrorMessage
             return
         }
         linkError = null
@@ -117,6 +122,7 @@ fun HomeScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             TopAppBar(
                 title = {
@@ -124,7 +130,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("LibRedirect", fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.app_name), fontWeight = FontWeight.Bold)
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
@@ -144,13 +150,16 @@ fun HomeScreen(
                         if (state.refreshInProgress) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.Default.Refresh, contentDescription = "Verileri Yenile")
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.action_refresh_data),
+                            )
                         }
                     }
                 },
             )
         },
-        modifier = modifier,
+        modifier = modifier.fillMaxSize(),
     ) { padding ->
         LazyColumn(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -202,7 +211,7 @@ fun HomeScreen(
 
             item {
                 Text(
-                    text = "Hızlı İşlemler",
+                    text = stringResource(R.string.home_quick_actions_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 4.dp),
@@ -225,12 +234,12 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Popüler Servisler",
+                        text = stringResource(R.string.home_popular_services_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "Tümünü Gör (${state.services.size})",
+                        text = stringResource(R.string.home_see_all_services, state.services.size),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
@@ -313,18 +322,25 @@ private fun StatusHeroCard(
                     }
 
                     Column {
+                        val routingStatusRes =
+                            if (routingEnabled) {
+                                R.string.home_routing_active
+                            } else {
+                                R.string.home_routing_disabled
+                            }
                         Text(
-                            text = if (routingEnabled) "Yönlendirme Aktif" else "Yönlendirme Kapalı",
+                            text = stringResource(routingStatusRes),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                         )
+                        val routingDescRes =
+                            if (routingEnabled) {
+                                R.string.home_routing_active_desc
+                            } else {
+                                R.string.home_routing_disabled_desc
+                            }
                         Text(
-                            text =
-                                if (routingEnabled) {
-                                    "Gizlilik koruması tüm servislerde açık"
-                                } else {
-                                    "Tüm istekler doğrudan iletiliyor"
-                                },
+                            text = stringResource(routingDescRes),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -336,7 +352,11 @@ private fun StatusHeroCard(
                     onCheckedChange = onRoutingToggle,
                     colors =
                         SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                         ),
                 )
             }
@@ -354,9 +374,18 @@ private fun StatusHeroCard(
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    StatusStatItem(label = "Aktif Servis", value = "$activeServicesCount")
-                    StatusStatItem(label = "İstisnalar", value = "$exceptionsCount")
-                    StatusStatItem(label = "Tarayıcı", value = "Dahili & Hızlı")
+                    StatusStatItem(
+                        label = stringResource(R.string.home_stat_active_services),
+                        value = "$activeServicesCount",
+                    )
+                    StatusStatItem(
+                        label = stringResource(R.string.home_stat_exceptions),
+                        value = "$exceptionsCount",
+                    )
+                    StatusStatItem(
+                        label = stringResource(R.string.home_stat_browser),
+                        value = stringResource(R.string.home_stat_browser_value),
+                    )
                 }
             }
         }
@@ -413,7 +442,7 @@ private fun QuickLinkCard(
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    text = "Hızlı Link Aç & Test Et",
+                    text = stringResource(R.string.home_quick_link_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -422,7 +451,7 @@ private fun QuickLinkCard(
             OutlinedTextField(
                 value = linkText,
                 onValueChange = onLinkTextChange,
-                placeholder = { Text("https://instagram.com/... veya youtube.com/...") },
+                placeholder = { Text(stringResource(R.string.home_quick_link_placeholder)) },
                 singleLine = true,
                 isError = linkError != null,
                 shape = RoundedCornerShape(14.dp),
@@ -456,14 +485,14 @@ private fun QuickLinkCard(
                 ) {
                     Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Dahili Tarayıcıda Aç")
+                    Text(stringResource(R.string.home_quick_link_open_in_app))
                 }
 
                 OutlinedButton(
                     onClick = onOpenExternal,
                     shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text("Dışarıda Aç")
+                    Text(stringResource(R.string.home_quick_link_open_external))
                 }
             }
         }
@@ -483,25 +512,25 @@ private fun QuickActionsRow(
     ) {
         QuickActionItem(
             icon = Icons.Default.Public,
-            label = "Tarayıcı",
+            label = stringResource(R.string.nav_browser),
             onClick = onOpenBrowser,
             modifier = Modifier.weight(1f),
         )
         QuickActionItem(
             icon = Icons.Default.Tune,
-            label = "Servisler",
+            label = stringResource(R.string.nav_services),
             onClick = onOpenServices,
             modifier = Modifier.weight(1f),
         )
         QuickActionItem(
             icon = Icons.Default.Block,
-            label = "İstisnalar",
+            label = stringResource(R.string.home_stat_exceptions),
             onClick = onOpenExceptions,
             modifier = Modifier.weight(1f),
         )
         QuickActionItem(
             icon = Icons.Default.Settings,
-            label = "Ayarlar",
+            label = stringResource(R.string.nav_settings),
             onClick = onOpenSettings,
             modifier = Modifier.weight(1f),
         )
@@ -558,13 +587,13 @@ private fun UpdateCard(
             Icon(Icons.Default.Update, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Yeni Sürüm Mevcut!",
+                    text = stringResource(R.string.home_update_available_title),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
-                    text = "v$versionName güncellemesini incelemek için dokunun",
+                    text = stringResource(R.string.home_update_available_desc, versionName),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
@@ -595,7 +624,7 @@ private fun ManifestErrorCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Rota Verileri Yüklenemedi",
+                    text = stringResource(R.string.home_manifest_error_title),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onErrorContainer,
@@ -610,7 +639,7 @@ private fun ManifestErrorCard(
                 onClick = onRetry,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             ) {
-                Text("Tekrar Dene")
+                Text(stringResource(R.string.action_retry))
             }
         }
     }

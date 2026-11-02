@@ -1,6 +1,8 @@
 package dev.libredirect.mobile.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -23,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -30,6 +33,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.ui.browser.BrowserPickerScreen
 import dev.libredirect.mobile.ui.browser.BrowserTab
 import dev.libredirect.mobile.ui.browser.BrowserViewModel
@@ -54,16 +58,16 @@ private const val ROUTE_CUSTOM_SERVICES = "custom-services"
 
 private data class NavItem(
     val route: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector,
 )
 
 private val NAV_ITEMS =
     listOf(
-        NavItem(ROUTE_HOME, "Ana Sayfa", Icons.Default.Home),
-        NavItem(ROUTE_BROWSER, "Tarayıcı", Icons.Default.Public),
-        NavItem(ROUTE_SERVICES, "Servisler", Icons.Default.Tune),
-        NavItem(ROUTE_SETTINGS, "Ayarlar", Icons.Default.Settings),
+        NavItem(ROUTE_HOME, R.string.nav_home, Icons.Default.Home),
+        NavItem(ROUTE_BROWSER, R.string.nav_browser, Icons.Default.Public),
+        NavItem(ROUTE_SERVICES, R.string.nav_services, Icons.Default.Tune),
+        NavItem(ROUTE_SETTINGS, R.string.nav_settings, Icons.Default.Settings),
     )
 
 @Composable
@@ -102,11 +106,13 @@ fun AppNavHost(
     val showBottomBar = currentRoute in NAV_ITEMS.map { it.route }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
                     NAV_ITEMS.forEach { item ->
                         val selected = currentRoute == item.route
+                        val label = stringResource(item.labelRes)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -120,8 +126,8 @@ fun AppNavHost(
                                     }
                                 }
                             },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
+                            icon = { Icon(item.icon, contentDescription = label) },
+                            label = { Text(label) },
                         )
                     }
                 }
@@ -133,7 +139,7 @@ fun AppNavHost(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(bottom = padding.calculateBottomPadding()),
         ) {
             NavHost(
                 navController = navController,

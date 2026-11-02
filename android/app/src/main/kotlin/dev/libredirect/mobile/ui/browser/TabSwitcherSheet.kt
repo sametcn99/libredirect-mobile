@@ -36,9 +36,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.libredirect.mobile.R
 
 @Composable
 fun TabSwitcherSheet(
@@ -69,12 +71,12 @@ fun TabSwitcherSheet(
             ) {
                 Column {
                     Text(
-                        text = "Açık Sekmeler",
+                        text = stringResource(R.string.tab_switcher_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "${tabs.size} sekme açık",
+                        text = stringResource(R.string.tab_switcher_count_fmt, tabs.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -89,11 +91,14 @@ fun TabSwitcherSheet(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text("Tümünü Kapat")
+                            Text(stringResource(R.string.tab_switcher_close_all))
                         }
                     }
                     IconButton(onClick = actions.onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Kapat")
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.action_close),
+                        )
                     }
                 }
             }
@@ -125,7 +130,7 @@ fun TabSwitcherSheet(
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Yeni Sekme Aç")
+                Text(stringResource(R.string.tab_switcher_open_new_tab))
             }
         }
     }
@@ -198,7 +203,7 @@ private fun TabCard(
                 ) {
                     Icon(
                         Icons.Default.Close,
-                        contentDescription = "Sekmeyi Kapat",
+                        contentDescription = stringResource(R.string.tab_switcher_close_tab),
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -206,7 +211,7 @@ private fun TabCard(
 
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = tab.title.ifBlank { "Yeni Sekme" },
+                    text = tab.title.ifBlank { stringResource(R.string.tab_switcher_new_tab) },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
                     maxLines = 1,

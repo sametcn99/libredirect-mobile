@@ -5,8 +5,11 @@ package dev.libredirect.mobile.ui.service
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -27,7 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.ui.FrontendUiState
 import dev.libredirect.mobile.ui.ServiceUiState
@@ -38,28 +43,34 @@ fun ServiceDetailScreen(
     onBack: () -> Unit,
     onFrontendSelected: (String) -> Unit,
     onInstanceSelectionChange: (frontendId: String, selection: InstanceSelection) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             TopAppBar(
                 title = { Text(service.name) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
                     }
                 },
             )
         },
+        modifier = modifier.fillMaxSize(),
     ) { padding ->
         LazyColumn(
             modifier =
                 Modifier
-                    .padding(padding)
-                    .fillMaxWidth(),
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             item {
                 Text(
-                    text = "Frontend",
+                    text = stringResource(R.string.service_detail_frontend_header),
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
                 )
             }
@@ -101,7 +112,7 @@ private fun InstanceSelector(
 ) {
     Column(modifier = Modifier.padding(start = 32.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
         InstanceModeRow(
-            label = "Automatic",
+            label = stringResource(R.string.service_detail_instance_auto),
             selected = frontend.selection is InstanceSelection.Automatic,
             onClick = { onSelectionChange(InstanceSelection.Automatic) },
         )
@@ -133,7 +144,7 @@ private fun InstanceSelector(
                     customText = it
                     if (it.isNotBlank()) onSelectionChange(InstanceSelection.Custom(it))
                 },
-                label = { Text("Custom instance") },
+                label = { Text(stringResource(R.string.service_detail_instance_custom)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

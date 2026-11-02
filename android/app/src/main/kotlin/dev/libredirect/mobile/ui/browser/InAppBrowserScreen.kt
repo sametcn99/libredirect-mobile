@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -69,12 +70,14 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.libredirect.mobile.R
 
 @Composable
 fun InAppBrowserScreen(
@@ -107,7 +110,11 @@ fun InAppBrowserScreen(
                 onStop = viewModel::stopActiveTab,
                 onOpenTabs = { viewModel.setTabsSheetVisible(true) },
                 onNewTab = viewModel::openNewTab,
-                onShare = { activeTab?.url?.let { context.shareUrl(it) } },
+                onShare = {
+                    activeTab?.url?.let {
+                        context.shareUrl(it, context.getString(R.string.browser_share_link_title))
+                    }
+                },
                 onOpenExternal = { activeTab?.url?.let { context.openExternalUrl(it) } },
                 onCloseTab = { activeTab?.let { viewModel.closeTab(it.id) } },
             )
@@ -219,6 +226,7 @@ private fun BrowserTopBar(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -232,12 +240,12 @@ private fun BrowserTopBar(
                         .focusRequester(focusRequester)
                         .onFocusChanged { isFocused = it.isFocused },
                 singleLine = true,
-                placeholder = { Text("URL veya arama terimi girin...") },
+                placeholder = { Text(stringResource(R.string.browser_search_placeholder)) },
                 leadingIcon = {
                     val isHttps = tab?.url?.startsWith("https://", ignoreCase = true) == true
                     Icon(
                         Icons.Default.Lock,
-                        contentDescription = "Güvenli Bağlantı",
+                        contentDescription = stringResource(R.string.browser_secure_connection),
                         tint = if (isHttps) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                         modifier = Modifier.size(18.dp),
                     )
@@ -245,15 +253,27 @@ private fun BrowserTopBar(
                 trailingIcon = {
                     if (isFocused && urlText.isNotEmpty()) {
                         IconButton(onClick = { urlText = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Temizle", modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = stringResource(R.string.action_clear),
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                     } else if (tab?.isLoading == true) {
                         IconButton(onClick = onStop) {
-                            Icon(Icons.Default.Close, contentDescription = "Durdur", modifier = Modifier.size(20.dp))
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.action_stop),
+                                modifier = Modifier.size(20.dp),
+                            )
                         }
                     } else {
                         IconButton(onClick = onReload) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Yenile", modifier = Modifier.size(20.dp))
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.action_reload),
+                                modifier = Modifier.size(20.dp),
+                            )
                         }
                     }
                 },
@@ -292,11 +312,14 @@ private fun BrowserTopBar(
 
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Menü")
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.action_menu),
+                    )
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(
-                        text = { Text("Yeni Sekme") },
+                        text = { Text(stringResource(R.string.browser_menu_new_tab)) },
                         leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -304,7 +327,7 @@ private fun BrowserTopBar(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Sayfayı Paylaş") },
+                        text = { Text(stringResource(R.string.browser_menu_share_page)) },
                         leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -312,7 +335,7 @@ private fun BrowserTopBar(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Harici Tarayıcıda Aç") },
+                        text = { Text(stringResource(R.string.browser_menu_open_external)) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -320,7 +343,7 @@ private fun BrowserTopBar(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Sekmeyi Kapat") },
+                        text = { Text(stringResource(R.string.browser_menu_close_tab)) },
                         leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -378,7 +401,7 @@ private fun RedirectBanner(
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "Gizlilik arayüzüne otomatik yönlendirildi",
+                        text = stringResource(R.string.browser_redirect_banner_desc),
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -389,7 +412,7 @@ private fun RedirectBanner(
             IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
                 Icon(
                     Icons.Default.Close,
-                    contentDescription = "Kapat",
+                    contentDescription = stringResource(R.string.action_close),
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -424,7 +447,7 @@ private fun BrowserBottomBar(
             IconButton(onClick = onBack, enabled = canGoBack) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Geri",
+                    contentDescription = stringResource(R.string.action_back),
                     tint =
                         if (canGoBack) {
                             MaterialTheme.colorScheme.onSurface
@@ -437,7 +460,7 @@ private fun BrowserBottomBar(
             IconButton(onClick = onForward, enabled = canGoForward) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "İleri",
+                    contentDescription = stringResource(R.string.action_forward),
                     tint =
                         if (canGoForward) {
                             MaterialTheme.colorScheme.onSurface
@@ -448,28 +471,40 @@ private fun BrowserBottomBar(
             }
 
             IconButton(onClick = onHome) {
-                Icon(Icons.Default.Home, contentDescription = "Ana Sayfa")
+                Icon(
+                    Icons.Default.Home,
+                    contentDescription = stringResource(R.string.action_home),
+                )
             }
 
             IconButton(onClick = onTabs) {
-                Icon(Icons.Outlined.Tab, contentDescription = "Sekmeler ($tabCount)")
+                Icon(
+                    Icons.Outlined.Tab,
+                    contentDescription = stringResource(R.string.browser_tabs_fmt, tabCount),
+                )
             }
 
             IconButton(onClick = onNewTab) {
-                Icon(Icons.Default.Add, contentDescription = "Yeni Sekme")
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = stringResource(R.string.tab_switcher_new_tab),
+                )
             }
         }
     }
 }
 
-private fun Context.shareUrl(url: String) {
+private fun Context.shareUrl(
+    url: String,
+    chooserTitle: String,
+) {
     val sendIntent =
         Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, url)
             type = "text/plain"
         }
-    val shareIntent = Intent.createChooser(sendIntent, "Bağlantıyı Paylaş")
+    val shareIntent = Intent.createChooser(sendIntent, chooserTitle)
     startActivity(shareIntent)
 }
 

@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -48,8 +50,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.ui.MainUiState
 
@@ -71,12 +75,13 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             TopAppBar(
-                title = { Text("Ayarlar & Bilgi", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.settings_title), fontWeight = FontWeight.Bold) },
             )
         },
-        modifier = modifier,
+        modifier = modifier.fillMaxSize(),
     ) { padding ->
         LazyColumn(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -87,15 +92,15 @@ fun SettingsScreen(
                     .padding(padding),
         ) {
             item {
-                SectionTitle("Tarayıcı ve Yönlendirme Tercihleri")
+                SectionTitle(stringResource(R.string.settings_section_browser_routing))
             }
 
             item {
                 val isInApp = state.selectedBrowserPackage == BrowserLauncher.IN_APP_BROWSER_PACKAGE
-                val badge = if (isInApp) "Dahili Tarayıcı" else null
+                val badge = if (isInApp) stringResource(R.string.settings_badge_in_app) else null
                 SettingsCardItem(
                     icon = Icons.Default.Language,
-                    title = "Varsayılan Tarayıcı",
+                    title = stringResource(R.string.settings_default_browser),
                     subtitle = state.selectedBrowserLabel,
                     badge = badge,
                     onClick = actions.onBrowserClick,
@@ -105,8 +110,8 @@ fun SettingsScreen(
             item {
                 SettingsCardItem(
                     icon = Icons.Default.Block,
-                    title = "Yönlendirme İstisnaları",
-                    subtitle = "${state.exceptions.size} özel kural yapılandırıldı",
+                    title = stringResource(R.string.settings_exceptions),
+                    subtitle = stringResource(R.string.settings_exceptions_subtitle_fmt, state.exceptions.size),
                     onClick = actions.onExceptionsClick,
                 )
             }
@@ -114,14 +119,14 @@ fun SettingsScreen(
             item {
                 SettingsCardItem(
                     icon = Icons.Default.Tune,
-                    title = "Özel Servisler",
-                    subtitle = "${state.customRoutes.size} özel rota tanımlandı",
+                    title = stringResource(R.string.settings_custom_services),
+                    subtitle = stringResource(R.string.settings_custom_services_subtitle_fmt, state.customRoutes.size),
                     onClick = actions.onCustomServicesClick,
                 )
             }
 
             item {
-                SectionTitle("Yönlendirme Veritabanı")
+                SectionTitle(stringResource(R.string.settings_section_routing_db))
             }
 
             item {
@@ -135,7 +140,7 @@ fun SettingsScreen(
             }
 
             item {
-                SectionTitle("Uygulama Bilgisi")
+                SectionTitle(stringResource(R.string.settings_section_app_info))
             }
 
             item {
@@ -285,7 +290,7 @@ private fun ManifestDatabaseCard(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = "Rota Veritabanı",
+                        text = stringResource(R.string.settings_routing_db_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -296,7 +301,7 @@ private fun ManifestDatabaseCard(
                     color = MaterialTheme.colorScheme.primaryContainer,
                 ) {
                     Text(
-                        text = "Revizyon ${revision ?: "—"}",
+                        text = stringResource(R.string.settings_db_revision_fmt, revision?.toString() ?: "—"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -319,7 +324,7 @@ private fun ManifestDatabaseCard(
                 )
             } else {
                 Text(
-                    text = "En güncel alternatif arayüzler ve rota kuralları yüklü.",
+                    text = stringResource(R.string.settings_db_up_to_date),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -338,11 +343,11 @@ private fun ManifestDatabaseCard(
                         strokeWidth = 2.dp,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Güncelleniyor...")
+                    Text(stringResource(R.string.settings_db_updating))
                 } else {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Verileri Şimdi Güncelle")
+                    Text(stringResource(R.string.settings_db_update_now))
                 }
             }
         }
@@ -390,7 +395,7 @@ private fun AppVersionCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "LibRedirect Mobile",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -428,7 +433,7 @@ private fun AppVersionCard(
                     ) {
                         Icon(Icons.Default.Update, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
-                            text = "Yeni Güncelleme Mevcut: $updateAvailable (İndirmek için dokunun)",
+                            text = stringResource(R.string.settings_update_available_fmt, updateAvailable),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -447,7 +452,7 @@ private fun AppVersionCard(
                         modifier = Modifier.size(16.dp),
                     )
                     Text(
-                        text = "Uygulamanız en güncel sürümde",
+                        text = stringResource(R.string.settings_app_up_to_date),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -471,7 +476,7 @@ private fun AppVersionCard(
                     modifier = Modifier.size(18.dp),
                 )
                 Text(
-                    text = "Açık Kaynak Kod (GitHub)",
+                    text = stringResource(R.string.settings_github_source),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium,

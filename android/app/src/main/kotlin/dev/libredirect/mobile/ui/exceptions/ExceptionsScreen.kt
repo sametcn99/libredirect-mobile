@@ -4,8 +4,11 @@ package dev.libredirect.mobile.ui.exceptions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -27,7 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.routing.ExceptionRule
 
 @Composable
@@ -35,24 +40,30 @@ fun ExceptionsScreen(
     exceptions: List<ExceptionRule>,
     onBack: () -> Unit,
     onExceptionsChange: (List<ExceptionRule>) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             TopAppBar(
-                title = { Text("Exceptions") },
+                title = { Text(stringResource(R.string.exceptions_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
                     }
                 },
             )
         },
+        modifier = modifier.fillMaxSize(),
     ) { padding ->
         LazyColumn(
             modifier =
                 Modifier
-                    .padding(padding)
-                    .fillMaxWidth(),
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             item { AddExceptionRow(onAdd = { rule -> onExceptionsChange(exceptions + rule) }) }
             item { HorizontalDivider() }
@@ -82,7 +93,7 @@ private fun AddExceptionRow(onAdd: (ExceptionRule) -> Unit) {
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            label = { Text("example.com or example.com/path") },
+            label = { Text(stringResource(R.string.exceptions_input_placeholder)) },
             singleLine = true,
             modifier = Modifier.weight(1f),
         )
@@ -93,7 +104,7 @@ private fun AddExceptionRow(onAdd: (ExceptionRule) -> Unit) {
                 text = ""
             }
         }) {
-            Text("Add")
+            Text(stringResource(R.string.action_add))
         }
     }
 }
@@ -110,6 +121,10 @@ private fun ExceptionRow(
         }
     ListItem(
         headlineContent = { Text(label) },
-        trailingContent = { TextButton(onClick = onRemove) { Text("Remove") } },
+        trailingContent = {
+            TextButton(onClick = onRemove) {
+                Text(stringResource(R.string.action_remove))
+            }
+        },
     )
 }

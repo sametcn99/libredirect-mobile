@@ -4,8 +4,11 @@ package dev.libredirect.mobile.ui.custom
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -26,7 +29,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.manifest.Frontend
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.manifest.Strategy
@@ -46,21 +51,30 @@ fun CustomServicesScreen(
     onBack: () -> Unit,
     onAdd: (Route) -> Unit,
     onRemove: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             TopAppBar(
-                title = { Text("Custom services") },
+                title = { Text(stringResource(R.string.custom_services_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
                     }
                 },
             )
         },
+        modifier = modifier.fillMaxSize(),
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.padding(padding).fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
@@ -73,7 +87,9 @@ fun CustomServicesScreen(
                     headlineContent = { Text(route.name) },
                     supportingContent = { Text(route.hosts.joinToString(", ")) },
                     trailingContent = {
-                        TextButton(onClick = { onRemove(route.id) }) { Text("Remove") }
+                        TextButton(onClick = { onRemove(route.id) }) {
+                            Text(stringResource(R.string.action_remove))
+                        }
                     },
                 )
                 HorizontalDivider()
@@ -90,11 +106,8 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Add a service")
-        Text(
-            "Use one hostname per line. A template is optional and supports " +
-                "{instance}, {path}, {query:name}, and {fragment}.",
-        )
+        Text(stringResource(R.string.custom_services_add_header))
+        Text(stringResource(R.string.custom_services_instructions))
         CustomServiceFields(draft = draft, onDraftChange = { draft = it })
         Button(
             onClick = {
@@ -105,7 +118,7 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Add service")
+            Text(stringResource(R.string.custom_services_btn_add))
         }
     }
 }
@@ -118,35 +131,35 @@ private fun CustomServiceFields(
     OutlinedTextField(
         value = draft.name,
         onValueChange = { onDraftChange(draft.copy(name = it)) },
-        label = { Text("Service name") },
+        label = { Text(stringResource(R.string.custom_services_field_name)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
     OutlinedTextField(
         value = draft.hosts,
         onValueChange = { onDraftChange(draft.copy(hosts = it)) },
-        label = { Text("Source hostnames") },
+        label = { Text(stringResource(R.string.custom_services_field_hosts)) },
         minLines = 2,
         modifier = Modifier.fillMaxWidth(),
     )
     OutlinedTextField(
         value = draft.frontendName,
         onValueChange = { onDraftChange(draft.copy(frontendName = it)) },
-        label = { Text("Frontend name") },
+        label = { Text(stringResource(R.string.custom_services_field_frontend)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
     OutlinedTextField(
         value = draft.instance,
         onValueChange = { onDraftChange(draft.copy(instance = it)) },
-        label = { Text("HTTPS instance origin") },
+        label = { Text(stringResource(R.string.custom_services_field_instance)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
     OutlinedTextField(
         value = draft.template,
         onValueChange = { onDraftChange(draft.copy(template = it)) },
-        label = { Text("Optional output template") },
+        label = { Text(stringResource(R.string.custom_services_field_template)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )

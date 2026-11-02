@@ -2,6 +2,7 @@
 
 package dev.libredirect.mobile.ui.services
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,11 +11,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -45,17 +48,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.libredirect.mobile.R
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.ServiceUiState
 import dev.libredirect.mobile.ui.home.ServiceSort
 import dev.libredirect.mobile.ui.home.ServiceSorter
 
-private enum class ServiceFilter(val label: String) {
-    ALL("Tümü"),
-    ENABLED("Aktif"),
-    DISABLED("Kapalı"),
+private enum class ServiceFilter(
+    @StringRes val labelRes: Int,
+) {
+    ALL(R.string.services_filter_all),
+    ENABLED(R.string.services_filter_enabled),
+    DISABLED(R.string.services_filter_disabled),
 }
 
 @Composable
@@ -86,12 +93,13 @@ fun ServicesScreen(
         }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             TopAppBar(
-                title = { Text("Yönlendirme Servisleri", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.services_title), fontWeight = FontWeight.Bold) },
             )
         },
-        modifier = modifier,
+        modifier = modifier.fillMaxSize(),
     ) { padding ->
         Column(
             modifier =
@@ -106,12 +114,12 @@ fun ServicesScreen(
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp),
-                placeholder = { Text("Servis ara (örn. YouTube, Instagram...)") },
+                placeholder = { Text(stringResource(R.string.services_search_placeholder)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Temizle")
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.action_clear))
                         }
                     }
                 },
@@ -133,11 +141,17 @@ fun ServicesScreen(
                     FilterChip(
                         selected = selectedFilter == filter,
                         onClick = { selectedFilter = filter },
-                        label = { Text(filter.label) },
+                        label = { Text(stringResource(filter.labelRes)) },
                     )
                 }
 
                 item {
+                    val sortLabelRes =
+                        if (selectedSort == ServiceSort.NAME_ASC) {
+                            R.string.services_sort_name_asc
+                        } else {
+                            R.string.services_sort_popularity
+                        }
                     FilterChip(
                         selected = selectedSort == ServiceSort.NAME_ASC,
                         onClick = {
@@ -148,15 +162,13 @@ fun ServicesScreen(
                                     ServiceSort.NAME_ASC
                                 }
                         },
-                        label = {
-                            Text(if (selectedSort == ServiceSort.NAME_ASC) "A-Z Sıralı" else "Popülerlik")
-                        },
+                        label = { Text(stringResource(sortLabelRes)) },
                     )
                 }
             }
 
             Text(
-                text = "${filteredServices.size} servis listeleniyor",
+                text = stringResource(R.string.services_count_fmt, filteredServices.size),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -246,8 +258,10 @@ fun ServiceCard(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
+                    val statusTextRes =
+                        if (service.enabled) R.string.service_status_active else R.string.service_status_disabled
                     Text(
-                        text = if (service.enabled) "Aktif" else "Devre Dışı",
+                        text = stringResource(statusTextRes),
                         style = MaterialTheme.typography.bodySmall,
                         color =
                             if (service.enabled) {
@@ -266,7 +280,7 @@ fun ServiceCard(
 
             Icon(
                 Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = "Detay",
+                contentDescription = stringResource(R.string.action_detail),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.size(20.dp),
             )
