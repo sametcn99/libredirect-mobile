@@ -1,10 +1,12 @@
 package dev.libredirect.mobile.ui
 
 import android.app.Application
+import android.content.ClipboardManager
 import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.libredirect.mobile.BuildConfig
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserInfo
@@ -13,6 +15,8 @@ import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
+import dev.libredirect.mobile.core.url.UrlCandidate
+import dev.libredirect.mobile.manifest.InstanceRefreshWorker
 import dev.libredirect.mobile.manifest.ManifestEndpoints
 import dev.libredirect.mobile.manifest.RefreshResult
 import dev.libredirect.mobile.settings.AppSettings
@@ -40,10 +44,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
+    /**
+     * Navigation route requested by a launcher shortcut (set from
+     * [dev.libredirect.mobile.MainActivity]; consumed by AppNavHost once it
+     * has navigated).
+     */
+    private val _shortcutRoute = MutableStateFlow<String?>(null)
+    val shortcutRoute: StateFlow<String?> = _shortcutRoute.asStateFlow()
+
+    fun onShortcutRoute(route: String) {
+        _shortcutRoute.value = route
+    }
+
+    fun consumeShortcutRoute() {
+        _shortcutRoute.value = null
+    }
+
     private var manifest: Manifest? = null
     private var manifestErrorMessage: String? = null
     private var browsers: List<BrowserInfo> = emptyList()
     private var customRoutes: List<Route> = emptyList()
+    private var latestSettings: AppSettings = AppSettings()
+    private var lastClipboardOfferUrl: String? = null
 
     init {
         launchSafely {
@@ -51,6 +73,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             customRoutes = withContext(Dispatchers.IO) { manifestRepository.customRoutes() }
             browsers = withContext(Dispatchers.IO) { browserLauncher.installedBrowsers() }
             settingsRepository.settings.collect { settings ->
+                latestSettings = settings
                 _uiState.value = buildUiState(settings)
             }
         }
@@ -70,7 +93,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun versionInfo(): Triple<String, Long, String> =
         try {
             val packageInfo = app.packageManager.getPackageInfo(app.packageName, 0)
-            val name = packageInfo.versionName ?: FALLBACK_VERSION_NAME
+            val name = packageInfo.versionName ?: BuildConfig.VERSION_NAME
             val code =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     packageInfo.longVersionCode
@@ -80,7 +103,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             Triple(name, code, "v$name (Build $code)")
         } catch (_: Exception) {
-            Triple(FALLBACK_VERSION_NAME, FALLBACK_VERSION_CODE, FALLBACK_VERSION_DISPLAY)
+            val code = BuildConfig.VERSION_CODE.toLong()
+            Triple(BuildConfig.VERSION_NAME, code, "v${BuildConfig.VERSION_NAME} (Build $code)")
         }
 
     private fun currentVersionName(): String = versionInfo().first
@@ -155,6 +179,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setExceptions(exceptions: List<ExceptionRule>) = launchSafely { settingsRepository.setExceptions(exceptions) }
 
+    fun setClipboardOfferEnabled(enabled: Boolean) =
+        launchSafely { settingsRepository.setClipboardOfferEnabled(enabled) }
+
+    /**
+     * Toggles the opt-in daily background instance refresh. Scheduling lives
+     * here so the Worker itself stays framework-agnostic about settings.
+     */
+    fun setAutoInstanceRefreshEnabled(enabled: Boolean) =
+        launchSafely {
+            settingsRepository.setAutoInstanceRefreshEnabled(enabled)
+            if (enabled) {
+                InstanceRefreshWorker.schedule(app)
+            } else {
+                InstanceRefreshWorker.cancel(app)
+            }
+        }
+
+    /**
+     * Called when the Home screen appears: if the user opted in, offers to
+     * route a link found in the clipboard. Only the primary clip item is
+     * read, once per appearance, and the same URL is never offered twice in
+     * a process. Android 12+ shows a system "pasted" notice, which is why
+     * the feature defaults to off.
+     */
+    fun checkClipboardForLinkOffer() {
+        if (!latestSettings.clipboardOfferEnabled) return
+        val clipboard = app.getSystemService(Application.CLIPBOARD_SERVICE) as? ClipboardManager
+        val text = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(app)?.toString()
+        val offerUrl = UrlCandidate.find(text)?.takeIf { it != lastClipboardOfferUrl } ?: return
+        lastClipboardOfferUrl = offerUrl
+        _uiState.value = _uiState.value.copy(clipboardLinkOffer = offerUrl)
+    }
+
+    fun dismissClipboardOffer() {
+        _uiState.value = _uiState.value.copy(clipboardLinkOffer = null)
+    }
+
     fun addCustomRoute(route: Route) {
         launchSafely {
             val result = withContext(Dispatchers.IO) { manifestRepository.addCustomRoute(route) }
@@ -162,11 +223,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 customRoutes = withContext(Dispatchers.IO) { manifestRepository.customRoutes() }
                 manifest = loadManifest()
                 val settings = settingsRepository.settings.first()
-                _uiState.value = buildUiState(settings).copy(customServiceMessage = "Custom service added")
+                _uiState.value =
+                    buildUiState(settings).copy(
+                        customServiceMessage = app.getString(R.string.custom_service_added),
+                    )
             } else {
                 _uiState.value =
                     _uiState.value.copy(
-                        customServiceMessage = result.exceptionOrNull()?.message ?: "Could not add custom service",
+                        customServiceMessage =
+                            result.exceptionOrNull()?.message
+                                ?: app.getString(R.string.custom_service_add_failed),
                     )
             }
         }
@@ -178,7 +244,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             customRoutes = withContext(Dispatchers.IO) { manifestRepository.customRoutes() }
             manifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
             val settings = settingsRepository.settings.first()
-            _uiState.value = buildUiState(settings).copy(customServiceMessage = "Custom service removed")
+            _uiState.value =
+                buildUiState(settings).copy(
+                    customServiceMessage = app.getString(R.string.custom_service_removed),
+                )
         }
     }
 
@@ -191,15 +260,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val message =
                 when (result) {
-                    is RefreshResult.Activated -> "Updated to revision ${result.revision}"
-                    is RefreshResult.NotModified -> "Already up to date"
-                    is RefreshResult.Rejected -> "Update failed: ${result.reason}"
+                    is RefreshResult.Activated -> app.getString(R.string.refresh_updated_fmt, result.revision)
+                    is RefreshResult.NotModified -> app.getString(R.string.refresh_up_to_date)
+                    is RefreshResult.Rejected -> app.getString(R.string.refresh_failed_fmt, result.reason)
                 }
 
             val settings = settingsRepository.settings.first()
             _uiState.value = buildUiState(settings).copy(refreshInProgress = false, lastRefreshMessage = message)
         }
     }
+
+    private fun browserLabelFor(selectedBrowserPackage: String?): String =
+        when (selectedBrowserPackage) {
+            null, BrowserLauncher.SYSTEM_DEFAULT_PACKAGE -> app.getString(R.string.browser_picker_system_default)
+            BrowserLauncher.IN_APP_BROWSER_PACKAGE -> app.getString(R.string.browser_in_app_label)
+            else ->
+                browsers.find { it.packageName == selectedBrowserPackage }?.label
+                    ?: selectedBrowserPackage
+        }
 
     private fun buildUiState(settings: AppSettings): MainUiState {
         val currentManifest = manifest
@@ -225,14 +303,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             } ?: emptyList()
 
-        val browserLabel =
-            when (settings.selectedBrowserPackage) {
-                null, BrowserLauncher.SYSTEM_DEFAULT_PACKAGE -> app.getString(R.string.browser_picker_system_default)
-                BrowserLauncher.IN_APP_BROWSER_PACKAGE -> app.getString(R.string.browser_in_app_label)
-                else ->
-                    browsers.find { it.packageName == settings.selectedBrowserPackage }?.label
-                        ?: settings.selectedBrowserPackage
-            }
+        val browserLabel = browserLabelFor(settings.selectedBrowserPackage)
 
         val (verName, verCode, verDisplay) = versionInfo()
 
@@ -260,6 +331,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             searchEngine = settings.searchEngine,
             customSearchEngineName = settings.customSearchEngineName,
             customSearchEngineUrl = settings.customSearchEngineUrl,
+            clipboardOfferEnabled = settings.clipboardOfferEnabled,
+            autoInstanceRefreshEnabled = settings.autoInstanceRefreshEnabled,
         )
     }
 
@@ -268,7 +341,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val loaded = manifestRepository.activeManifest()
             manifestErrorMessage =
                 if (loaded == null) {
-                    manifestRepository.lastLoadError() ?: "Routing data is unavailable"
+                    manifestRepository.lastLoadError() ?: app.getString(R.string.routing_data_unavailable)
                 } else {
                     null
                 }
@@ -284,15 +357,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 throw error
             } catch (error: Exception) {
                 Log.e(TAG, "Unexpected error", error)
-                _uiState.value = _uiState.value.copy(errorMessage = error.message ?: "Something went wrong")
+                _uiState.value =
+                    _uiState.value.copy(
+                        errorMessage = error.message ?: app.getString(R.string.generic_error),
+                    )
             }
         }
     }
 
     private companion object {
         const val TAG = "MainViewModel"
-        const val FALLBACK_VERSION_NAME = "1.2.2"
-        const val FALLBACK_VERSION_CODE = 6L
-        const val FALLBACK_VERSION_DISPLAY = "v1.2.2 (Build 6)"
     }
 }

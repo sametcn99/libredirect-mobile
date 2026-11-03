@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package dev.libredirect.mobile.ui
 
 import androidx.annotation.StringRes
@@ -5,27 +7,34 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -48,7 +57,10 @@ import dev.libredirect.mobile.ui.settings.SettingsScreen
 
 private const val ROUTE_HOME = "home"
 private const val ROUTE_BROWSER = "browser"
-private const val ROUTE_SERVICES = "services"
+
+/** Public so launcher shortcuts (MainActivity) can request this tab. */
+const val ROUTE_SERVICES = "services"
+
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_BROWSERS = "browsers"
 private const val ROUTE_EXCEPTIONS = "exceptions"
@@ -102,6 +114,21 @@ fun AppNavHost(
         val message = state.errorMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message)
         mainViewModel.errorShown()
+    }
+
+    LaunchedEffect(Unit) {
+        mainViewModel.shortcutRoute.collect { route ->
+            if (route != null) {
+                navController.navigate(route) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                mainViewModel.consumeShortcutRoute()
+            }
+        }
     }
 
     val showBottomBar = currentRoute in NAV_ITEMS.map { it.route }
@@ -184,6 +211,8 @@ fun AppNavHost(
                                         restoreState = true
                                     }
                                 },
+                                onCheckClipboard = mainViewModel::checkClipboardForLinkOffer,
+                                onDismissClipboardOffer = mainViewModel::dismissClipboardOffer,
                             ),
                     )
                 }
@@ -214,6 +243,8 @@ fun AppNavHost(
                                     mainViewModel.setCustomSearchEngine(name, template)
                                 },
                                 onCheckForUpdates = mainViewModel::checkForUpdates,
+                                onClipboardOfferChange = mainViewModel::setClipboardOfferEnabled,
+                                onAutoInstanceRefreshChange = mainViewModel::setAutoInstanceRefreshEnabled,
                             ),
                     )
                 }
@@ -262,9 +293,50 @@ fun AppNavHost(
                                 mainViewModel.setInstanceSelection(service.routeId, frontendId, selection)
                             },
                         )
+                    } else {
+                        // The route vanished from the manifest (e.g. after a
+                        // data refresh); show a navigable fallback instead of
+                        // a blank screen.
+                        ServiceUnavailableScreen(onBack = navController::popBackStack)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ServiceUnavailableScreen(onBack: () -> Unit) {
+    Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
+        topBar = {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
+                },
+            )
+        },
+        modifier = Modifier.fillMaxSize(),
+    ) { padding ->
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.service_detail_unavailable),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

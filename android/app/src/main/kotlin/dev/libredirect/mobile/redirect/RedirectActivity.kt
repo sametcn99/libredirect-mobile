@@ -3,7 +3,6 @@ package dev.libredirect.mobile.redirect
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.util.Patterns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
@@ -14,6 +13,7 @@ import dev.libredirect.mobile.browser.InAppRedirectInfo
 import dev.libredirect.mobile.core.routing.RoutingFailure
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
+import dev.libredirect.mobile.core.url.UrlCandidate
 import dev.libredirect.mobile.settings.SettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -53,15 +53,15 @@ class RedirectActivity : ComponentActivity() {
             else -> null
         }
 
+    /**
+     * Shared-text extraction lives in the pure [UrlCandidate] (JVM-tested); it adds
+     * an https scheme to bare domains.
+     */
     private fun extractFromSharedText(intent: Intent): String? =
         intent
             .takeIf { it.type == "text/plain" }
             ?.getStringExtra(Intent.EXTRA_TEXT)
-            ?.let { text ->
-                Patterns.WEB_URL.matcher(text).let { matcher ->
-                    if (matcher.find()) text.substring(matcher.start(), matcher.end()) else null
-                }
-            }
+            ?.let(UrlCandidate::find)
 
     private suspend fun route(url: String) {
         val app = applicationContext as LibRedirectApplication

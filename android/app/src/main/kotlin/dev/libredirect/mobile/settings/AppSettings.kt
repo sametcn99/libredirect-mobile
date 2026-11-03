@@ -15,8 +15,6 @@ data class AppSettings(
     /** "$routeId/$frontendId" -> selection. Missing entry defaults to Automatic. */
     val instanceSelections: Map<String, InstanceSelection> = emptyMap(),
     val exceptions: List<ExceptionRule> = emptyList(),
-    val manifestRevision: Int? = null,
-    val manifestUpdatedAtEpochMillis: Long? = null,
     val searchEngine: String = "duckduckgo",
     /** Custom search engine; an empty URL means none is configured. */
     val customSearchEngineName: String = "",
@@ -25,6 +23,10 @@ data class AppSettings(
     val browserPageTheme: String = "system",
     /** Darken pages that ship no dark theme of their own while the page theme is dark. */
     val browserAutoDarken: Boolean = true,
+    /** Offer to route a link found in the clipboard on the Home screen. Opt-in (Android 12+ shows a paste notice). */
+    val clipboardOfferEnabled: Boolean = false,
+    /** Daily background refresh of frontend instance lists via WorkManager. Opt-in, off by default. */
+    val autoInstanceRefreshEnabled: Boolean = false,
 ) {
     fun isRouteEnabled(routeId: String): Boolean = routeId !in disabledRoutes
 

@@ -1,5 +1,6 @@
 package dev.libredirect.mobile.ui
 
+import dev.libredirect.mobile.BuildConfig
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.ExceptionRule
@@ -25,12 +26,17 @@ data class MainUiState(
     val updateChecked: Boolean = false,
     val updateCheckInProgress: Boolean = false,
     val updateCheckFailed: Boolean = false,
-    val appVersionName: String = "1.2.2",
-    val appVersionCode: Long = 6L,
-    val appVersionDisplay: String = "v1.2.2 (Build 6)",
+    // Kept in sync at compile time instead of a hand-edited fallback (see CONTRIBUTING's release checklist).
+    val appVersionName: String = BuildConfig.VERSION_NAME,
+    val appVersionCode: Long = BuildConfig.VERSION_CODE.toLong(),
+    val appVersionDisplay: String = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
     val searchEngine: String = "duckduckgo",
     val customSearchEngineName: String = "",
     val customSearchEngineUrl: String = "",
+    /** A routable URL found in the clipboard and offered on Home; null hides the card. */
+    val clipboardLinkOffer: String? = null,
+    val clipboardOfferEnabled: Boolean = false,
+    val autoInstanceRefreshEnabled: Boolean = false,
 )
 
 data class ServiceUiState(

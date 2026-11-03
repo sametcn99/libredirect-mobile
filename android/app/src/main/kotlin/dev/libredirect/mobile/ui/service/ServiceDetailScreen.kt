@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,8 +35,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.routing.InstanceSelection
+import dev.libredirect.mobile.core.url.UrlValidation
 import dev.libredirect.mobile.ui.FrontendUiState
 import dev.libredirect.mobile.ui.ServiceUiState
+import kotlinx.coroutines.delay
+
+private const val CUSTOM_COMMIT_DEBOUNCE_MILLIS = 600L
 
 @Composable
 fun ServiceDetailScreen(
@@ -111,22 +116,55 @@ private fun InstanceSelector(
     onSelectionChange: (InstanceSelection) -> Unit,
 ) {
     Column(modifier = Modifier.padding(start = 32.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+        var customText by remember(frontend.id) {
+            mutableStateOf((frontend.selection as? InstanceSelection.Custom)?.instance.orEmpty())
+        }
+        var showCustomError by remember(frontend.id) { mutableStateOf(false) }
+        var customTouched by remember(frontend.id) { mutableStateOf(false) }
+
+        fun commitCustom() {
+            val trimmed = customText.trim().lowercase()
+            if (UrlValidation.isValidHttpsOrigin(trimmed)) {
+                showCustomError = false
+                onSelectionChange(InstanceSelection.Custom(trimmed))
+            } else {
+                showCustomError = true
+            }
+        }
+
         InstanceModeRow(
             label = stringResource(R.string.service_detail_instance_auto),
             selected = frontend.selection is InstanceSelection.Automatic,
-            onClick = { onSelectionChange(InstanceSelection.Automatic) },
+            onClick = {
+                customTouched = false
+                onSelectionChange(InstanceSelection.Automatic)
+            },
         )
         for (instance in frontend.instances) {
             InstanceModeRow(
                 label = instance,
                 selected = (frontend.selection as? InstanceSelection.Pinned)?.instance == instance,
-                onClick = { onSelectionChange(InstanceSelection.Pinned(instance)) },
+                onClick = {
+                    customTouched = false
+                    onSelectionChange(InstanceSelection.Pinned(instance))
+                },
             )
         }
 
-        var customText by remember {
-            mutableStateOf((frontend.selection as? InstanceSelection.Custom)?.instance.orEmpty())
+        // Debounced commit while typing: only valid HTTPS origins reach the
+        // settings store, and only after a short typing pause. Clicking
+        // Automatic or a pinned instance above cancels the pending commit.
+        LaunchedEffect(frontend.id, customText, customTouched) {
+            val trimmed = customText.trim().lowercase()
+            if (customTouched && UrlValidation.isValidHttpsOrigin(trimmed)) {
+                showCustomError = false
+                delay(CUSTOM_COMMIT_DEBOUNCE_MILLIS)
+                if (customTouched) {
+                    onSelectionChange(InstanceSelection.Custom(trimmed))
+                }
+            }
         }
+
         Row(
             modifier =
                 Modifier
@@ -136,15 +174,21 @@ private fun InstanceSelector(
         ) {
             RadioButton(
                 selected = frontend.selection is InstanceSelection.Custom,
-                onClick = { if (customText.isNotBlank()) onSelectionChange(InstanceSelection.Custom(customText)) },
+                onClick = { commitCustom() },
             )
             OutlinedTextField(
                 value = customText,
                 onValueChange = {
                     customText = it
-                    if (it.isNotBlank()) onSelectionChange(InstanceSelection.Custom(it))
+                    customTouched = true
                 },
                 label = { Text(stringResource(R.string.service_detail_instance_custom)) },
+                isError = showCustomError,
+                supportingText = {
+                    if (showCustomError) {
+                        Text(stringResource(R.string.service_detail_instance_invalid))
+                    }
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

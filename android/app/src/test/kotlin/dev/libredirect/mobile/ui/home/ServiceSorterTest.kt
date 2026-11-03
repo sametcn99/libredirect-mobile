@@ -78,18 +78,4 @@ class ServiceSorterTest {
 
         assertEquals(listOf("Apple", "banana", "cloUd"), sorted.map { it.name })
     }
-
-    @Test
-    fun `name descending reverses the ascending order`() {
-        val services =
-            listOf(
-                service("a", "Apple"),
-                service("b", "banana"),
-                service("c", "cloUd"),
-            )
-
-        val sorted = ServiceSorter.sort(services, ServiceSort.NAME_DESC)
-
-        assertEquals(listOf("cloUd", "banana", "Apple"), sorted.map { it.name })
-    }
 }

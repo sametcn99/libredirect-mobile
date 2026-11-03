@@ -27,9 +27,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
@@ -48,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -81,6 +84,8 @@ data class SettingsActions(
     val onSearchEngineSelect: (SearchEngine) -> Unit = {},
     val onSaveCustomSearchEngine: (name: String, template: String) -> Unit = { _, _ -> },
     val onCheckForUpdates: () -> Unit = {},
+    val onClipboardOfferChange: (Boolean) -> Unit = {},
+    val onAutoInstanceRefreshChange: (Boolean) -> Unit = {},
 )
 
 @Composable
@@ -174,6 +179,16 @@ fun SettingsScreen(
             }
 
             item {
+                SettingsToggleItem(
+                    icon = Icons.Default.ContentPaste,
+                    title = stringResource(R.string.settings_clipboard_offer),
+                    subtitle = stringResource(R.string.settings_clipboard_offer_desc),
+                    checked = state.clipboardOfferEnabled,
+                    onCheckedChange = actions.onClipboardOfferChange,
+                )
+            }
+
+            item {
                 SectionTitle(stringResource(R.string.settings_section_routing_db))
             }
 
@@ -184,6 +199,16 @@ fun SettingsScreen(
                     refreshMessage = state.lastRefreshMessage,
                     errorMessage = state.manifestErrorMessage,
                     onRefresh = actions.onRefreshManifest,
+                )
+            }
+
+            item {
+                SettingsToggleItem(
+                    icon = Icons.Default.Autorenew,
+                    title = stringResource(R.string.settings_auto_instance_refresh),
+                    subtitle = stringResource(R.string.settings_auto_instance_refresh_desc),
+                    checked = state.autoInstanceRefreshEnabled,
+                    onCheckedChange = actions.onAutoInstanceRefreshChange,
                 )
             }
 
@@ -329,6 +354,60 @@ private fun SectionTitle(title: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp),
     )
+}
+
+@Composable
+private fun SettingsToggleItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
 }
 
 @Composable

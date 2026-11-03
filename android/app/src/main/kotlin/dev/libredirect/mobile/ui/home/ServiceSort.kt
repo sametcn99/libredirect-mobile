@@ -6,7 +6,6 @@ import dev.libredirect.mobile.ui.ServiceUiState
 enum class ServiceSort(val label: String) {
     POPULARITY("Popularity"),
     NAME_ASC("A to Z"),
-    NAME_DESC("Z to A"),
 }
 
 /** Applies a [ServiceSort] to the service list shown on the home screen. */
@@ -47,7 +46,6 @@ object ServiceSorter {
         when (sort) {
             ServiceSort.POPULARITY -> services.sortedBy { popularityRank(it.name) }
             ServiceSort.NAME_ASC -> services.sortedBy { it.name.lowercase() }
-            ServiceSort.NAME_DESC -> services.sortedByDescending { it.name.lowercase() }
         }
 
     /** Unranked names all share the fallback rank, so a stable sort keeps manifest order. */

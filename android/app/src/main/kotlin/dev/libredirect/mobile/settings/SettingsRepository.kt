@@ -87,6 +87,14 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.BROWSER_AUTO_DARKEN] = enabled }
     }
 
+    suspend fun setClipboardOfferEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.CLIPBOARD_OFFER_ENABLED] = enabled }
+    }
+
+    suspend fun setAutoInstanceRefreshEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.AUTO_INSTANCE_REFRESH_ENABLED] = enabled }
+    }
+
     suspend fun setRouteEnabled(
         routeId: String,
         enabled: Boolean,
@@ -124,21 +132,25 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.EXCEPTIONS] = json.encodeToString(exceptions) }
     }
 
-    suspend fun setManifestMetadata(
-        revision: Int,
-        updatedAtEpochMillis: Long,
-    ) {
-        context.settingsDataStore.edit { prefs ->
-            prefs[Keys.MANIFEST_REVISION] = revision
-            prefs[Keys.MANIFEST_UPDATED_AT] = updatedAtEpochMillis
-        }
-    }
-
     /** Epoch millis of the last successful GitHub Releases update check; 0 when never checked. */
     suspend fun updateLastCheckAt(): Long = context.settingsDataStore.data.first()[Keys.UPDATE_LAST_CHECK_AT] ?: 0L
 
     suspend fun setUpdateLastCheckAt(epochMillis: Long) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.UPDATE_LAST_CHECK_AT] = epochMillis }
+    }
+
+    /** Consecutive failed update checks since the last success; drives the throttle back-off. */
+    suspend fun updateFailedChecksSinceSuccess(): Int =
+        context.settingsDataStore.data.first()[Keys.UPDATE_FAILED_CHECKS] ?: 0
+
+    suspend fun setUpdateFailedChecksSinceSuccess(count: Int) {
+        context.settingsDataStore.edit { prefs ->
+            if (count <= 0) {
+                prefs.remove(Keys.UPDATE_FAILED_CHECKS)
+            } else {
+                prefs[Keys.UPDATE_FAILED_CHECKS] = count
+            }
+        }
     }
 
     /** Last known newer release from GitHub; null when none is cached. */
@@ -174,13 +186,13 @@ class SettingsRepository(private val context: Context) {
             selectedFrontends = decodeStringMap(prefs[Keys.SELECTED_FRONTENDS]),
             instanceSelections = decodeInstanceSelections(prefs[Keys.INSTANCE_SELECTIONS]),
             exceptions = decodeList(prefs[Keys.EXCEPTIONS]),
-            manifestRevision = prefs[Keys.MANIFEST_REVISION],
-            manifestUpdatedAtEpochMillis = prefs[Keys.MANIFEST_UPDATED_AT],
             searchEngine = prefs[Keys.SEARCH_ENGINE] ?: "duckduckgo",
             customSearchEngineName = prefs[Keys.CUSTOM_SEARCH_ENGINE_NAME] ?: "",
             customSearchEngineUrl = prefs[Keys.CUSTOM_SEARCH_ENGINE_URL] ?: "",
             browserPageTheme = prefs[Keys.BROWSER_PAGE_THEME] ?: "system",
             browserAutoDarken = prefs[Keys.BROWSER_AUTO_DARKEN] ?: true,
+            clipboardOfferEnabled = prefs[Keys.CLIPBOARD_OFFER_ENABLED] ?: false,
+            autoInstanceRefreshEnabled = prefs[Keys.AUTO_INSTANCE_REFRESH_ENABLED] ?: false,
         )
 
     private fun decodeSet(raw: String?): Set<String> = decodeOrDefault(raw, emptySet())
@@ -211,14 +223,15 @@ class SettingsRepository(private val context: Context) {
         val SELECTED_FRONTENDS = stringPreferencesKey("selected_frontends_json")
         val INSTANCE_SELECTIONS = stringPreferencesKey("instance_selections_json")
         val EXCEPTIONS = stringPreferencesKey("exceptions_json")
-        val MANIFEST_REVISION = intPreferencesKey("manifest_revision")
-        val MANIFEST_UPDATED_AT = longPreferencesKey("manifest_updated_at")
         val SEARCH_ENGINE = stringPreferencesKey("search_engine")
         val CUSTOM_SEARCH_ENGINE_NAME = stringPreferencesKey("custom_search_engine_name")
         val CUSTOM_SEARCH_ENGINE_URL = stringPreferencesKey("custom_search_engine_url")
         val BROWSER_PAGE_THEME = stringPreferencesKey("browser_page_theme")
         val BROWSER_AUTO_DARKEN = booleanPreferencesKey("browser_auto_darken")
+        val CLIPBOARD_OFFER_ENABLED = booleanPreferencesKey("clipboard_offer_enabled")
+        val AUTO_INSTANCE_REFRESH_ENABLED = booleanPreferencesKey("auto_instance_refresh_enabled")
         val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
+        val UPDATE_FAILED_CHECKS = intPreferencesKey("update_failed_checks")
         val UPDATE_CACHED_VERSION = stringPreferencesKey("update_cached_version")
         val UPDATE_CACHED_RELEASE_URL = stringPreferencesKey("update_cached_release_url")
     }

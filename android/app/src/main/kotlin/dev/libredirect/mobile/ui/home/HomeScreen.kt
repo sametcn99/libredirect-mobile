@@ -23,12 +23,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
@@ -52,8 +55,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,11 +71,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.redirect.RedirectActivity
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.ServiceUiState
+import dev.libredirect.mobile.ui.browser.BrowserTab
 import dev.libredirect.mobile.ui.services.ServiceCard
 
 private const val TOP_SERVICES_LIMIT = 5
@@ -85,6 +92,12 @@ fun HomeScreen(
     var linkText by rememberSaveable { mutableStateOf("") }
     var linkError by rememberSaveable { mutableStateOf<String?>(null) }
     val emptyLinkErrorMessage = stringResource(R.string.home_quick_link_error)
+
+    // Clipboard link offer: checked once per Home appearance; MainViewModel
+    // dedupes repeated offers and skips everything when the setting is off.
+    LaunchedEffect(Unit) {
+        actions.onCheckClipboard()
+    }
 
     fun normalizeLink(raw: String): String =
         when {
@@ -169,23 +182,11 @@ fun HomeScreen(
                     .fillMaxSize()
                     .padding(padding),
         ) {
-            if (state.updateAvailable != null) {
-                item {
-                    UpdateCard(
-                        versionName = state.updateAvailable.versionName,
-                        onClick = { context.openExternalUrl(state.updateAvailable.releaseUrl) },
-                    )
-                }
-            }
-
-            if (state.manifestErrorMessage != null) {
-                item {
-                    ManifestErrorCard(
-                        error = state.manifestErrorMessage,
-                        onRetry = actions.onRefreshClick,
-                    )
-                }
-            }
+            homeStatusCards(
+                state = state,
+                actions = actions,
+                openUrl = { context.openExternalUrl(it) },
+            )
 
             item {
                 StatusHeroCard(
@@ -260,6 +261,46 @@ fun HomeScreen(
             item {
                 Spacer(Modifier.height(16.dp))
             }
+        }
+    }
+}
+
+/**
+ * The three optional cards above the hero card (update, manifest error,
+ * clipboard offer) so [HomeScreen] stays under the complexity budget.
+ */
+private fun LazyListScope.homeStatusCards(
+    state: MainUiState,
+    actions: HomeActions,
+    openUrl: (String) -> Unit,
+) {
+    if (state.updateAvailable != null) {
+        val release = state.updateAvailable
+        item {
+            UpdateCard(
+                versionName = release.versionName,
+                onClick = { openUrl(release.releaseUrl) },
+            )
+        }
+    }
+    if (state.manifestErrorMessage != null) {
+        item {
+            ManifestErrorCard(
+                error = state.manifestErrorMessage,
+                onRetry = actions.onRefreshClick,
+            )
+        }
+    }
+    state.clipboardLinkOffer?.let { offerUrl ->
+        item {
+            ClipboardOfferCard(
+                url = offerUrl,
+                onRoute = {
+                    actions.onDismissClipboardOffer()
+                    actions.onOpenInAppBrowser(offerUrl)
+                },
+                onDismiss = actions.onDismissClipboardOffer,
+            )
         }
     }
 }
@@ -603,6 +644,58 @@ private fun UpdateCard(
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
+        }
+    }
+}
+
+@Composable
+private fun ClipboardOfferCard(
+    url: String,
+    onRoute: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.ContentPaste,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_clipboard_offer_title),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = BrowserTab.hostOf(url),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(onClick = onRoute) {
+                Text(stringResource(R.string.home_clipboard_offer_route))
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.action_close),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }

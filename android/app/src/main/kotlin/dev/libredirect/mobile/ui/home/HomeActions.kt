@@ -11,4 +11,6 @@ data class HomeActions(
     val onOpenInAppBrowser: (String?) -> Unit = {},
     val onNavigateToServices: () -> Unit = {},
     val onNavigateToSettings: () -> Unit = {},
+    val onCheckClipboard: () -> Unit = {},
+    val onDismissClipboardOffer: () -> Unit = {},
 )
