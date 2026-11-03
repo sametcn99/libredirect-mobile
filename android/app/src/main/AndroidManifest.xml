@@ -33,6 +33,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Long-press launcher shortcuts: new browser tab, services list. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <activity
@@ -72,6 +77,18 @@
             <meta-data
                 android:name="autoStoreLocales"
                 android:value="true" />
+        </service>
+
+        <!-- Quick Settings tile toggling the master routing switch. -->
+        <service
+            android:name=".tile.RoutingTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_shortcut_routing"
+            android:label="@string/tile_routing_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
 
     </application>

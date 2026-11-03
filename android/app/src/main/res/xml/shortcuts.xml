@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_new_tab"
+        android:shortcutDisabledMessage="@string/shortcut_new_tab_disabled"
+        android:shortcutId="new_tab"
+        android:shortcutLongLabel="@string/shortcut_new_tab_long"
+        android:shortcutShortLabel="@string/shortcut_new_tab">
+        <intent
+            android:action="dev.libredirect.mobile.ACTION_OPEN_NEW_TAB"
+            android:targetClass="dev.libredirect.mobile.MainActivity"
+            android:targetPackage="dev.libredirect.mobile" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_services"
+        android:shortcutDisabledMessage="@string/shortcut_services_disabled"
+        android:shortcutId="services"
+        android:shortcutLongLabel="@string/shortcut_services_long"
+        android:shortcutShortLabel="@string/shortcut_services">
+        <intent
+            android:action="dev.libredirect.mobile.ACTION_SHOW_SERVICES"
+            android:targetClass="dev.libredirect.mobile.MainActivity"
+            android:targetPackage="dev.libredirect.mobile" />
+    </shortcut>
+</shortcuts>
