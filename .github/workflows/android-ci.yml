@@ -45,5 +45,14 @@ jobs:
       - name: App module unit tests
         run: ./gradlew :app:testDebugUnitTest
 
+      - name: Android Lint
+        run: ./gradlew :app:lintDebug
+
       - name: Assemble debug APK
         run: ./gradlew assembleDebug
+
+      # Exercises the R8/minified release build (unsigned — signing material
+      # only exists in the release workflow) so shrinking rules can never
+      # silently break without a release dispatch.
+      - name: Assemble release APK (unsigned, R8)
+        run: ./gradlew assembleRelease

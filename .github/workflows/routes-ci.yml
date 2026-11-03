@@ -4,11 +4,17 @@ on:
   pull_request:
     paths:
       - "tools/**"
+      - "schema/**"
+      - "fixtures/**"
+      - "android/app/src/main/assets/routes.json"
       - ".github/workflows/routes-ci.yml"
   push:
     branches: [main]
     paths:
       - "tools/**"
+      - "schema/**"
+      - "fixtures/**"
+      - "android/app/src/main/assets/routes.json"
       - ".github/workflows/routes-ci.yml"
 
 concurrency:
@@ -37,3 +43,12 @@ jobs:
 
       - name: Format check
         run: bun run format:check
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test (adapters, semantic validator, URL fixtures)
+        run: bun test
+
+      - name: Semantic validation of the committed manifest
+        run: bun run validate ../android/app/src/main/assets/routes.json

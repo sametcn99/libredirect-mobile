@@ -70,6 +70,12 @@ jobs:
           mkdir -p release-out
           cp "app/build/outputs/apk/release/app-release.apk" "release-out/${{ steps.version.outputs.apk_name }}"
 
+      - name: Generate SHA-256 checksum
+        working-directory: release-out
+        run: |
+          sha256sum "${{ steps.version.outputs.apk_name }}" > "${{ steps.version.outputs.apk_name }}.sha256"
+          cat "${{ steps.version.outputs.apk_name }}.sha256"
+
       - name: Remove local signing material
         if: always()
         run: |
@@ -82,6 +88,7 @@ jobs:
         run: |
           gh release create "${{ steps.version.outputs.tag }}" \
             "release-out/${{ steps.version.outputs.apk_name }}" \
+            "release-out/${{ steps.version.outputs.apk_name }}.sha256" \
             --repo "${{ github.repository }}" \
             --title "LibRedirect Mobile ${{ steps.version.outputs.tag }}" \
             --generate-notes
