@@ -14,4 +14,7 @@ enum class RefreshRejectionReason {
     MALFORMED_MANIFEST,
     UNSUPPORTED_SCHEMA_VERSION,
     SELF_TEST_FAILED,
+
+    /** The candidate manifest was valid but writing it to disk failed — a storage problem, not a data problem. */
+    STORAGE_ERROR,
 }

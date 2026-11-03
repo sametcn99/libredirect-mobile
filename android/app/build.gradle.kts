@@ -72,6 +72,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -101,6 +102,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.webkit)
+    implementation(libs.androidx.work.runtime)
 
     testImplementation(libs.junit)
 

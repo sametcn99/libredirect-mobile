@@ -10,35 +10,40 @@ import dev.libredirect.mobile.core.routing.RoutingContext
 import dev.libredirect.mobile.core.routing.UrlRouter
 import java.io.File
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 
 /**
  * Manifest priority (project plan §11/§12): Last Known Good (on-disk
- * `active.json`, then `previous.json`) over the bundled asset. A refresh
- * fetches the upstream instance data, decodes it, merges the per-frontend
- * instance lists into the active manifest, validates, and self-tests — and
- * only written to `active.json` if every one of those steps passes. Any
- * failure leaves the existing active manifest (or the bundled asset, if
- * nothing has ever been activated) untouched and in use.
+ * `active.json`, then `previous.json`) over the bundled asset — the file
+ * chain itself lives in [ManifestFileStore]. A refresh fetches the upstream
+ * instance data, decodes it, merges the per-frontend instance lists into
+ * the active manifest, validates, and self-tests — and the result is only
+ * written to `active.json` if every one of those steps passes. Any failure
+ * leaves the existing active manifest (or the bundled asset, if nothing has
+ * ever been activated) untouched and in use.
  */
 class ManifestRepository(
-    private val context: Context,
+    context: Context,
     private val fetcher: RemoteManifestFetcher = RemoteManifestFetcher(),
     private val customServiceRepository: CustomServiceRepository = CustomServiceRepository(context),
 ) {
-    @Volatile
-    private var cached: Manifest? = null
+    private val store =
+        ManifestFileStore(
+            manifestDir = File(context.filesDir, "manifest"),
+            bundledAssetText = {
+                context.assets.open(BUNDLED_ASSET_NAME).bufferedReader().use { it.readText() }
+            },
+            onFailure = { diagnostic, error -> Log.e(TAG, "Manifest load failed: $diagnostic", error) },
+        )
 
     @Volatile
-    private var lastLoadError: String? = null
+    private var cached: Manifest? = null
 
     /** Never null in practice — the bundled asset is a build-time guarantee — but
      * callers must still treat a null result as "route nothing, pass everything through"
      * (fail-open) rather than crash, in case that guarantee is ever violated. */
     fun activeManifest(): Manifest? {
         cached?.let { return it.withCustomRoutes() }
-        val manifest = loadBaseManifest()
+        val manifest = store.loadBase()
         cached = manifest
         return manifest?.withCustomRoutes()
     }
@@ -48,13 +53,13 @@ class ManifestRepository(
      * available. The detail is intentionally kept here so the UI can explain
      * an empty service list instead of silently treating it as a valid state.
      */
-    fun lastLoadError(): String? = lastLoadError
+    fun lastLoadError(): String? = store.lastDiagnostic
 
     fun customRoutes(): List<Route> = customServiceRepository.routes()
 
     /** Adds a custom route only when it remains valid and does not shadow a built-in host/id. */
     fun addCustomRoute(route: Route): Result<Unit> {
-        val base = loadBaseManifest()
+        val base = store.loadBase()
         return if (base == null) {
             Result.failure(IllegalStateException("No routing manifest available"))
         } else {
@@ -89,7 +94,7 @@ class ManifestRepository(
         }
 
     private fun refreshBase(instanceData: Map<String, List<String>>): RefreshResult =
-        loadBaseManifest()?.let { base ->
+        store.loadBase()?.let { base ->
             when (val candidate = InstanceMerger.merge(base, instanceData)) {
                 null -> RefreshResult.NotModified
                 else -> refreshCandidate(candidate)
@@ -108,11 +113,12 @@ class ManifestRepository(
 
     private fun activateCandidate(candidate: Manifest): RefreshResult =
         try {
-            activateAtomically(ManifestJson.encode(candidate).toByteArray(Charsets.UTF_8))
+            store.activateAtomically(ManifestJson.encode(candidate).toByteArray(Charsets.UTF_8))
             cached = candidate
             RefreshResult.Activated(candidate.revision)
-        } catch (_: IOException) {
-            RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+        } catch (error: IOException) {
+            Log.e(TAG, "Manifest activation failed (storage error)", error)
+            RefreshResult.Rejected(RefreshRejectionReason.STORAGE_ERROR)
         }
 
     /**
@@ -129,30 +135,6 @@ class ManifestRepository(
             false
         }
 
-    private fun loadActiveFromDisk(): Manifest? = readManifestFile(activeFile(), "active.json")
-
-    private fun loadPreviousFromDisk(): Manifest? = readManifestFile(previousFile(), "previous.json")
-
-    private fun loadBundled(): Manifest? =
-        try {
-            val raw = context.assets.open(BUNDLED_ASSET_NAME).bufferedReader().use { it.readText() }
-            decodeAndValidate(raw, BUNDLED_ASSET_NAME)
-        } catch (error: IOException) {
-            recordLoadFailure(BUNDLED_ASSET_NAME, "could not be read", error)
-            null
-        }
-
-    private fun loadBaseManifest(): Manifest? {
-        lastLoadError = null
-        val manifest = loadActiveFromDisk() ?: loadPreviousFromDisk() ?: loadBundled()
-        if (manifest == null && lastLoadError == null) {
-            recordLoadFailure("manifest", "no valid manifest was found", null)
-        } else if (manifest != null) {
-            lastLoadError = null
-        }
-        return manifest
-    }
-
     private fun Manifest.withCustomRoutes(): Manifest {
         val validCustomRoutes =
             buildList {
@@ -163,75 +145,6 @@ class ManifestRepository(
             }
         return if (validCustomRoutes.isEmpty()) this else copy(routes = routes + validCustomRoutes)
     }
-
-    private fun readManifestFile(
-        file: File,
-        source: String,
-    ): Manifest? {
-        if (!file.exists()) return null
-        return try {
-            decodeAndValidate(file.readText(), source)
-        } catch (error: IOException) {
-            recordLoadFailure(source, "could not be read", error)
-            null
-        }
-    }
-
-    private fun activateAtomically(rawBytes: ByteArray) {
-        val dir = manifestDir()
-        val active = activeFile()
-        if (active.exists()) {
-            active.copyTo(previousFile(), overwrite = true)
-        }
-        val temp = File.createTempFile("active-", ".json.tmp", dir)
-        try {
-            temp.writeBytes(rawBytes)
-            try {
-                Files.move(
-                    temp.toPath(),
-                    active.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE,
-                )
-            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
-                Files.move(temp.toPath(), active.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            }
-        } finally {
-            temp.delete()
-        }
-    }
-
-    private fun decodeAndValidate(
-        raw: String,
-        source: String,
-    ): Manifest? {
-        val decoded = runCatching { ManifestJson.decode(raw) }
-        val decodeError = decoded.exceptionOrNull()
-        if (decodeError != null) {
-            recordLoadFailure(source, "JSON decode failed", decodeError)
-            return null
-        }
-
-        val validated = runCatching { ManifestValidator.requireValid(decoded.getOrThrow()) }
-        validated.exceptionOrNull()?.let { recordLoadFailure(source, "validation failed", it) }
-        return validated.getOrNull()
-    }
-
-    private fun recordLoadFailure(
-        source: String,
-        reason: String,
-        error: Throwable?,
-    ) {
-        val detail = error?.message?.takeIf(String::isNotBlank) ?: error?.javaClass?.simpleName
-        lastLoadError = "$source: $reason${detail?.let { " ($it)" } ?: ""}"
-        Log.e(TAG, "Manifest load failed: $lastLoadError", error)
-    }
-
-    private fun manifestDir(): File = File(context.filesDir, "manifest").apply { mkdirs() }
-
-    private fun activeFile(): File = File(manifestDir(), "active.json")
-
-    private fun previousFile(): File = File(manifestDir(), "previous.json")
 
     private companion object {
         const val TAG = "ManifestRepository"
