@@ -14,7 +14,8 @@
     "check": "biome check .",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "generate": "bun run src/generate-routes.ts"
+    "generate": "bun run src/generate-routes.ts",
+    "validate": "bun run src/validate-routes.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
