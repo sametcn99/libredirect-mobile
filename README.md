@@ -9,18 +9,20 @@ Routing rules live in a declarative manifest. This design lets the service catal
 ### Routing
 
 - **Privacy-focused routing**: Redirect eligible links without accounts, analytics, or a backend.
+- **Tracking-parameter stripping**: Well-known tracking parameters (`utm_*`, `fbclid`, `gclid`, YouTube's `si`, …) are removed before a link is opened — including links that are not routed at all. User exceptions keep their URLs byte-for-byte intact.
 - **Offline-first routing**: Route links locally — routing itself never makes a network request.
 - **System-wide link handling**: Registered as an http/https link handler and as a share target, so links from other apps can be routed either by opening them with LibRedirect Mobile or by sharing text containing a URL to it.
-- **Live instance updates**: Refresh frontend instance lists directly from the upstream [libredirect/instances](https://github.com/libredirect/instances) repository; routes and hosts update with app releases.
-- **Per-service control**: Enable or disable individual services, choose the frontend for each service, and pin a specific instance or define a custom one (Automatic / Pinned / Custom).
+- **Live instance updates**: Refresh frontend instance lists directly from the upstream [libredirect/instances](https://github.com/libredirect/instances) repository; routes and hosts update with app releases. An optional (off by default) daily background refresh runs the same safe pipeline.
+- **Per-service control**: Enable or disable individual services, choose the frontend for each service, and pin a specific instance or define a custom one (Automatic / Pinned / Custom), with per-instance latency measurement to help pick the fastest one.
 - **Routing exceptions**: Add host or host/path rules that are never redirected.
 - **Custom services**: Add local services with source hostnames and an HTTPS instance or an output template supporting `{instance}`, `{path}`, `{query:name}`, and `{fragment}`.
 - **Safe fallback**: Open the original URL when routing fails for an eligible link (fail-open); malformed or unsupported-scheme input is never opened at all.
 - **Redirect-loop prevention**: When handing a link to an external browser, the app can never be chosen as its own target.
+- **Quick access**: A Quick Settings tile toggles routing; launcher shortcuts open a new browser tab or the services list.
 
 ### Built-in browser
 
-- **Multi-tab browsing**: A tabbed WebView browser ("LibRedirect Browser") that receives routed links directly, with a tab switcher, navigation controls, and a combined URL/search address bar.
+- **Multi-tab browsing**: A tabbed WebView browser ("LibRedirect Browser") that receives routed links directly, with a tab switcher, navigation controls, and a combined URL/search address bar. Open tabs survive process death.
 - **Search engines**: Choose DuckDuckGo, SearXNG, Brave Search, Google, Startpage, or add a custom engine via a `%s` URL template.
 - **Bookmarks and history**: Local bookmark list with standard HTML and JSON import/export; browsing history capped at 200 entries, individually removable and clearable.
 - **Downloads**: Handed to the system Download Manager with progress notifications (on Android < 10, files go to the app's private downloads directory instead).
@@ -55,7 +57,7 @@ When a link cannot be routed (service disabled, no instance available, or an exc
 | `android/core/` | Pure-Kotlin routing engine: manifest model, validator, router, template renderer, URL utilities — no Android dependencies |
 | `tools/` | Bun and TypeScript tools that generate and validate the routing manifest from upstream data |
 | `schema/` | JSON Schema for routing manifests |
-| `fixtures/` | Real URL regression fixtures for the converter |
+| `fixtures/` | Real URL regression fixtures, exercised by `bun test` |
 | `dist/` | Generated manifest artifacts (gitignored; produced by automation, not committed by hand) |
 
 ## Requirements
@@ -133,7 +135,7 @@ The app checks GitHub's "latest release" endpoint and, if a newer version exists
 
 Remote updates change nothing except instance origin lists. Fetched data is parsed strictly (HTTPS-only, origin-only URLs), merged, re-validated, and self-tested before activation. If an update fails any step, the app keeps the last known good manifest.
 
-Routing accepts only safe URL schemes and rejects malformed or private/local redirect targets. The built-in browser stores all browsing data locally and never syncs it. For the full policy and threat model, see [SECURITY.md](SECURITY.md).
+Routing accepts only safe URL schemes and rejects malformed or private/local redirect targets. The built-in browser pins a conservative WebView posture: third-party cookies are rejected, mixed content is never allowed, and Safe Browsing stays enabled. It stores all browsing data locally and never syncs it. For the full policy and threat model, see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 

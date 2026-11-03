@@ -23,7 +23,7 @@ locale and are maintained alongside the English source strings.)
   data into the routing manifest and validates it against
   `schema/routes.schema.json`.
 - `schema/` — the JSON Schema the generated manifest must satisfy.
-- `fixtures/` — real-URL regression fixtures for the converter.
+- `fixtures/` — real-URL regression fixtures, exercised by `bun test`.
 
 `android/core` and `android/app` are separate Gradle modules; `tools/` has
 its own toolchain. Changes to one do not require touching the others, but
@@ -138,14 +138,14 @@ them will be rejected regardless of other merits:
 Maintainers release as follows (there is no manual tagging):
 
 1. Bump `versionName` and `versionCode` in `android/app/build.gradle.kts`.
-2. Update the matching fallback constants in `MainUiState` and
-   `MainViewModel` (`FALLBACK_VERSION_*`) so the version display stays
-   correct even if package info cannot be read.
-3. Commit, then dispatch the `Android Release` GitHub Actions workflow
+   The version display reads `BuildConfig` at compile time, so no other
+   file needs the same numbers.
+2. Commit, then dispatch the `Android Release` GitHub Actions workflow
    (`workflow_dispatch`). It reads the version from the build file, builds
    and signs the APK, smoke-tests the bundled manifest inside the release
-   APK, and publishes a GitHub Release tagged `v{versionName}`.
-4. New services and frontends reach users through this flow: regenerate the
+   APK, and publishes a GitHub Release tagged `v{versionName}` together
+   with a SHA-256 checksum file.
+3. New services and frontends reach users through this flow: regenerate the
    bundled manifest (see above) as part of the release preparation.
 
 ## Reporting security issues
