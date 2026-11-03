@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -112,6 +113,27 @@ class BrowserDataRepository(private val context: Context) {
         }
     }
 
+    /**
+     * The open-tab session, persisted so tabs survive process death. Only
+     * URLs and redirect metadata are stored — WebView page state is not.
+     */
+    suspend fun loadSession(): PersistedSession? =
+        context.browserDataStore.data.first()[Keys.SESSION]?.let { raw ->
+            try {
+                json.decodeFromString<PersistedSession>(raw)
+            } catch (_: SerializationException) {
+                null
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
+
+    suspend fun saveSession(session: PersistedSession) {
+        context.browserDataStore.edit { prefs ->
+            prefs[Keys.SESSION] = json.encodeToString(session)
+        }
+    }
+
     private inline fun <reified T> decodeList(raw: String?): List<T> =
         if (raw == null) {
             emptyList()
@@ -128,5 +150,6 @@ class BrowserDataRepository(private val context: Context) {
     private object Keys {
         val BOOKMARKS = stringPreferencesKey("bookmarks_json")
         val HISTORY = stringPreferencesKey("history_json")
+        val SESSION = stringPreferencesKey("session_json")
     }
 }

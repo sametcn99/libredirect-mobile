@@ -5,6 +5,16 @@
     <string name="redirect_cannot_open">Could not open this link.</string>
     <string name="redirect_no_browser">No browser available to open this link.</string>
 
+    <!-- Launcher shortcuts & Quick Settings tile -->
+    <string name="shortcut_new_tab">New tab</string>
+    <string name="shortcut_new_tab_long">Open a new browser tab</string>
+    <string name="shortcut_new_tab_disabled">New tab shortcut unavailable</string>
+    <string name="shortcut_services">Services</string>
+    <string name="shortcut_services_long">Browse redirect services</string>
+    <string name="shortcut_services_disabled">Services shortcut unavailable</string>
+    <string name="tile_routing_label">Routing</string>
+    <string name="tile_routing_subtitle">Privacy redirects on/off</string>
+
     <!-- Navigation -->
     <string name="nav_home">Home</string>
     <string name="nav_browser">Browser</string>
@@ -23,6 +33,7 @@
     <string name="action_menu">Menu</string>
     <string name="action_add">Add</string>
     <string name="action_remove">Remove</string>
+    <string name="action_cancel">Cancel</string>
     <string name="action_retry">Retry</string>
     <string name="action_detail">Detail</string>
     <string name="action_save">Save</string>
@@ -43,8 +54,10 @@
     <string name="home_quick_link_placeholder">https://instagram.com/&#8230; or youtube.com/&#8230;</string>
     <string name="home_quick_link_error">Please enter a valid URL first</string>
     <string name="home_quick_link_open_in_app">Open in Built-in Browser</string>
-    <string name="home_quick_link_open_external">Open Externally</string>
+    <string name="home_quick_link_open_external">Open Externally (routed)</string>
     <string name="home_quick_actions_title">Quick Actions</string>
+    <string name="home_clipboard_offer_title">Link found in clipboard</string>
+    <string name="home_clipboard_offer_route">Route</string>
     <string name="home_popular_services_title">Popular Services</string>
     <string name="home_see_all_services">See All (%1$d)</string>
 
@@ -73,12 +86,16 @@
     <string name="settings_exceptions_subtitle_fmt">%1$d custom rules configured</string>
     <string name="settings_custom_services">Custom Services</string>
     <string name="settings_custom_services_subtitle_fmt">%1$d custom routes defined</string>
+    <string name="settings_clipboard_offer">Clipboard link suggestions</string>
+    <string name="settings_clipboard_offer_desc">Offer to route a link copied to the clipboard. Off by default; when on, Android may show a paste notification.</string>
     <string name="settings_section_routing_db">Routing Database</string>
     <string name="settings_routing_db_title">Route Database</string>
     <string name="settings_db_revision_fmt">Revision %1$s</string>
     <string name="settings_db_up_to_date">Latest alternative frontends and routing rules loaded.</string>
     <string name="settings_db_updating">Updating&#8230;</string>
     <string name="settings_db_update_now">Update Data Now</string>
+    <string name="settings_auto_instance_refresh">Automatic instance refresh</string>
+    <string name="settings_auto_instance_refresh_desc">Refresh frontend instance lists daily over any network, using the same safe pipeline as the manual update. Off by default.</string>
     <string name="settings_section_app_info">Application Info</string>
     <string name="settings_update_available_fmt">New Update Available: %1$s (Tap to download)</string>
     <string name="settings_app_up_to_date">Your application is up to date</string>
@@ -119,6 +136,7 @@
     <string name="browser_bookmarks_export_failed">Failed to export bookmarks</string>
     <string name="browser_history_empty">Browsing history is empty</string>
     <string name="browser_history_empty_desc">Websites you visit will appear here.</string>
+    <string name="browser_history_count_fmt">%1$d items</string>
     <string name="browser_clear_history">Clear History</string>
     <string name="browser_clear_history_confirm">All browsing history will be deleted. This cannot be undone.</string>
     <string name="browser_delete_item">Delete</string>
@@ -128,6 +146,11 @@
     <string name="browser_instance_picker_title">Try another instance</string>
     <string name="browser_instance_picker_desc">Reopen this tab\'s original link on a different instance</string>
     <string name="browser_instance_random">Random instance</string>
+    <string name="browser_instance_measure">Measure instances</string>
+    <string name="browser_instance_measuring">Measuring…</string>
+    <string name="browser_instance_latency_fmt">%1$d ms</string>
+    <string name="browser_instance_latency_failed">unreachable</string>
+    <string name="browser_instance_fastest">Fastest</string>
     <string name="browser_instance_current">Current instance</string>
     <string name="browser_original_host_fmt">Original: %1$s</string>
     <string name="browser_search_engine_title">Select Search Engine</string>
@@ -137,8 +160,10 @@
     <string name="browser_find_previous">Previous match</string>
     <string name="browser_find_next">Next match</string>
     <string name="browser_menu_clear_cookies_cache">Clear cookies and cache</string>
+    <string name="browser_clear_data_confirm">All cookies, site data and cached files will be deleted. This cannot be undone.</string>
     <string name="browser_download_started">Download started</string>
     <string name="browser_download_failed">Download failed</string>
+    <string name="browser_download_private_fallback">Downloaded to the app\'s private storage</string>
     <string name="browser_search_engine_custom_title">Custom Search Engine</string>
     <string name="browser_search_engine_add_custom">Add custom engine</string>
     <string name="browser_search_engine_edit_custom">Edit custom engine</string>
@@ -146,6 +171,10 @@
     <string name="browser_search_engine_custom_template">Search URL template</string>
     <string name="browser_search_engine_custom_template_hint">Use %s where the search term goes</string>
     <string name="browser_search_engine_custom_invalid">Template must start with http(s):// and contain %s</string>
+    <string name="browser_time_just_now">Just now</string>
+    <string name="browser_time_minutes_fmt">%1$dm</string>
+    <string name="browser_time_hours_fmt">%1$dh</string>
+    <string name="browser_time_days_fmt">%1$dd</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Open Tabs</string>
@@ -176,11 +205,18 @@
     <string name="custom_services_field_instance">HTTPS instance origin</string>
     <string name="custom_services_field_template">Optional output template</string>
     <string name="custom_services_btn_add">Add service</string>
+    <string name="custom_services_default_frontend">Custom frontend</string>
+    <string name="custom_services_error_name">Service name is required</string>
+    <string name="custom_services_error_hosts">At least one hostname is required</string>
+    <string name="custom_services_error_instance">Enter a valid HTTPS origin</string>
+    <string name="custom_services_error_template">Template contains unsupported placeholders</string>
 
     <!-- Service Detail Screen -->
     <string name="service_detail_frontend_header">Frontend</string>
     <string name="service_detail_instance_auto">Automatic</string>
     <string name="service_detail_instance_custom">Custom instance</string>
+    <string name="service_detail_instance_invalid">Enter a valid HTTPS origin (https://…)</string>
+    <string name="service_detail_unavailable">This service is no longer available</string>
 
     <!-- Browser: page appearance & chrome -->
     <string name="browser_page_appearance">Page appearance</string>
@@ -194,4 +230,14 @@
     <string name="browser_quick_find">Find</string>
     <string name="browser_quick_desktop">Desktop</string>
     <string name="browser_redirect_from_to_fmt">%1$s → %2$s</string>
+
+    <!-- Status & error messages -->
+    <string name="generic_error">Something went wrong</string>
+    <string name="routing_data_unavailable">Routing data is unavailable</string>
+    <string name="custom_service_added">Custom service added</string>
+    <string name="custom_service_add_failed">Could not add custom service</string>
+    <string name="custom_service_removed">Custom service removed</string>
+    <string name="refresh_updated_fmt">Updated to revision %1$d</string>
+    <string name="refresh_up_to_date">Already up to date</string>
+    <string name="refresh_failed_fmt">Update failed: %1$s</string>
 </resources>

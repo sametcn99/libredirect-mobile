@@ -5,6 +5,16 @@
     <string name="redirect_cannot_open">Bu bağlantı açılamadı.</string>
     <string name="redirect_no_browser">Bu bağlantıyı açabilecek bir tarayıcı bulunamadı.</string>
 
+    <!-- Kısayollar ve Hızlı Ayarlar kutusu -->
+    <string name="shortcut_new_tab">Yeni sekme</string>
+    <string name="shortcut_new_tab_long">Yeni tarayıcı sekmesi aç</string>
+    <string name="shortcut_new_tab_disabled">Yeni sekme kısayolu kullanılamıyor</string>
+    <string name="shortcut_services">Servisler</string>
+    <string name="shortcut_services_long">Yönlendirme servislerine göz at</string>
+    <string name="shortcut_services_disabled">Servisler kısayolu kullanılamıyor</string>
+    <string name="tile_routing_label">Yönlendirme</string>
+    <string name="tile_routing_subtitle">Gizlilik yönlendirmesi aç/kapat</string>
+
     <!-- Navigasyon -->
     <string name="nav_home">Ana Sayfa</string>
     <string name="nav_browser">Tarayıcı</string>
@@ -23,6 +33,7 @@
     <string name="action_menu">Menü</string>
     <string name="action_add">Ekle</string>
     <string name="action_remove">Kaldır</string>
+    <string name="action_cancel">İptal</string>
     <string name="action_retry">Tekrar dene</string>
     <string name="action_detail">Detay</string>
     <string name="action_save">Kaydet</string>
@@ -43,8 +54,10 @@
     <string name="home_quick_link_placeholder">https://instagram.com/&#8230; veya youtube.com/&#8230;</string>
     <string name="home_quick_link_error">Lütfen önce geçerli bir URL girin</string>
     <string name="home_quick_link_open_in_app">Dahili Tarayıcıda Aç</string>
-    <string name="home_quick_link_open_external">Harici Aç</string>
+    <string name="home_quick_link_open_external">Harici Aç (yönlendirilir)</string>
     <string name="home_quick_actions_title">Hızlı İşlemler</string>
+    <string name="home_clipboard_offer_title">Panoda bağlantı bulundu</string>
+    <string name="home_clipboard_offer_route">Yönlendir</string>
     <string name="home_popular_services_title">Popüler Servisler</string>
     <string name="home_see_all_services">Tümünü Gör (%1$d)</string>
 
@@ -73,12 +86,16 @@
     <string name="settings_exceptions_subtitle_fmt">%1$d özel kural yapılandırıldı</string>
     <string name="settings_custom_services">Özel Servisler</string>
     <string name="settings_custom_services_subtitle_fmt">%1$d özel yönlendirme tanımlı</string>
+    <string name="settings_clipboard_offer">Pano bağlantı önerileri</string>
+    <string name="settings_clipboard_offer_desc">Panoya kopyalanan bağlantıyı yönlendirmeyi önerir. Varsayılan olarak kapalıdır; açıldığında Android pano bildirimi gösterebilir.</string>
     <string name="settings_section_routing_db">Yönlendirme Veritabanı</string>
     <string name="settings_routing_db_title">Rota Veritabanı</string>
     <string name="settings_db_revision_fmt">Revizyon %1$s</string>
     <string name="settings_db_up_to_date">En güncel alternatif arayüzler ve yönlendirme kuralları yüklü.</string>
     <string name="settings_db_updating">Güncelleniyor&#8230;</string>
     <string name="settings_db_update_now">Verileri Şimdi Güncelle</string>
+    <string name="settings_auto_instance_refresh">Otomatik instance yenileme</string>
+    <string name="settings_auto_instance_refresh_desc">Arayüz instance listelerini herhangi bir ağ üzerinden günlük olarak yeniler; manuel güncellemeyle aynı güvenli hattı kullanır. Varsayılan olarak kapalıdır.</string>
     <string name="settings_section_app_info">Uygulama Bilgileri</string>
     <string name="settings_update_available_fmt">Yeni Güncelleme Mevcut: %1$s (İndirmek için dokunun)</string>
     <string name="settings_app_up_to_date">Uygulamanız güncel</string>
@@ -119,6 +136,7 @@
     <string name="browser_bookmarks_export_failed">Yer imleri dışa aktarılamadı</string>
     <string name="browser_history_empty">Tarama geçmişi boş</string>
     <string name="browser_history_empty_desc">Ziyaret ettiğiniz siteler burada listelenir.</string>
+    <string name="browser_history_count_fmt">%1$d öğe</string>
     <string name="browser_clear_history">Geçmişi Temizle</string>
     <string name="browser_clear_history_confirm">Tüm tarama geçmişi silinecek. Bu işlem geri alınamaz.</string>
     <string name="browser_delete_item">Sil</string>
@@ -128,6 +146,11 @@
     <string name="browser_instance_picker_title">Başka bir instance dene</string>
     <string name="browser_instance_picker_desc">Bu sekmenin orijinal bağlantısını farklı bir instance üzerinde yeniden aç</string>
     <string name="browser_instance_random">Rastgele instance</string>
+    <string name="browser_instance_measure">Instance\'ları ölç</string>
+    <string name="browser_instance_measuring">Ölçülüyor…</string>
+    <string name="browser_instance_latency_fmt">%1$d ms</string>
+    <string name="browser_instance_latency_failed">erişilemedi</string>
+    <string name="browser_instance_fastest">En hızlı</string>
     <string name="browser_instance_current">Mevcut instance</string>
     <string name="browser_original_host_fmt">Orijinal: %1$s</string>
     <string name="browser_search_engine_title">Arama Motoru Seçin</string>
@@ -137,8 +160,10 @@
     <string name="browser_find_previous">Önceki eşleşme</string>
     <string name="browser_find_next">Sonraki eşleşme</string>
     <string name="browser_menu_clear_cookies_cache">Çerezleri ve önbelleği temizle</string>
+    <string name="browser_clear_data_confirm">Tüm çerezler, site verileri ve önbellekteki dosyalar silinecek. Bu işlem geri alınamaz.</string>
     <string name="browser_download_started">İndirme başlatıldı</string>
     <string name="browser_download_failed">İndirme başlatılamadı</string>
+    <string name="browser_download_private_fallback">İndirme uygulamanın özel depolama alanına kaydedildi</string>
     <string name="browser_search_engine_custom_title">Özel Arama Motoru</string>
     <string name="browser_search_engine_add_custom">Özel motor ekle</string>
     <string name="browser_search_engine_edit_custom">Özel motoru düzenle</string>
@@ -146,6 +171,10 @@
     <string name="browser_search_engine_custom_template">Arama URL şablonu</string>
     <string name="browser_search_engine_custom_template_hint">Arama teriminin yazılacağı yere %s koyun</string>
     <string name="browser_search_engine_custom_invalid">Şablon http(s):// ile başlamalı ve %s içermeli</string>
+    <string name="browser_time_just_now">Şimdi</string>
+    <string name="browser_time_minutes_fmt">%1$d dk</string>
+    <string name="browser_time_hours_fmt">%1$d sa</string>
+    <string name="browser_time_days_fmt">%1$d g</string>
 
     <!-- Tab Switcher Sheet -->
     <string name="tab_switcher_title">Açık Sekmeler</string>
@@ -176,11 +205,18 @@
     <string name="custom_services_field_instance">HTTPS servis adresi</string>
     <string name="custom_services_field_template">İsteğe bağlı çıktı şablonu</string>
     <string name="custom_services_btn_add">Servis ekle</string>
+    <string name="custom_services_default_frontend">Özel arayüz</string>
+    <string name="custom_services_error_name">Servis adı gerekli</string>
+    <string name="custom_services_error_hosts">En az bir kaynak alan adı gerekli</string>
+    <string name="custom_services_error_instance">Geçerli bir HTTPS adres girin</string>
+    <string name="custom_services_error_template">Şablon desteklenmeyen yer tutucular içeriyor</string>
 
     <!-- Servis Detay Ekranı -->
     <string name="service_detail_frontend_header">Arayüz</string>
     <string name="service_detail_instance_auto">Otomatik</string>
     <string name="service_detail_instance_custom">Özel sunucu adresi</string>
+    <string name="service_detail_instance_invalid">Geçerli bir HTTPS adres girin (https://…)</string>
+    <string name="service_detail_unavailable">Bu servis artık mevcut değil</string>
 
     <!-- Browser: page appearance & chrome -->
     <string name="browser_page_appearance">Sayfa görünümü</string>
@@ -194,4 +230,14 @@
     <string name="browser_quick_find">Bul</string>
     <string name="browser_quick_desktop">Masaüstü</string>
     <string name="browser_redirect_from_to_fmt">%1$s → %2$s</string>
+
+    <!-- Durum ve hata mesajları -->
+    <string name="generic_error">Bir şeyler ters gitti</string>
+    <string name="routing_data_unavailable">Yönlendirme verileri kullanılamıyor</string>
+    <string name="custom_service_added">Özel servis eklendi</string>
+    <string name="custom_service_add_failed">Özel servis eklenemedi</string>
+    <string name="custom_service_removed">Özel servis kaldırıldı</string>
+    <string name="refresh_updated_fmt">Revizyon %1$d olarak güncellendi</string>
+    <string name="refresh_up_to_date">Zaten güncel</string>
+    <string name="refresh_failed_fmt">Güncelleme başarısız: %1$s</string>
 </resources>

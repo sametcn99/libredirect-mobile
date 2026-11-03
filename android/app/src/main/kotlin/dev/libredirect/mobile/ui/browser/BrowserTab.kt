@@ -17,7 +17,8 @@ data class RedirectNotice(
 data class BrowserTab(
     val id: String = UUID.randomUUID().toString(),
     val url: String = DEFAULT_HOME_URL,
-    val title: String = "Yeni Sekme",
+    /** Page title; blank until the page reports one. UI layers show a localized "new tab" fallback. */
+    val title: String = "",
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val canGoBack: Boolean = false,

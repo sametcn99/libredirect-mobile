@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +56,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -260,10 +262,28 @@ private fun BrowserSheets(
                     onOpenSearchEngine = { viewModel.setSearchEngineDialogVisible(true) },
                     onTryAnotherInstance = { viewModel.setInstancePickerVisible(true) },
                     onOpenExternal = onOpenExternal,
-                    onClearBrowsingData = viewModel::clearBrowsingData,
+                    onClearBrowsingData = { viewModel.setClearDataConfirmVisible(true) },
                     onCloseTab = { state.activeTab?.let { viewModel.closeTab(it.id) } },
                     onDismiss = { viewModel.setMenuSheetVisible(false) },
                 ),
+        )
+    }
+
+    if (state.isClearDataConfirmVisible) {
+        AlertDialog(
+            onDismissRequest = { viewModel.setClearDataConfirmVisible(false) },
+            title = { Text(stringResource(R.string.browser_menu_clear_cookies_cache)) },
+            text = { Text(stringResource(R.string.browser_clear_data_confirm)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::clearBrowsingData) {
+                    Text(stringResource(R.string.action_clear))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.setClearDataConfirmVisible(false) }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
         )
     }
 
@@ -271,6 +291,9 @@ private fun BrowserSheets(
         state.instanceAlternatives?.let { alternatives ->
             InstancePickerDialog(
                 alternatives = alternatives,
+                latencies = state.instanceLatencies,
+                isMeasuring = state.isMeasuringInstances,
+                onMeasure = viewModel::measureInstanceLatency,
                 onPickRandom = { viewModel.tryAnotherInstance(null) },
                 onPickInstance = viewModel::tryAnotherInstance,
                 onDismiss = { viewModel.setInstancePickerVisible(false) },

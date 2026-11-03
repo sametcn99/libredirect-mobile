@@ -504,7 +504,7 @@ private fun HistoryTabContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "${history.size} items",
+                    text = stringResource(R.string.browser_history_count_fmt, history.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -619,12 +619,13 @@ private fun EmptyStateView(
     }
 }
 
+@Composable
 private fun formatTimestamp(epochMillis: Long): String {
     val diff = System.currentTimeMillis() - epochMillis
     return when {
-        diff < MINUTE_MILLIS -> "Just now"
-        diff < HOUR_MILLIS -> "${diff / MINUTE_MILLIS}m"
-        diff < DAY_MILLIS -> "${diff / HOUR_MILLIS}h"
-        else -> "${diff / DAY_MILLIS}d"
+        diff < MINUTE_MILLIS -> stringResource(R.string.browser_time_just_now)
+        diff < HOUR_MILLIS -> stringResource(R.string.browser_time_minutes_fmt, diff / MINUTE_MILLIS)
+        diff < DAY_MILLIS -> stringResource(R.string.browser_time_hours_fmt, diff / HOUR_MILLIS)
+        else -> stringResource(R.string.browser_time_days_fmt, diff / DAY_MILLIS)
     }
 }

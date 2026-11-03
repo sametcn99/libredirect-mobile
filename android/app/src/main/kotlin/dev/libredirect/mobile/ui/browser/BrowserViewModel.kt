@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.view.ViewGroup
@@ -31,13 +32,23 @@ import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /**
  * Instance choices offered for the active tab's original link. Built when the
@@ -70,8 +81,12 @@ data class BrowserUiState(
     val findMatchCount: Int = 0,
     val findActiveMatchIndex: Int = 0,
     val isMenuSheetVisible: Boolean = false,
+    val isClearDataConfirmVisible: Boolean = false,
     val instanceAlternatives: InstanceAlternatives? = null,
     val isInstancePickerVisible: Boolean = false,
+    /** Per-instance time-to-first-byte in ms; [LATENCY_FAILED] marks unreachable hosts. Empty until measured. */
+    val instanceLatencies: Map<String, Long> = emptyMap(),
+    val isMeasuringInstances: Boolean = false,
     val pageTheme: PageTheme = PageTheme.DEFAULT,
     val autoDarken: Boolean = true,
 ) {
@@ -128,6 +143,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private var cachedManifest: Manifest? = null
     private var cachedSettings: AppSettings = AppSettings()
 
+    private var sessionPersistJob: Job? = null
+
     private val webViewPool = mutableMapOf<String, WebView>()
 
     /** Whether each pooled WebView was created with a dark theme; see [WebViewTheming]. */
@@ -138,6 +155,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         viewModelScope.launch {
+            restoreSession()
             cachedManifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
             enrichRedirectNotices()
             if (_uiState.value.isMenuSheetVisible) {
@@ -176,7 +194,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun openNewTab(url: String? = null) {
         val targetUrl = url ?: _uiState.value.searchEngine.homeUrl
-        val newTab = BrowserTab(id = UUID.randomUUID().toString(), url = targetUrl, title = "Yeni Sekme")
+        val newTab = BrowserTab(id = UUID.randomUUID().toString(), url = targetUrl)
         _uiState.update { current ->
             current.copy(
                 tabs = current.tabs + newTab,
@@ -185,6 +203,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         requestBrowserFocus()
+        scheduleSessionPersist()
     }
 
     /**
@@ -201,6 +220,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         instance: String? = null,
     ) {
         val origin = originalUrl ?: url
+        // The same link arriving twice (e.g. two taps on one share) should
+        // refocus the existing tab instead of piling up duplicates.
+        _uiState.value.tabs
+            .find { it.url == url || it.originalUrl == origin }
+            ?.let { existing ->
+                _uiState.update { it.copy(activeTabId = existing.id, isTabsSheetVisible = false) }
+                requestBrowserFocus()
+                scheduleSessionPersist()
+                return
+            }
         val notice =
             routeId?.let { rid ->
                 val (serviceName, frontendName) = routeNames(cachedManifest, rid, frontendId)
@@ -233,6 +262,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         requestBrowserFocus()
+        scheduleSessionPersist()
     }
 
     fun openUrlInNewOrActiveTab(url: String) {
@@ -250,6 +280,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             navigateActiveTab(url)
         }
         requestBrowserFocus()
+        scheduleSessionPersist()
     }
 
     fun closeTab(tabId: String) {
@@ -284,6 +315,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         }
+        scheduleSessionPersist(immediate = true)
     }
 
     fun closeAllTabs() {
@@ -304,6 +336,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 isFindInPageVisible = false,
             )
         }
+        scheduleSessionPersist(immediate = true)
     }
 
     private fun destroyWebView(tabId: String) {
@@ -326,6 +359,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 findActiveMatchIndex = 0,
             )
         }
+        scheduleSessionPersist()
     }
 
     fun setTabsSheetVisible(visible: Boolean) {
@@ -358,8 +392,64 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setInstancePickerVisible(visible: Boolean) {
-        _uiState.update { it.copy(isInstancePickerVisible = visible) }
+        _uiState.update {
+            if (visible) {
+                it.copy(isInstancePickerVisible = true, instanceLatencies = emptyMap(), isMeasuringInstances = false)
+            } else {
+                it.copy(isInstancePickerVisible = false)
+            }
+        }
     }
+
+    /**
+     * User-initiated probe of the current frontend's instances: a bounded
+     * concurrency pool of HEAD requests measures time-to-first-byte so the
+     * picker can rank instances and suggest the fastest one to pin. Runs
+     * only on request — never in the background.
+     */
+    fun measureInstanceLatency() {
+        val alternatives = _uiState.value.instanceAlternatives ?: return
+        if (_uiState.value.isMeasuringInstances) return
+        _uiState.update { it.copy(isMeasuringInstances = true, instanceLatencies = emptyMap()) }
+        viewModelScope.launch {
+            val results =
+                withContext(Dispatchers.IO) {
+                    measureLatencies(alternatives.instances)
+                }
+            _uiState.update { it.copy(instanceLatencies = results, isMeasuringInstances = false) }
+        }
+    }
+
+    private suspend fun measureLatencies(instances: List<String>): Map<String, Long> =
+        coroutineScope {
+            val client =
+                OkHttpClient
+                    .Builder()
+                    .connectTimeout(LATENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .readTimeout(LATENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .build()
+            val semaphore = Semaphore(LATENCY_PROBE_CONCURRENCY)
+            instances
+                .map { instance ->
+                    async { instance to semaphore.withPermit { probeInstance(client, instance) } }
+                }.awaitAll()
+                .toMap()
+        }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun probeInstance(
+        client: OkHttpClient,
+        instance: String,
+    ): Long =
+        try {
+            val request = Request.Builder().url(instance).head().build()
+            val startNanos = System.nanoTime()
+            client.newCall(request).execute().use {
+                (System.nanoTime() - startNanos) / NANOS_PER_MILLI
+            }
+        } catch (_: Exception) {
+            LATENCY_FAILED_MILLIS
+        }
 
     /**
      * Pooled WebViews keep the theme they were created with; the screen
@@ -445,6 +535,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         webViewPool.values.forEach { webView ->
             webView.clearCache(true)
         }
+        _uiState.update { it.copy(isClearDataConfirmVisible = false) }
+    }
+
+    fun setClearDataConfirmVisible(visible: Boolean) {
+        _uiState.update { it.copy(isClearDataConfirmVisible = visible) }
     }
 
     fun toggleBookmarkActivePage() {
@@ -730,6 +825,94 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
+     * Restores the persisted open-tab session on cold start so a process
+     * death does not drop every open tab. Only URLs and redirect metadata
+     * are restored; each WebView reloads its URL when first shown. Names in
+     * redirect notices are filled in later by [enrichRedirectNotices] once
+     * the manifest is available.
+     */
+    private suspend fun restoreSession() {
+        val session = browserDataRepository.loadSession() ?: return
+        val restoredTabs =
+            session.tabs
+                .asSequence()
+                .filter { it.url.startsWith("http", ignoreCase = true) }
+                .take(MAX_RESTORED_TABS)
+                .map { persisted ->
+                    val notice =
+                        persisted.routeId?.let { rid ->
+                            val (serviceName, frontendName) = routeNames(cachedManifest, rid, persisted.frontendId)
+                            RedirectNotice(
+                                originalUrl = persisted.originalUrl ?: persisted.url,
+                                redirectedUrl = persisted.url,
+                                serviceName = serviceName,
+                                frontendName = frontendName,
+                                routeId = rid,
+                                frontendId = persisted.frontendId,
+                                instance = persisted.instance,
+                            )
+                        }
+                    BrowserTab(
+                        url = persisted.url,
+                        title = BrowserTab.hostOf(persisted.url),
+                        lastRedirect = notice,
+                        originalUrl = persisted.originalUrl?.takeIf { notice != null },
+                    )
+                }.toList()
+        if (restoredTabs.isEmpty()) return
+        restoredTabs.forEach { tab ->
+            tab.lastRedirect?.let {
+                // Frontend origins must not be re-resolved on load, exactly
+                // like freshly redirected tabs.
+                pendingRedirectTargets.getOrPut(tab.id) { mutableSetOf() }.add(tab.url)
+            }
+        }
+        val activeIndex = session.activeIndex.coerceIn(0, restoredTabs.lastIndex)
+        _uiState.update { current ->
+            current.copy(tabs = restoredTabs, activeTabId = restoredTabs[activeIndex].id)
+        }
+    }
+
+    /**
+     * Persists the open-tab session, debounced so bursts of updates (page
+     * loads, tab churn) coalesce into one DataStore write. Destructive
+     * operations (closing tabs) save immediately instead.
+     */
+    private fun scheduleSessionPersist(immediate: Boolean = false) {
+        sessionPersistJob?.cancel()
+        sessionPersistJob =
+            viewModelScope.launch {
+                if (!immediate) {
+                    delay(SESSION_SAVE_DEBOUNCE_MILLIS)
+                }
+                persistSession()
+            }
+    }
+
+    private suspend fun persistSession() {
+        val state = _uiState.value
+        var activeIndex = 0
+        val tabs =
+            buildList {
+                state.tabs.forEachIndexed { index, tab ->
+                    val url = tab.url
+                    if (!url.startsWith("http", ignoreCase = true)) return@forEachIndexed
+                    if (tab.id == state.activeTabId) activeIndex = size
+                    add(
+                        PersistedTab(
+                            url = url,
+                            originalUrl = tab.originalUrl,
+                            routeId = tab.lastRedirect?.routeId,
+                            frontendId = tab.lastRedirect?.frontendId,
+                            instance = tab.lastRedirect?.instance,
+                        ),
+                    )
+                }
+            }
+        browserDataRepository.saveSession(PersistedSession(tabs = tabs, activeIndex = activeIndex))
+    }
+
+    /**
      * Tabs created from an intent may predate the manifest being cached (cold
      * start); fill their redirect notices with proper display names once it is.
      */
@@ -809,7 +992,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 builtInZoomControls = true
                 displayZoomControls = false
                 mediaPlaybackRequiresUserGesture = false
+                // Pinned privacy posture: explicit rather than relying on
+                // WebView defaults that may vary across versions.
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    safeBrowsingEnabled = true
+                }
             }
+            // Third-party cookies are accepted by default; a privacy proxy
+            // should not ship that default.
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             WebViewTheming.applyBackground(this, darkPages)
             WebViewTheming.applyAutoDarken(this, darkPages, _uiState.value.autoDarken)
             applyDesktopMode(this, isDesktop)
@@ -871,14 +1063,26 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 addRequestHeader("User-Agent", userAgent)
                 CookieManager.getInstance().getCookie(url)?.let { addRequestHeader("Cookie", it) }
             }
-        try {
-            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-        } catch (_: SecurityException) {
-            request.setDestinationInExternalFilesDir(app, Environment.DIRECTORY_DOWNLOADS, fileName)
-        }
+        // On API < 29 the shared Downloads directory needs a storage
+        // permission this app does not request; surface the private-dir
+        // fallback instead of letting the file "disappear" into app storage.
+        val usingPrivateFallback =
+            try {
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                false
+            } catch (_: SecurityException) {
+                request.setDestinationInExternalFilesDir(app, Environment.DIRECTORY_DOWNLOADS, fileName)
+                true
+            }
         try {
             app.getSystemService(DownloadManager::class.java).enqueue(request)
-            Toast.makeText(app, R.string.browser_download_started, Toast.LENGTH_SHORT).show()
+            val messageRes =
+                if (usingPrivateFallback) {
+                    R.string.browser_download_private_fallback
+                } else {
+                    R.string.browser_download_started
+                }
+            Toast.makeText(app, messageRes, Toast.LENGTH_SHORT).show()
         } catch (_: Exception) {
             Toast.makeText(app, R.string.browser_download_failed, Toast.LENGTH_SHORT).show()
         }
@@ -890,13 +1094,29 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     ) {
         val userAgent =
             if (isDesktopMode) {
-                BrowserTab.DESKTOP_USER_AGENT
+                desktopUserAgent(WebSettings.getDefaultUserAgent(webView.context))
             } else {
                 WebSettings.getDefaultUserAgent(webView.context)
             }
         webView.settings.userAgentString = userAgent
         webView.settings.useWideViewPort = isDesktopMode
         webView.settings.loadWithOverviewMode = isDesktopMode
+    }
+
+    /**
+     * Derives the desktop UA from the WebView's own default so the Chrome
+     * version and platform tokens age with the installed WebView instead of
+     * freezing at a hardcoded string. Mirrors what desktop-mode browsers do:
+     * swap the mobile platform descriptor for a desktop one and drop the
+     * "Mobile" token. [BrowserTab.DESKTOP_USER_AGENT] remains as a fallback
+     * when the default UA has an unexpected shape.
+     */
+    private fun desktopUserAgent(defaultUserAgent: String): String {
+        val desktop =
+            defaultUserAgent
+                .replace(Regex("\\((Linux; )?Android[^)]*\\)"), "(X11; Linux x86_64)")
+                .replace(" Mobile Safari", " Safari")
+        return if (desktop == defaultUserAgent) BrowserTab.DESKTOP_USER_AGENT else desktop
     }
 
     private fun updateTabUrl(
@@ -911,6 +1131,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     },
             )
         }
+        scheduleSessionPersist()
     }
 
     private fun updateTabTitle(
@@ -1114,5 +1335,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 updateTabFavicon(tabId, icon)
             }
         }
+    }
+
+    private companion object {
+        const val SESSION_SAVE_DEBOUNCE_MILLIS = 500L
+        const val MAX_RESTORED_TABS = 50
+        const val LATENCY_TIMEOUT_SECONDS = 5L
+        const val LATENCY_PROBE_CONCURRENCY = 16
+        const val LATENCY_FAILED_MILLIS = -1L
+        const val NANOS_PER_MILLI = 1_000_000L
     }
 }

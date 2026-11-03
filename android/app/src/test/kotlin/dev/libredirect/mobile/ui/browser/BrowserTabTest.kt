@@ -12,7 +12,8 @@ class BrowserTabTest {
     fun `default tab has expected defaults`() {
         val tab = BrowserTab()
         assertEquals("https://duckduckgo.com", tab.url)
-        assertEquals("Yeni Sekme", tab.title)
+        // Blank title; UI layers substitute a localized "new tab" label.
+        assertEquals("", tab.title)
         assertFalse(tab.isLoading)
         assertEquals(0, tab.progress)
         assertFalse(tab.canGoBack)
