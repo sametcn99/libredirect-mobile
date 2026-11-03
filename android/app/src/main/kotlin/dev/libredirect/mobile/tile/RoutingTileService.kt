@@ -1,5 +1,6 @@
 package dev.libredirect.mobile.tile
 
+import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import dev.libredirect.mobile.R
@@ -54,7 +55,10 @@ class RoutingTileService : TileService() {
     private fun updateTile(enabled: Boolean) {
         val tile = qsTile ?: return
         tile.state = if (enabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.subtitle = getString(R.string.tile_routing_subtitle)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Tile.setSubtitle exists only from API 29; the label alone is fine below that.
+            tile.subtitle = getString(R.string.tile_routing_subtitle)
+        }
         tile.updateTile()
     }
 }
