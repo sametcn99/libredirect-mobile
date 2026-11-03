@@ -4,6 +4,7 @@ import dev.libredirect.mobile.core.manifest.Frontend
 import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Strategy
 import dev.libredirect.mobile.core.url.ParsedUrl
+import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlParser
 import dev.libredirect.mobile.core.url.UrlValidation
 import kotlin.random.Random
@@ -40,9 +41,10 @@ class UrlRouter(
         val selectedFrontendId = route?.let { context.selectedFrontends[it.id] }
         val frontend = route?.frontends?.find { it.id == selectedFrontendId } ?: route?.frontends?.firstOrNull()
         return when {
+            // Explicit user exceptions keep the URL byte-for-byte intact.
             ExceptionMatcher.matches(url, context.exceptions) -> RoutingResult.Passthrough(input)
-            route == null || route.id in context.disabledRoutes -> RoutingResult.Passthrough(input)
-            frontend == null -> RoutingResult.Passthrough(input)
+            route == null || route.id in context.disabledRoutes || frontend == null ->
+                RoutingResult.Passthrough(TrackingParams.stripFrom(input, url))
             else -> applyStrategy(input, url, route.id, frontend, context)
         }
     }
@@ -53,20 +55,29 @@ class UrlRouter(
         routeId: String,
         frontend: Frontend,
         context: RoutingContext,
-    ): RoutingResult =
-        when (val strategy = frontend.strategy) {
-            is Strategy.Passthrough -> RoutingResult.Passthrough(input)
-            is Strategy.CustomScheme -> redirectResult(input, "${strategy.scheme}://$input", routeId, frontend, null)
+    ): RoutingResult {
+        val cleanUrl = TrackingParams.stripped(url)
+        return when (val strategy = frontend.strategy) {
+            is Strategy.Passthrough -> RoutingResult.Passthrough(TrackingParams.stripFrom(input, url))
+            is Strategy.CustomScheme ->
+                redirectResult(
+                    input,
+                    "${strategy.scheme}://${TrackingParams.stripFrom(input, url)}",
+                    routeId,
+                    frontend,
+                    null,
+                )
             is Strategy.ReplaceOrigin ->
                 pickInstance(routeId, frontend, context)?.let { instance ->
-                    redirectResult(input, replaceOrigin(url, instance), routeId, frontend, instance)
+                    redirectResult(input, replaceOrigin(cleanUrl, instance), routeId, frontend, instance)
                 } ?: noInstance(input)
             is Strategy.Template ->
                 pickInstance(routeId, frontend, context)?.let { instance ->
-                    val rendered = TemplateRenderer.render(strategy.output, url, instance)
+                    val rendered = TemplateRenderer.render(strategy.output, cleanUrl, instance)
                     redirectResult(input, rendered, routeId, frontend, instance)
                 } ?: noInstance(input)
         }
+    }
 
     private fun redirectResult(
         input: String,

@@ -75,6 +75,63 @@ class UrlRouterTest {
     }
 
     @Test
+    fun `unrouted host passes through with tracking parameters stripped`() {
+        val result =
+            router.resolve(
+                "https://example.org/page?utm_source=share&id=7",
+                RoutingContext(),
+            )
+        assertEquals(RoutingResult.Passthrough("https://example.org/page?id=7"), result)
+    }
+
+    @Test
+    fun `replace-origin redirect drops tracking parameters but keeps the original`() {
+        val result =
+            router.resolve(
+                "https://youtube.com/watch?v=abc&si=xyz&utm_medium=social",
+                RoutingContext(),
+            )
+        assertEquals(
+            RoutingResult.Redirect(
+                originalUrl = "https://youtube.com/watch?v=abc&si=xyz&utm_medium=social",
+                redirectedUrl = "https://yewtu.be/watch?v=abc",
+                routeId = "youtube",
+                frontendId = "invidious",
+                instance = "https://yewtu.be",
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun `passthrough frontend still strips tracking parameters`() {
+        val context = RoutingContext(selectedFrontends = mapOf("youtube" to "official"))
+        val result = router.resolve("https://youtube.com/watch?v=abc&fbclid=1", context)
+        assertEquals(RoutingResult.Passthrough("https://youtube.com/watch?v=abc"), result)
+    }
+
+    @Test
+    fun `domain exception keeps the URL fully intact including tracking parameters`() {
+        val context = RoutingContext(exceptions = listOf(ExceptionRule.Domain("example.org")))
+        val result = router.resolve("https://example.org/page?utm_source=x", context)
+        assertEquals(RoutingResult.Passthrough("https://example.org/page?utm_source=x"), result)
+    }
+
+    @Test
+    fun `custom-scheme wraps the tracking-stripped URL`() {
+        val result = router.resolve("https://some-service.example/item/1?utm_source=x", RoutingContext())
+        assertEquals(
+            RoutingResult.Redirect(
+                originalUrl = "https://some-service.example/item/1?utm_source=x",
+                redirectedUrl = "someapp://https://some-service.example/item/1",
+                routeId = "some-service",
+                frontendId = "some-app",
+            ),
+            result,
+        )
+    }
+
+    @Test
     fun `replace-origin preserves path query and fragment`() {
         val result =
             router.resolve(
