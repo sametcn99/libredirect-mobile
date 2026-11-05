@@ -22,8 +22,14 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // On a cold start the browser already begins with one fresh tab, so
-        // the "new tab" shortcut only needs to add one when resuming.
-        handleIntent(intent, isColdStart = savedInstanceState == null)
+        // the "new tab" shortcut only needs to add one when resuming. A mere
+        // recreation (rotation, theme change) re-delivers the creating intent,
+        // but it was handled on the first creation — running it again would
+        // resurrect closed tabs and switch tabs, so only a true cold start
+        // processes it here.
+        if (savedInstanceState == null) {
+            handleIntent(intent, isColdStart = true)
+        }
         setContent {
             LibRedirectMobileTheme {
                 AppNavHost(browserViewModel = browserViewModel, mainViewModel = mainViewModel)
@@ -50,8 +56,21 @@ class MainActivity : AppCompatActivity() {
 
             ShortcutActions.SHOW_SERVICES -> mainViewModel.onShortcutRoute(ROUTE_SERVICES)
 
-            BrowserLauncher.ACTION_OPEN_IN_APP_BROWSER, Intent.ACTION_VIEW -> {
+            // Only the app's own in-app-browser action is honored. This
+            // activity is exported (it is the launcher), so honoring raw
+            // ACTION_VIEW here would let any app bypass RedirectActivity and
+            // its routing settings — external links must arrive through
+            // RedirectActivity's intent filters instead.
+            BrowserLauncher.ACTION_OPEN_IN_APP_BROWSER -> {
                 val url = intent.dataString ?: return
+                // Exported surface: validate the scheme before the URL is
+                // used, so a crafted intent cannot smuggle in a non-web
+                // scheme (intent:, file:, javascript:, ...).
+                if (!url.startsWith("http://", ignoreCase = true) &&
+                    !url.startsWith("https://", ignoreCase = true)
+                ) {
+                    return
+                }
                 browserViewModel.openExternalLinkInNewTab(
                     url = url,
                     originalUrl = intent.getStringExtra(BrowserLauncher.EXTRA_ORIGINAL_URL),

@@ -93,12 +93,20 @@ fun AppNavHost(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    // The focus collector below outlives recompositions (it keys on the
+    // ViewModel), so it must read the route through rememberUpdatedState
+    // instead of capturing a stale composition value.
+    val currentRouteState by rememberUpdatedState(currentRoute)
 
     LaunchedEffect(browserViewModel) {
-        // StateFlow-backed counter: replays the latest request to this collector,
-        // so focus requests emitted before composition (cold-start intents) navigate too.
-        browserViewModel.browserFocusRequests.collect {
-            if (it > 0 && currentRoute != ROUTE_BROWSER) {
+        // One-shot flag: the request replays to this collector even when it
+        // was emitted before composition (cold-start intent); consuming it
+        // keeps an Activity recreation — which restarts this collector and
+        // replays the StateFlow — from navigating again.
+        browserViewModel.browserFocusRequested.collect { requested ->
+            if (!requested) return@collect
+            browserViewModel.consumeBrowserFocusRequest()
+            if (currentRouteState != ROUTE_BROWSER) {
                 navController.navigate(ROUTE_BROWSER) {
                     popUpTo(navController.graph.findStartDestination().id) {
                         saveState = true

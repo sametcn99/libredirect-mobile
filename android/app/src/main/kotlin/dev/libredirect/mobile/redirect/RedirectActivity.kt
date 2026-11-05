@@ -1,11 +1,11 @@
 package dev.libredirect.mobile.redirect
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.lifecycleScope
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserLauncher
@@ -31,16 +31,22 @@ class RedirectActivity : ComponentActivity() {
     @Suppress("TooGenericExceptionCaught")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lifecycleScope.launch {
+        val app = applicationContext as LibRedirectApplication
+        // Route on the application scope, not the activity's: this screen is
+        // invisible and finishes (or is torn down) as soon as the user moves
+        // on — a lifecycle-scoped coroutine would be cancelled mid-route and
+        // silently drop the link.
+        app.applicationScope.launch {
             try {
                 val incomingUrl = extractUrl(intent)
-                if (incomingUrl != null) route(incomingUrl)
+                if (incomingUrl != null) route(app, incomingUrl)
             } catch (_: CancellationException) {
-                // Activity cancellation is expected while the lifecycle is ending.
+                // Scope cancellation means the process is going away anyway.
             } catch (error: Exception) {
                 Log.e(TAG, "Could not route incoming URL", error)
-                showMessage(R.string.redirect_cannot_open)
+                showMessage(app, R.string.redirect_cannot_open)
             } finally {
+                // A no-op when the activity is already gone.
                 finish()
             }
         }
@@ -63,10 +69,12 @@ class RedirectActivity : ComponentActivity() {
             ?.getStringExtra(Intent.EXTRA_TEXT)
             ?.let(UrlCandidate::find)
 
-    private suspend fun route(url: String) {
-        val app = applicationContext as LibRedirectApplication
+    private suspend fun route(
+        app: LibRedirectApplication,
+        url: String,
+    ) {
         val manifest = withContext(Dispatchers.IO) { app.manifestRepository.activeManifest() }
-        val settings = SettingsRepository(applicationContext).settings.first()
+        val settings = SettingsRepository(app).settings.first()
 
         val result =
             if (!settings.routingEnabled) {
@@ -77,7 +85,7 @@ class RedirectActivity : ComponentActivity() {
                 RoutingResult.Passthrough(url)
             }
 
-        val destination = destinationFor(result) ?: return showMessage(R.string.redirect_cannot_open)
+        val destination = destinationFor(result) ?: return showMessage(app, R.string.redirect_cannot_open)
 
         val redirectInfo =
             (result as? RoutingResult.Redirect)?.let {
@@ -88,16 +96,18 @@ class RedirectActivity : ComponentActivity() {
                     instance = it.instance,
                 )
             }
-        val launcher = BrowserLauncher(this)
+        // Launch from the application context: by the time routing finishes
+        // the activity may already be destroyed.
+        val launcher = BrowserLauncher(app)
         val launched =
             launcher.launch(
-                this,
+                app,
                 destination,
                 preferredPackage = settings.selectedBrowserPackage,
                 redirect = redirectInfo,
             )
         if (!launched) {
-            showMessage(R.string.redirect_no_browser)
+            showMessage(app, R.string.redirect_no_browser)
         }
     }
 
@@ -117,8 +127,11 @@ class RedirectActivity : ComponentActivity() {
                 }
         }
 
-    private fun showMessage(messageRes: Int) {
-        Toast.makeText(this, messageRes, Toast.LENGTH_SHORT).show()
+    private fun showMessage(
+        context: Context,
+        messageRes: Int,
+    ) {
+        Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()
     }
 
     private companion object {

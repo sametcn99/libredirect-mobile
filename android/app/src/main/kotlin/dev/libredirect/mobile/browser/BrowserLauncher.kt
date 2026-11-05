@@ -94,11 +94,21 @@ class BrowserLauncher(
         }
 
         val target = preferredPackage?.takeIf { isInstalled(it) } ?: systemDefaultBrowserPackage()
+        // NEW_TASK on the VIEW launches: callers may start these from a
+        // non-activity context (RedirectActivity routes on the application
+        // scope), where starting an activity without a task flag throws.
         val targetIntent =
             if (target != null) {
-                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { setPackage(target) }
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    setPackage(target)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             } else {
-                Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse(url)), null).apply {
+                Intent.createChooser(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    null,
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     putExtra(
                         Intent.EXTRA_EXCLUDE_COMPONENTS,
                         arrayOf(ComponentName(context.packageName, REDIRECT_ACTIVITY_CLASS_NAME)),

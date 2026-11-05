@@ -31,6 +31,7 @@ import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -40,6 +41,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -67,7 +69,8 @@ data class BrowserUiState(
     val tabs: List<BrowserTab> = emptyList(),
     val activeTabId: String = "",
     val isTabsSheetVisible: Boolean = false,
-    val activeRedirectNotice: RedirectNotice? = null,
+    /** Notice timestamps the user (or the auto-dismiss) has already seen. */
+    val dismissedNoticeTimestamps: Set<Long> = emptySet(),
     val bookmarks: List<BrowserBookmark> = emptyList(),
     val history: List<BrowserHistoryItem> = emptyList(),
     val isBookmarksHistorySheetVisible: Boolean = false,
@@ -92,6 +95,15 @@ data class BrowserUiState(
 ) {
     val activeTab: BrowserTab?
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
+
+    /**
+     * The redirect banner belongs to the active tab, not to the screen: it
+     * derives from that tab's [BrowserTab.lastRedirect], so switching tabs
+     * never shows another tab's banner. A notice dismissed here stays hidden
+     * until a new redirect replaces it.
+     */
+    val activeRedirectNotice: RedirectNotice?
+        get() = activeTab?.lastRedirect?.takeIf { it.timestamp !in dismissedNoticeTimestamps }
 
     val isCurrentPageBookmarked: Boolean
         get() {
@@ -120,16 +132,24 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     val uiState: StateFlow<BrowserUiState> = _uiState.asStateFlow()
 
     /**
-     * Monotonic counter bumped whenever the browser screen should be brought
-     * to the front (e.g. a link arrived from outside the app). Backed by a
-     * StateFlow instead of a fire-and-forget event so a request emitted before
-     * the UI subscribes — cold start handling an intent — is still observed.
+     * One-shot flag: the browser screen should be brought to the front (e.g. a
+     * link arrived from outside the app). Backed by a StateFlow instead of a
+     * fire-and-forget event so a request emitted before the UI subscribes —
+     * cold start handling an intent — is still observed. The collector
+     * consumes it via [consumeBrowserFocusRequest], so the replay an Activity
+     * recreation receives (the collector restarts and the StateFlow replays
+     * its latest value) cannot re-trigger an already-handled request.
      */
-    private val _browserFocusRequests = MutableStateFlow(0)
-    val browserFocusRequests: StateFlow<Int> = _browserFocusRequests.asStateFlow()
+    private val _browserFocusRequested = MutableStateFlow(false)
+    val browserFocusRequested: StateFlow<Boolean> = _browserFocusRequested.asStateFlow()
 
     private fun requestBrowserFocus() {
-        _browserFocusRequests.update { it + 1 }
+        _browserFocusRequested.value = true
+    }
+
+    /** Clears a handled focus request; see [browserFocusRequested]. */
+    fun consumeBrowserFocusRequest() {
+        _browserFocusRequested.value = false
     }
 
     /**
@@ -142,6 +162,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private var cachedManifest: Manifest? = null
     private var cachedSettings: AppSettings = AppSettings()
+
+    /**
+     * Completed once the manifest and the first settings value have landed on
+     * a cold start. Until then [resolveRedirection] would route against
+     * defaults (or skip routing on a null manifest), so initial page loads
+     * wait for it instead of racing the first seconds of startup.
+     */
+    private val initialStateLoaded = CompletableDeferred<Unit>()
 
     private var sessionPersistJob: Job? = null
 
@@ -157,10 +185,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             restoreSession()
             cachedManifest = withContext(Dispatchers.IO) { manifestRepository.activeManifest() }
-            enrichRedirectNotices()
-            if (_uiState.value.isMenuSheetVisible) {
-                _uiState.update { it.copy(instanceAlternatives = computeInstanceAlternatives()) }
-            }
+            // Take the first settings value synchronously so no navigation can
+            // resolve against defaults while DataStore is still reading.
+            cachedSettings = settingsRepository.settings.first()
+            initialStateLoaded.complete(Unit)
+            refreshManifestDerivedState()
             settingsRepository.settings.collect { settings ->
                 cachedSettings = settings
                 _uiState.update {
@@ -181,6 +210,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         viewModelScope.launch {
+            // Follow manifest changes (instance refresh, custom services) so
+            // the browser keeps routing against the current manifest instead
+            // of the snapshot taken on cold start.
+            manifestRepository.activeManifestUpdates.collect { manifest ->
+                cachedManifest = manifest
+                refreshManifestDerivedState()
+            }
+        }
+        viewModelScope.launch {
             browserDataRepository.bookmarks.collect { bookmarks ->
                 _uiState.update { it.copy(bookmarks = bookmarks) }
             }
@@ -192,15 +230,23 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Re-derives state that depends on the manifest (notice names, instance alternatives). */
+    private fun refreshManifestDerivedState() {
+        enrichRedirectNotices()
+        if (_uiState.value.isMenuSheetVisible) {
+            _uiState.update { it.copy(instanceAlternatives = computeInstanceAlternatives()) }
+        }
+    }
+
     fun openNewTab(url: String? = null) {
         val targetUrl = url ?: _uiState.value.searchEngine.homeUrl
         val newTab = BrowserTab(id = UUID.randomUUID().toString(), url = targetUrl)
         _uiState.update { current ->
-            current.copy(
-                tabs = current.tabs + newTab,
-                activeTabId = newTab.id,
-                isTabsSheetVisible = false,
-            )
+            current
+                .copy(
+                    tabs = current.tabs + newTab,
+                    activeTabId = newTab.id,
+                ).withOverlaysClosed()
         }
         requestBrowserFocus()
         scheduleSessionPersist()
@@ -221,11 +267,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     ) {
         val origin = originalUrl ?: url
         // The same link arriving twice (e.g. two taps on one share) should
-        // refocus the existing tab instead of piling up duplicates.
+        // refocus the existing tab instead of piling up duplicates — but only
+        // while the tab still sits on that link. A tab that has navigated on
+        // since is about something else now, and matching it on the stale
+        // original link would swallow the re-opened link entirely.
         _uiState.value.tabs
-            .find { it.url == url || it.originalUrl == origin }
+            .find { it.url == url }
             ?.let { existing ->
-                _uiState.update { it.copy(activeTabId = existing.id, isTabsSheetVisible = false) }
+                webViewPool[_uiState.value.activeTabId]?.clearMatches()
+                _uiState.update { it.copy(activeTabId = existing.id).withOverlaysClosed() }
                 requestBrowserFocus()
                 scheduleSessionPersist()
                 return
@@ -255,15 +305,30 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             pendingRedirectTargets.getOrPut(newTab.id) { mutableSetOf() }.add(url)
         }
         _uiState.update { current ->
-            current.copy(
-                tabs = current.tabs + newTab,
-                activeTabId = newTab.id,
-                isTabsSheetVisible = false,
-            )
+            current
+                .copy(
+                    tabs = current.tabs + newTab,
+                    activeTabId = newTab.id,
+                ).withOverlaysClosed()
         }
         requestBrowserFocus()
         scheduleSessionPersist()
     }
+
+    /**
+     * Overlays are screen-global: anything that refocuses or creates a tab
+     * must not leave an open sheet or panel stranded in front of the new page.
+     */
+    private fun BrowserUiState.withOverlaysClosed(): BrowserUiState =
+        copy(
+            isTabsSheetVisible = false,
+            isMenuSheetVisible = false,
+            isBookmarksHistorySheetVisible = false,
+            isSearchEngineDialogVisible = false,
+            isFindInPageVisible = false,
+            isInstancePickerVisible = false,
+            isClearDataConfirmVisible = false,
+        )
 
     fun openUrlInNewOrActiveTab(url: String) {
         val active = _uiState.value.activeTab
@@ -299,7 +364,6 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     tabs = listOf(freshTab),
                     activeTabId = freshTab.id,
                     isTabsSheetVisible = false,
-                    activeRedirectNotice = null,
                     isFindInPageVisible = false,
                 )
             } else {
@@ -332,7 +396,6 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 tabs = listOf(freshTab),
                 activeTabId = freshTab.id,
                 isTabsSheetVisible = false,
-                activeRedirectNotice = null,
                 isFindInPageVisible = false,
             )
         }
@@ -609,8 +672,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Hides the active tab's redirect banner by remembering its timestamp;
+     * the tab's [BrowserTab.lastRedirect] metadata (original link, instance)
+     * stays intact for "try another instance". A later redirect on the same
+     * tab carries a fresh timestamp and shows again.
+     */
     fun dismissRedirectNotice() {
-        _uiState.update { it.copy(activeRedirectNotice = null) }
+        _uiState.update { current ->
+            val timestamp = current.activeTab?.lastRedirect?.timestamp ?: return@update current
+            current.copy(dismissedNoticeTimestamps = current.dismissedNoticeTimestamps + timestamp)
+        }
     }
 
     fun navigateActiveTab(queryOrUrl: String) {
@@ -628,7 +700,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             }
 
         val currentTabId = _uiState.value.activeTabId
-        val resolved = resolveRedirection(targetUrl)
+        val resolved = resolveRedirection(targetUrl, currentTabId)
         if (resolved == null) {
             // A fresh, unredirected navigation: the tab is now about this link.
             _uiState.update { current ->
@@ -686,7 +758,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     @Suppress("ReturnCount")
-    fun resolveRedirection(url: String): String? {
+    private fun resolveRedirection(
+        url: String,
+        tabId: String,
+    ): String? {
         val settings = cachedSettings
         val manifest = cachedManifest
         if (!settings.routingEnabled || manifest == null) return null
@@ -707,14 +782,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 frontendId = result.frontendId,
                 instance = result.instance,
             )
-        val currentTabId = _uiState.value.activeTabId
-        pendingRedirectTargets.getOrPut(currentTabId) { mutableSetOf() }.add(result.redirectedUrl)
+        pendingRedirectTargets.getOrPut(tabId) { mutableSetOf() }.add(result.redirectedUrl)
         _uiState.update { current ->
+            // Attribute the redirect to the tab that navigated: a background
+            // tab's WebView client also resolves here and must never touch the
+            // active tab's metadata. The banner derives from the active tab,
+            // so a background redirect cannot hijack it either.
             current.copy(
-                activeRedirectNotice = notice,
                 tabs =
                     current.tabs.map { tab ->
-                        if (tab.id == current.activeTabId) {
+                        if (tab.id == tabId) {
                             tab.copy(lastRedirect = notice, originalUrl = url)
                         } else {
                             tab
@@ -765,7 +842,6 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         pendingRedirectTargets.getOrPut(tab.id) { mutableSetOf() }.add(result.redirectedUrl)
         _uiState.update { current ->
             current.copy(
-                activeRedirectNotice = notice,
                 tabs =
                     current.tabs.map { t ->
                         if (t.id == tab.id) {
@@ -860,16 +936,38 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }.toList()
         if (restoredTabs.isEmpty()) return
-        restoredTabs.forEach { tab ->
-            tab.lastRedirect?.let {
+        val restoredActiveId = restoredTabs[session.activeIndex.coerceIn(0, restoredTabs.lastIndex)].id
+        _uiState.update { current ->
+            // Loading the session suspends on DataStore, so on a cold start the
+            // launching intent (an external link) has usually already opened its
+            // tab by now. Keep those tabs — and their focus — instead of
+            // overwriting them with the restored session; only the placeholder
+            // start tab is replaced.
+            val arrivedTabs = current.tabs.filterNot { it.id == initialTab.id }
+            val keptRestored =
+                restoredTabs.filterNot { restored ->
+                    arrivedTabs.any { it.url == restored.url || it.originalUrl == restored.url }
+                }
+            val activeId =
+                current.activeTabId.takeIf { id -> arrivedTabs.any { it.id == id } }
+                    ?: restoredActiveId.takeIf { id -> keptRestored.any { it.id == id } }
+                    ?: (keptRestored + arrivedTabs).first().id
+            current.copy(tabs = keptRestored + arrivedTabs, activeTabId = activeId)
+        }
+        // The banner derives from the active tab's notice; a session restored
+        // from a previous run must not announce its old redirects again, so
+        // they start out dismissed. Notices are copies — timestamps survive
+        // the later name enrichment.
+        val restoredNoticeTimestamps = restoredTabs.mapNotNull { it.lastRedirect?.timestamp }
+        _uiState.update { current ->
+            current.copy(dismissedNoticeTimestamps = current.dismissedNoticeTimestamps + restoredNoticeTimestamps)
+        }
+        _uiState.value.tabs.forEach { tab ->
+            if (tab.lastRedirect != null && restoredTabs.any { it.id == tab.id }) {
                 // Frontend origins must not be re-resolved on load, exactly
                 // like freshly redirected tabs.
                 pendingRedirectTargets.getOrPut(tab.id) { mutableSetOf() }.add(tab.url)
             }
-        }
-        val activeIndex = session.activeIndex.coerceIn(0, restoredTabs.lastIndex)
-        _uiState.update { current ->
-            current.copy(tabs = restoredTabs, activeTabId = restoredTabs[activeIndex].id)
         }
     }
 
@@ -915,6 +1013,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Tabs created from an intent may predate the manifest being cached (cold
      * start); fill their redirect notices with proper display names once it is.
+     * The banner derives from the active tab's notice, so tabs are all there
+     * is to enrich.
      */
     private fun enrichRedirectNotices() {
         val manifest = cachedManifest ?: return
@@ -929,16 +1029,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         tab.copy(lastRedirect = notice.copy(serviceName = serviceName, frontendName = frontendName))
                     }
                 }
-            val banner =
-                current.activeRedirectNotice?.let { notice ->
-                    if (notice.routeId == null) {
-                        notice
-                    } else {
-                        val (serviceName, frontendName) = routeNames(manifest, notice.routeId, notice.frontendId)
-                        notice.copy(serviceName = serviceName, frontendName = frontendName)
-                    }
-                }
-            current.copy(tabs = tabs, activeRedirectNotice = banner)
+            current.copy(tabs = tabs)
         }
     }
 
@@ -1030,16 +1121,25 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         // A tab carrying redirect metadata is already sitting on a resolved
         // destination: load it as-is instead of routing it a second time.
         val alreadyRouted = tab?.lastRedirect != null
-        val resolved =
-            if (isReplacement || alreadyRouted) {
-                target
-            } else {
-                resolveRedirection(target) ?: target
+        if (isReplacement || alreadyRouted) {
+            if (alreadyRouted) {
+                pendingRedirectTargets.getOrPut(tabId) { mutableSetOf() }.add(target)
             }
-        if (alreadyRouted) {
-            pendingRedirectTargets.getOrPut(tabId) { mutableSetOf() }.add(resolved)
+            webView.loadUrl(target)
+            return
         }
-        webView.loadUrl(resolved)
+        // Cold-start window: manifest and settings are still streaming in, so
+        // routing now would either skip a redirect or ignore the user's
+        // disabled settings. Hold the load until they have landed.
+        viewModelScope.launch {
+            initialStateLoaded.await()
+            if (webViewPool[tabId] !== webView) return@launch // tab closed or re-keyed meanwhile
+            val currentUrl = _uiState.value.tabs.find { it.id == tabId }?.url ?: return@launch
+            val resolved = resolveRedirection(currentUrl, tabId) ?: currentUrl
+            if (webViewPool[tabId] === webView) {
+                webView.loadUrl(resolved)
+            }
+        }
     }
 
     /**
@@ -1231,7 +1331,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 true
             } else {
                 val isPendingTarget = pendingRedirectTargets[tabId]?.contains(urlString) == true
-                val redirected = if (isPendingTarget) null else resolveRedirection(urlString)
+                val redirected = if (isPendingTarget) null else resolveRedirection(urlString, tabId)
                 if (redirected != null && redirected != urlString) {
                     view?.loadUrl(redirected)
                     true
@@ -1259,7 +1359,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     }
                     return
                 }
-                val redirected = resolveRedirection(url)
+                val redirected = resolveRedirection(url, tabId)
                 if (redirected != null && redirected != url) {
                     view?.stopLoading()
                     view?.loadUrl(redirected)

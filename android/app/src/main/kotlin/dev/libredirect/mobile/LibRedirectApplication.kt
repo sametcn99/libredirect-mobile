@@ -5,10 +5,23 @@ import android.content.Intent
 import android.os.Process
 import android.util.Log
 import dev.libredirect.mobile.manifest.ManifestRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlin.system.exitProcess
 
 class LibRedirectApplication : Application() {
     val manifestRepository: ManifestRepository by lazy { ManifestRepository(this) }
+
+    /**
+     * Application-lifetime scope for work that must outlive any single
+     * activity: [RedirectActivity][dev.libredirect.mobile.redirect.RedirectActivity]
+     * is a NoDisplay screen the user can leave at any moment — a slow first
+     * start makes that likely — and the link it is routing must still reach
+     * the browser afterwards instead of dying with the cancelled activity
+     * scope.
+     */
+    val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()

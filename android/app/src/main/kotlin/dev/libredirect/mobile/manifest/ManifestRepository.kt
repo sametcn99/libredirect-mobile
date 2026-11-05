@@ -8,6 +8,9 @@ import dev.libredirect.mobile.core.manifest.ManifestValidator
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.RoutingContext
 import dev.libredirect.mobile.core.routing.UrlRouter
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.io.IOException
 
@@ -38,14 +41,25 @@ class ManifestRepository(
     @Volatile
     private var cached: Manifest? = null
 
+    private val _activeManifestUpdates = MutableStateFlow<Manifest?>(null)
+
+    /**
+     * The composite active manifest (custom routes included), re-emitted on
+     * every change: initial load, instance refresh, custom route add/remove.
+     * Long-lived consumers — the in-app browser resolves links continuously —
+     * follow this instead of caching a snapshot that goes stale after the
+     * first read.
+     */
+    val activeManifestUpdates: StateFlow<Manifest?> = _activeManifestUpdates.asStateFlow()
+
     /** Never null in practice — the bundled asset is a build-time guarantee — but
      * callers must still treat a null result as "route nothing, pass everything through"
      * (fail-open) rather than crash, in case that guarantee is ever violated. */
     fun activeManifest(): Manifest? {
-        cached?.let { return it.withCustomRoutes() }
+        _activeManifestUpdates.value?.let { return it }
         val manifest = store.loadBase()
         cached = manifest
-        return manifest?.withCustomRoutes()
+        return manifest?.withCustomRoutes().also { _activeManifestUpdates.value = it }
     }
 
     /**
@@ -69,12 +83,16 @@ class ManifestRepository(
                 Result.failure(IllegalArgumentException(errors.joinToString("; ")))
             } else {
                 customServiceRepository.save(route)
+                publishActiveManifest()
                 Result.success(Unit)
             }
         }
     }
 
-    fun removeCustomRoute(routeId: String) = customServiceRepository.delete(routeId)
+    fun removeCustomRoute(routeId: String) {
+        customServiceRepository.delete(routeId)
+        publishActiveManifest()
+    }
 
     /**
      * Fetches the upstream instance data and merges its per-frontend HTTPS
@@ -115,6 +133,7 @@ class ManifestRepository(
         try {
             store.activateAtomically(ManifestJson.encode(candidate).toByteArray(Charsets.UTF_8))
             cached = candidate
+            _activeManifestUpdates.value = candidate.withCustomRoutes()
             RefreshResult.Activated(candidate.revision)
         } catch (error: IOException) {
             Log.e(TAG, "Manifest activation failed (storage error)", error)
@@ -144,6 +163,12 @@ class ManifestRepository(
                 }
             }
         return if (validCustomRoutes.isEmpty()) this else copy(routes = routes + validCustomRoutes)
+    }
+
+    /** Re-publishes the composite manifest after a change to the custom routes. */
+    private fun publishActiveManifest() {
+        val base = cached ?: store.loadBase()?.also { cached = it }
+        _activeManifestUpdates.value = base?.withCustomRoutes()
     }
 
     private companion object {
