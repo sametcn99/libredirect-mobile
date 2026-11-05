@@ -17,6 +17,9 @@ import java.time.Instant
  * instance origins (the output of the runtime data.json parser).
  */
 object ManifestGenerator {
+    /** Mirrors [dev.libredirect.mobile.core.manifest.ManifestValidator]'s route/frontend id grammar. */
+    private val manifestIdPattern = Regex("^[a-z][a-z0-9-]{0,63}$")
+
     data class Generation(
         val manifest: Manifest,
         /** Unsupported targets / skipped frontends, for logging. Not user-facing. */
@@ -73,18 +76,30 @@ object ManifestGenerator {
     ): List<Route> {
         val matchers =
             if (service.targets.isEmpty()) {
-                notes += "$serviceKey: skipped (no targets)"
                 emptyMap()
             } else {
-                matcherToTargetIndices(serviceKey, service, notes).also { matchers ->
-                    if (matchers.isEmpty()) notes += "$serviceKey: skipped (no target produced a convertible host)"
-                }
+                matcherToTargetIndices(serviceKey, service, notes)
             }
-        if (matchers.isEmpty()) return emptyList()
+        val serviceId = toKebabCase(serviceKey)
+        val skipNote =
+            when {
+                service.targets.isEmpty() -> "skipped (no targets)"
+                matchers.isEmpty() -> "skipped (no target produced a convertible host)"
+                // e.g. a service key that kebab-cases into something starting
+                // with a digit: the manifest id grammar cannot express it —
+                // drop the whole service rather than guess a different id.
+                !manifestIdPattern.matches(serviceId) ->
+                    "skipped (service id '$serviceId' does not fit the manifest id grammar)"
+                else -> null
+            }
+        if (skipNote != null) {
+            notes += "$serviceKey: $skipNote"
+            return emptyList()
+        }
 
         val frontends = convertibleFrontends(serviceKey, service, instancesByFrontend, notes)
         val groups = groupMatchers(matchers, frontends)
-        return routesFor(serviceKey, service, frontends, groups)
+        return routesFor(service, serviceId, frontends, groups)
     }
 
     /**
@@ -139,16 +154,19 @@ object ManifestGenerator {
                 } else {
                     emptyList()
                 }
+            val frontendId = toKebabCase(frontendKey)
             val skipNote =
                 when {
                     frontend.instanceList != true -> "skipped (not a hosted instance frontend)"
+                    !manifestIdPattern.matches(frontendId) ->
+                        "skipped (frontend id '$frontendId' does not fit the manifest id grammar)"
                     instances.isEmpty() -> "skipped (no usable HTTPS clearnet instances)"
                     else -> null
                 }
             if (skipNote == null) {
                 frontends +=
                     ConvertibleFrontend(
-                        id = toKebabCase(frontendKey),
+                        id = frontendId,
                         name = frontend.name,
                         excludedTargets = frontend.excludeTargets.toSet(),
                         instances = instances,
@@ -197,13 +215,12 @@ object ManifestGenerator {
     }
 
     private fun routesFor(
-        serviceKey: String,
         service: LibRedirectService,
+        serviceId: String,
         frontends: List<ConvertibleFrontend>,
         groups: Map<String, MatcherGroup>,
     ): List<Route> {
         val frontendById = frontends.associateBy { it.id }
-        val serviceId = toKebabCase(serviceKey)
         val routes = mutableListOf<Route>()
         var groupIndex = 0
         for (group in groups.values) {

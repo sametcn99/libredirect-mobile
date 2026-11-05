@@ -190,6 +190,47 @@ class ManifestGeneratorTest {
     }
 
     @Test
+    fun `frontend keys that kebab-case outside the manifest id grammar are dropped and reported`() {
+        // Real case: upstream added a "4get" frontend for the search service;
+        // the manifest id grammar requires ids to start with a letter, so the
+        // frontend is dropped rather than guessing a different id.
+        val config =
+            LibRedirectConfigParser.parse(
+                """
+                {
+                  "services": {
+                    "search": {
+                      "name": "Search",
+                      "targets": ["^https?:\\/{2}search\\.example\\/"],
+                      "frontends": {
+                        "4get": { "name": "4get", "instanceList": true }
+                      }
+                    }
+                  }
+                }
+                """.toByteArray(),
+            )!!
+
+        val generation =
+            ManifestGenerator.generate(
+                config,
+                instancesByFrontend = mapOf("4get" to listOf("https://4get.example")),
+                previousRevision = 9,
+                generatedAt = fixedTime,
+            )
+
+        // No convertible frontend remains: the route falls back to the
+        // original passthrough frontend instead of an invalid id.
+        val route = generation.manifest.routes.single()
+        assertEquals("search", route.id)
+        assertEquals(
+            listOf(Frontend("original", "Original site", Strategy.Passthrough)),
+            route.frontends,
+        )
+        assertTrue(generation.notes.any { "frontend id '4get' does not fit the manifest id grammar" in it })
+    }
+
+    @Test
     fun `kebab-case conversion of camelCase service and frontend keys`() {
         assertEquals("piped-material", ManifestGenerator.toKebabCase("pipedMaterial"))
         assertEquals("lib-redirect", ManifestGenerator.toKebabCase("libRedirect"))
