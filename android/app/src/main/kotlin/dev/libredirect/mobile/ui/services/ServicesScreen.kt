@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.ui.MainUiState
@@ -114,7 +115,15 @@ fun ServicesScreen(
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp),
-                placeholder = { Text(stringResource(R.string.services_search_placeholder)) },
+                placeholder = {
+                    // One line even for long translations: a wrapping
+                    // placeholder grows the whole search field to two rows.
+                    Text(
+                        text = stringResource(R.string.services_search_placeholder),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {

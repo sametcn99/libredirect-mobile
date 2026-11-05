@@ -17,7 +17,6 @@ import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.url.UrlCandidate
 import dev.libredirect.mobile.manifest.InstanceRefreshWorker
-import dev.libredirect.mobile.manifest.ManifestEndpoints
 import dev.libredirect.mobile.manifest.RefreshResult
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
@@ -87,6 +86,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (updateRepository.shouldAutoCheck()) {
                 checkForUpdates()
             }
+        }
+        launchSafely {
+            regenerateManifestSilently()
+        }
+    }
+
+    /**
+     * The upstream sources are the manifest's primary source, so a stale
+     * routing structure is refreshed in the background on startup — silently:
+     * the bundled/active manifest keeps routing meanwhile, and a failure
+     * only costs a log line (the daily worker and the manual refresh are
+     * independent paths). Throttled by the last *attempt*, so a dead network
+     * is not hammered on every launch.
+     */
+    private suspend fun regenerateManifestSilently() {
+        val now = System.currentTimeMillis()
+        if (now - settingsRepository.manifestLastGenerationAt() < SILENT_GENERATION_INTERVAL_MS) return
+        settingsRepository.setManifestLastGenerationAt(now)
+        when (val result = manifestRepository.refresh()) {
+            is RefreshResult.Activated -> {
+                manifest = loadManifest()
+                val settings = settingsRepository.settings.first()
+                _uiState.value = buildUiState(settings)
+                Log.i(TAG, "Manifest regenerated silently to revision ${result.revision}")
+            }
+            else -> Log.i(TAG, "Silent manifest generation skipped: $result")
         }
     }
 
@@ -255,7 +280,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         launchSafely {
             _uiState.value = _uiState.value.copy(refreshInProgress = true, lastRefreshMessage = null)
 
-            val result = manifestRepository.refresh(ManifestEndpoints.INSTANCES_DATA_URL)
+            val result = manifestRepository.refresh()
+            settingsRepository.setManifestLastGenerationAt(System.currentTimeMillis())
             manifest = loadManifest()
 
             val message =
@@ -367,5 +393,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "MainViewModel"
+
+        /** Minimum gap between automatic startup manifest generations. */
+        const val SILENT_GENERATION_INTERVAL_MS = 24 * 60 * 60 * 1000L
     }
 }

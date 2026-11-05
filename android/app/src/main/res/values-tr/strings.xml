@@ -53,8 +53,8 @@
     <string name="home_quick_link_title">Hızlı Bağlantı Aç &amp; Test Et</string>
     <string name="home_quick_link_placeholder">https://instagram.com/&#8230; veya youtube.com/&#8230;</string>
     <string name="home_quick_link_error">Lütfen önce geçerli bir URL girin</string>
-    <string name="home_quick_link_open_in_app">Dahili Tarayıcıda Aç</string>
-    <string name="home_quick_link_open_external">Harici Aç (yönlendirilir)</string>
+    <string name="home_quick_link_open_in_app">Uygulamada Aç</string>
+    <string name="home_quick_link_open_external">Harici Aç</string>
     <string name="home_quick_actions_title">Hızlı İşlemler</string>
     <string name="home_clipboard_offer_title">Panoda bağlantı bulundu</string>
     <string name="home_clipboard_offer_route">Yönlendir</string>
@@ -63,7 +63,7 @@
 
     <!-- Servisler Ekranı -->
     <string name="services_title">Yönlendirme Servisleri</string>
-    <string name="services_search_placeholder">Servis ara (örn. YouTube, Instagram&#8230;)</string>
+    <string name="services_search_placeholder">Servis ara&#8230;</string>
     <string name="services_filter_all">Tümü</string>
     <string name="services_filter_enabled">Aktif</string>
     <string name="services_filter_disabled">Devre Dışı</string>
@@ -198,12 +198,20 @@
     <!-- Özel Servisler Ekranı -->
     <string name="custom_services_title">Özel servisler</string>
     <string name="custom_services_add_header">Servis ekle</string>
-    <string name="custom_services_instructions">Her satıra bir ana makine adı yazın. Şablon isteğe bağlıdır ve {instance}, {path}, {query:name} ile {fragment} destekler.</string>
+    <string name="custom_services_instructions">Seçtiğin sitelerden gelen bağlantıları, senin kontrol ettiğin bir arayüz örneğine yönlendir.</string>
+    <string name="custom_services_section_links">1 · Hangi bağlantılar yönlendirilsin?</string>
+    <string name="custom_services_section_destination">2 · Nereye açılsınlar?</string>
+    <string name="custom_services_section_template">3 · URL şablonu — gelişmiş, isteğe bağlı</string>
+    <string name="custom_services_hint_name">Servis listende görünür, örn. “Blogum”</string>
+    <string name="custom_services_hint_hosts">Her satıra bir alan adı veya virgülle ayrılmış, örn. example.com</string>
+    <string name="custom_services_hint_frontend">Servis kartında görünen etiket</string>
+    <string name="custom_services_hint_instance">Bağlantıların açılacağı arayüz, örn. https://arayuz.example.org</string>
+    <string name="custom_services_hint_template">Desteklenenler: {instance}, {path}, {query:ad}, {fragment}. Boş bırakırsan özgün yol korunur.</string>
     <string name="custom_services_field_name">Servis adı</string>
     <string name="custom_services_field_hosts">Kaynak alan adları</string>
-    <string name="custom_services_field_frontend">Arayüz adı</string>
+    <string name="custom_services_field_frontend">Arayüz adı (isteğe bağlı)</string>
     <string name="custom_services_field_instance">HTTPS servis adresi</string>
-    <string name="custom_services_field_template">İsteğe bağlı çıktı şablonu</string>
+    <string name="custom_services_field_template">Çıktı şablonu (isteğe bağlı)</string>
     <string name="custom_services_btn_add">Servis ekle</string>
     <string name="custom_services_default_frontend">Özel arayüz</string>
     <string name="custom_services_error_name">Servis adı gerekli</string>

@@ -8,21 +8,28 @@ import dev.libredirect.mobile.core.manifest.ManifestValidator
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.RoutingContext
 import dev.libredirect.mobile.core.routing.UrlRouter
+import dev.libredirect.mobile.core.upstream.LibRedirectConfigParser
+import dev.libredirect.mobile.core.upstream.ManifestGenerator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 
 /**
  * Manifest priority (project plan §11/§12): Last Known Good (on-disk
  * `active.json`, then `previous.json`) over the bundled asset — the file
- * chain itself lives in [ManifestFileStore]. A refresh fetches the upstream
- * instance data, decodes it, merges the per-frontend instance lists into
- * the active manifest, validates, and self-tests — and the result is only
- * written to `active.json` if every one of those steps passes. Any failure
- * leaves the existing active manifest (or the bundled asset, if nothing has
- * ever been activated) untouched and in use.
+ * chain itself lives in [ManifestFileStore]. A refresh regenerates the whole
+ * routing manifest from live LibRedirect upstream data (config.json for the
+ * service/target/frontend structure, data.json for the per-frontend HTTPS
+ * clearnet instance lists), validates, and self-tests it — and the result is
+ * only written to `active.json` if every one of those steps passes. Any
+ * failure leaves the existing active manifest (or the bundled asset, if
+ * nothing has ever been activated) untouched and in use.
  */
 class ManifestRepository(
     context: Context,
@@ -95,29 +102,49 @@ class ManifestRepository(
     }
 
     /**
-     * Fetches the upstream instance data and merges its per-frontend HTTPS
-     * clearnet instance lists into the base manifest. Routes, hosts and
-     * frontend structure are frozen at build time; only instances refresh.
+     * Regenerates the whole routing manifest from live LibRedirect upstream
+     * data — config.json provides the service/target/frontend structure,
+     * data.json the per-frontend HTTPS clearnet instance lists. A generated
+     * manifest whose routes are identical to the active one's (revision and
+     * generation time aside) is reported as [RefreshResult.NotModified] and
+     * not written; otherwise the same validate → self-test → activate chain
+     * guards what reaches `active.json`.
      */
-    suspend fun refresh(instancesUrl: String): RefreshResult {
-        val raw = fetcher.fetchBytes(instancesUrl) ?: return RefreshResult.Rejected(RefreshRejectionReason.FETCH_FAILED)
-        return refreshParsed(InstanceDataParser.parse(raw))
-    }
-
-    private fun refreshParsed(instanceData: Map<String, List<String>>?): RefreshResult =
-        if (instanceData.isNullOrEmpty()) {
-            RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
-        } else {
-            refreshBase(instanceData)
+    suspend fun refresh(): RefreshResult =
+        withContext(Dispatchers.IO) {
+            val (configRaw, instancesRaw) = fetchUpstream()
+            if (configRaw == null || instancesRaw == null) {
+                return@withContext RefreshResult.Rejected(RefreshRejectionReason.FETCH_FAILED)
+            }
+            val config = LibRedirectConfigParser.parse(configRaw)
+            if (config == null) {
+                return@withContext RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+            }
+            val instanceData = InstanceDataParser.parse(instancesRaw)
+            if (instanceData == null) {
+                return@withContext RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+            }
+            val base = store.loadBase()
+            val generation = ManifestGenerator.generate(config, instanceData, base?.revision ?: 0)
+            generation.notes.forEach { note -> Log.i(TAG, note) }
+            val unchanged =
+                base != null &&
+                    base.copy(revision = generation.manifest.revision, generatedAt = generation.manifest.generatedAt) ==
+                    generation.manifest
+            if (unchanged) {
+                RefreshResult.NotModified
+            } else {
+                refreshCandidate(generation.manifest)
+            }
         }
 
-    private fun refreshBase(instanceData: Map<String, List<String>>): RefreshResult =
-        store.loadBase()?.let { base ->
-            when (val candidate = InstanceMerger.merge(base, instanceData)) {
-                null -> RefreshResult.NotModified
-                else -> refreshCandidate(candidate)
-            }
-        } ?: RefreshResult.Rejected(RefreshRejectionReason.MALFORMED_MANIFEST)
+    /** Fetches both upstream sources concurrently; null means one of them failed. */
+    private suspend fun fetchUpstream(): Pair<ByteArray?, ByteArray?> =
+        coroutineScope {
+            val config = async { fetcher.fetchBytes(ManifestEndpoints.CONFIG_URL) }
+            val instances = async { fetcher.fetchBytes(ManifestEndpoints.INSTANCES_DATA_URL) }
+            config.await() to instances.await()
+        }
 
     private fun refreshCandidate(candidate: Manifest): RefreshResult =
         when {

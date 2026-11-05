@@ -12,12 +12,12 @@ import dev.libredirect.mobile.LibRedirectApplication
 import java.util.concurrent.TimeUnit
 
 /**
- * Optional daily background refresh of the frontend instance lists (opt-in
+ * Optional daily background regeneration of the routing manifest (opt-in
  * setting, off by default). Reuses the exact manual-refresh pipeline —
- * fetch from upstream, merge, validate, self-test, atomically activate —
- * so a background run can never activate data the manual path wouldn't.
- * Any failure keeps the last known good manifest, same as a rejected
- * manual refresh.
+ * fetch both upstream sources, generate, validate, self-test, atomically
+ * activate — so a background run can never activate data the manual path
+ * wouldn't. Any failure keeps the last known good manifest, same as a
+ * rejected manual refresh.
  */
 class InstanceRefreshWorker(
     context: Context,
@@ -27,7 +27,7 @@ class InstanceRefreshWorker(
         get() = (applicationContext as LibRedirectApplication).manifestRepository
 
     override suspend fun doWork(): Result =
-        when (val result = manifestRepository.refresh(ManifestEndpoints.INSTANCES_DATA_URL)) {
+        when (val result = manifestRepository.refresh()) {
             is RefreshResult.Activated, is RefreshResult.NotModified -> Result.success()
             // Network trouble is worth a backoff retry; data problems are not.
             is RefreshResult.Rejected ->

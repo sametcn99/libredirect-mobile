@@ -18,6 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.manifest.Frontend
@@ -112,9 +114,20 @@ fun CustomServicesScreen(
                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
             }
             items(routes, key = Route::id) { route ->
+                val instance = route.frontends.firstOrNull()?.instances?.firstOrNull()
                 ListItem(
                     headlineContent = { Text(route.name) },
-                    supportingContent = { Text(route.hosts.joinToString(", ")) },
+                    supportingContent = {
+                        Column {
+                            Text(route.hosts.joinToString(", "))
+                            if (instance != null) {
+                                Text(
+                                    text = "→ $instance",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    },
                     trailingContent = {
                         TextButton(onClick = { onRemove(route.id) }) {
                             Text(stringResource(R.string.action_remove))
@@ -138,14 +151,25 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(stringResource(R.string.custom_services_add_header))
-        Text(stringResource(R.string.custom_services_instructions))
+        Text(
+            text = stringResource(R.string.custom_services_add_header),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = stringResource(R.string.custom_services_instructions),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        SectionHeader(stringResource(R.string.custom_services_section_links))
         CustomServiceFields(
             draft = draft,
             validation = validation,
             showErrors = showErrors,
             onDraftChange = { draft = it },
         )
+
         Button(
             onClick = {
                 if (validation.isValid) {
@@ -167,6 +191,23 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
     }
 }
 
+/** Small step heading that groups the form into an answerable question per step. */
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+/**
+ * Every field carries a permanent format hint in its supporting text, so the
+ * form is understandable without prior knowledge; after a submit attempt an
+ * error replaces the hint on the offending fields.
+ */
 @Composable
 private fun CustomServiceFields(
     draft: CustomServiceDraft,
@@ -174,63 +215,82 @@ private fun CustomServiceFields(
     showErrors: Boolean,
     onDraftChange: (CustomServiceDraft) -> Unit,
 ) {
-    OutlinedTextField(
+    Field(
         value = draft.name,
         onValueChange = { onDraftChange(draft.copy(name = it)) },
-        label = { Text(stringResource(R.string.custom_services_field_name)) },
+        labelRes = R.string.custom_services_field_name,
+        hintRes = R.string.custom_services_hint_name,
+        errorRes = R.string.custom_services_error_name,
         isError = showErrors && validation.nameError,
-        supportingText = {
-            if (showErrors && validation.nameError) {
-                Text(stringResource(R.string.custom_services_error_name))
-            }
-        },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
+    Field(
         value = draft.hosts,
         onValueChange = { onDraftChange(draft.copy(hosts = it)) },
-        label = { Text(stringResource(R.string.custom_services_field_hosts)) },
+        labelRes = R.string.custom_services_field_hosts,
+        hintRes = R.string.custom_services_hint_hosts,
+        errorRes = R.string.custom_services_error_hosts,
         isError = showErrors && validation.hostsError,
-        supportingText = {
-            if (showErrors && validation.hostsError) {
-                Text(stringResource(R.string.custom_services_error_hosts))
-            }
-        },
         minLines = 2,
-        modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
+
+    SectionHeader(stringResource(R.string.custom_services_section_destination))
+    Field(
         value = draft.frontendName,
         onValueChange = { onDraftChange(draft.copy(frontendName = it)) },
-        label = { Text(stringResource(R.string.custom_services_field_frontend)) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
+        labelRes = R.string.custom_services_field_frontend,
+        hintRes = R.string.custom_services_hint_frontend,
+        errorRes = null,
+        isError = false,
     )
-    OutlinedTextField(
+    Field(
         value = draft.instance,
         onValueChange = { onDraftChange(draft.copy(instance = it)) },
-        label = { Text(stringResource(R.string.custom_services_field_instance)) },
+        labelRes = R.string.custom_services_field_instance,
+        hintRes = R.string.custom_services_hint_instance,
+        errorRes = R.string.custom_services_error_instance,
         isError = showErrors && validation.instanceError,
-        supportingText = {
-            if (showErrors && validation.instanceError) {
-                Text(stringResource(R.string.custom_services_error_instance))
-            }
-        },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
+
+    SectionHeader(stringResource(R.string.custom_services_section_template))
+    Field(
         value = draft.template,
         onValueChange = { onDraftChange(draft.copy(template = it)) },
-        label = { Text(stringResource(R.string.custom_services_field_template)) },
+        labelRes = R.string.custom_services_field_template,
+        hintRes = R.string.custom_services_hint_template,
+        errorRes = R.string.custom_services_error_template,
         isError = showErrors && validation.templateError,
+    )
+}
+
+@Composable
+private fun Field(
+    value: String,
+    onValueChange: (String) -> Unit,
+    labelRes: Int,
+    hintRes: Int,
+    errorRes: Int?,
+    isError: Boolean,
+    minLines: Int = 1,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(stringResource(labelRes)) },
         supportingText = {
-            if (showErrors && validation.templateError) {
-                Text(stringResource(R.string.custom_services_error_template))
-            }
+            val textRes = if (isError && errorRes != null) errorRes else hintRes
+            Text(
+                text = stringResource(textRes),
+                color =
+                    if (isError && errorRes != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+            )
         },
-        singleLine = true,
+        isError = isError,
+        singleLine = minLines == 1,
+        minLines = minLines,
         modifier = Modifier.fillMaxWidth(),
     )
 }

@@ -526,14 +526,23 @@ private fun QuickLinkCard(
                 ) {
                     Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.home_quick_link_open_in_app))
+                    Text(
+                        text = stringResource(R.string.home_quick_link_open_in_app),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
 
                 OutlinedButton(
                     onClick = onOpenExternal,
                     shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    Text(stringResource(R.string.home_quick_link_open_external))
+                    Text(
+                        text = stringResource(R.string.home_quick_link_open_external),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }

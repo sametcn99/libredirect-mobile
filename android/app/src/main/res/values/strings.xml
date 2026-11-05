@@ -53,8 +53,8 @@
     <string name="home_quick_link_title">Open &amp; Test Quick Link</string>
     <string name="home_quick_link_placeholder">https://instagram.com/&#8230; or youtube.com/&#8230;</string>
     <string name="home_quick_link_error">Please enter a valid URL first</string>
-    <string name="home_quick_link_open_in_app">Open in Built-in Browser</string>
-    <string name="home_quick_link_open_external">Open Externally (routed)</string>
+    <string name="home_quick_link_open_in_app">Open in App</string>
+    <string name="home_quick_link_open_external">Open Externally</string>
     <string name="home_quick_actions_title">Quick Actions</string>
     <string name="home_clipboard_offer_title">Link found in clipboard</string>
     <string name="home_clipboard_offer_route">Route</string>
@@ -63,7 +63,7 @@
 
     <!-- Services Screen -->
     <string name="services_title">Redirect Services</string>
-    <string name="services_search_placeholder">Search services (e.g. YouTube, Instagram&#8230;)</string>
+    <string name="services_search_placeholder">Search services&#8230;</string>
     <string name="services_filter_all">All</string>
     <string name="services_filter_enabled">Active</string>
     <string name="services_filter_disabled">Disabled</string>
@@ -198,12 +198,20 @@
     <!-- Custom Services Screen -->
     <string name="custom_services_title">Custom services</string>
     <string name="custom_services_add_header">Add a service</string>
-    <string name="custom_services_instructions">Use one hostname per line. A template is optional and supports {instance}, {path}, {query:name}, and {fragment}.</string>
+    <string name="custom_services_instructions">Route links from the sites you choose to a frontend instance you control.</string>
+    <string name="custom_services_section_links">1 · Which links should be redirected?</string>
+    <string name="custom_services_section_destination">2 · Where should they open?</string>
+    <string name="custom_services_section_template">3 · URL template — advanced, optional</string>
+    <string name="custom_services_hint_name">Shown in your service list, e.g. “My blog”</string>
+    <string name="custom_services_hint_hosts">One host per line or comma-separated, e.g. example.com</string>
+    <string name="custom_services_hint_frontend">Label shown on the service card</string>
+    <string name="custom_services_hint_instance">The frontend that receives the links, e.g. https://my-frontend.example.org</string>
+    <string name="custom_services_hint_template">Supported: {instance}, {path}, {query:name}, {fragment}. Leave empty to keep the original path.</string>
     <string name="custom_services_field_name">Service name</string>
     <string name="custom_services_field_hosts">Source hostnames</string>
-    <string name="custom_services_field_frontend">Frontend name</string>
+    <string name="custom_services_field_frontend">Frontend name (optional)</string>
     <string name="custom_services_field_instance">HTTPS instance origin</string>
-    <string name="custom_services_field_template">Optional output template</string>
+    <string name="custom_services_field_template">Output template (optional)</string>
     <string name="custom_services_btn_add">Add service</string>
     <string name="custom_services_default_frontend">Custom frontend</string>
     <string name="custom_services_error_name">Service name is required</string>

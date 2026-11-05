@@ -139,6 +139,19 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.UPDATE_LAST_CHECK_AT] = epochMillis }
     }
 
+    /**
+     * Epoch millis of the last automatic manifest generation attempt; 0 when
+     * never attempted. Attempts (not successes) advance it: a silent
+     * background refresh must not hammer a dead network on every launch, and
+     * the daily worker / manual refresh remain independent paths.
+     */
+    suspend fun manifestLastGenerationAt(): Long =
+        context.settingsDataStore.data.first()[Keys.MANIFEST_LAST_GENERATION_AT] ?: 0L
+
+    suspend fun setManifestLastGenerationAt(epochMillis: Long) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.MANIFEST_LAST_GENERATION_AT] = epochMillis }
+    }
+
     /** Consecutive failed update checks since the last success; drives the throttle back-off. */
     suspend fun updateFailedChecksSinceSuccess(): Int =
         context.settingsDataStore.data.first()[Keys.UPDATE_FAILED_CHECKS] ?: 0
@@ -231,6 +244,7 @@ class SettingsRepository(private val context: Context) {
         val CLIPBOARD_OFFER_ENABLED = booleanPreferencesKey("clipboard_offer_enabled")
         val AUTO_INSTANCE_REFRESH_ENABLED = booleanPreferencesKey("auto_instance_refresh_enabled")
         val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
+        val MANIFEST_LAST_GENERATION_AT = longPreferencesKey("manifest_last_generation_at")
         val UPDATE_FAILED_CHECKS = intPreferencesKey("update_failed_checks")
         val UPDATE_CACHED_VERSION = stringPreferencesKey("update_cached_version")
         val UPDATE_CACHED_RELEASE_URL = stringPreferencesKey("update_cached_release_url")

@@ -10,7 +10,7 @@ object UrlValidation {
         )
 
     /**
-     * Mirrors schema/routes.schema.json's `instanceOrigin` definition:
+     * The manifest's `instanceOrigin` contract, enforced by `ManifestValidator`:
      * HTTPS scheme, host, optional port, no path/query/fragment. Used both
      * to validate a user-supplied custom instance at resolve time and to
      * back the settings UI's input validation.
