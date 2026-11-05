@@ -131,24 +131,31 @@ object ManifestGenerator {
     ): List<ConvertibleFrontend> {
         val frontends = mutableListOf<ConvertibleFrontend>()
         for ((frontendKey, frontend) in service.frontends) {
-            if (frontend.instanceList != true) {
-                notes += "$serviceKey.$frontendKey: skipped (not a hosted instance frontend)"
-                continue
+            val instances =
+                if (frontend.instanceList == true) {
+                    // Lookup by kebab-cased key: the runtime data.json parser normalizes
+                    // upstream's camelCase frontend keys to the manifest's frontend ids.
+                    instancesByFrontend[toKebabCase(frontendKey)].orEmpty()
+                } else {
+                    emptyList()
+                }
+            val skipNote =
+                when {
+                    frontend.instanceList != true -> "skipped (not a hosted instance frontend)"
+                    instances.isEmpty() -> "skipped (no usable HTTPS clearnet instances)"
+                    else -> null
+                }
+            if (skipNote == null) {
+                frontends +=
+                    ConvertibleFrontend(
+                        id = toKebabCase(frontendKey),
+                        name = frontend.name,
+                        excludedTargets = frontend.excludeTargets.toSet(),
+                        instances = instances,
+                    )
+            } else {
+                notes += "$serviceKey.$frontendKey: $skipNote"
             }
-            // Lookup by kebab-cased key: the runtime data.json parser normalizes
-            // upstream's camelCase frontend keys to the manifest's frontend ids.
-            val instances = instancesByFrontend[toKebabCase(frontendKey)].orEmpty()
-            if (instances.isEmpty()) {
-                notes += "$serviceKey.$frontendKey: skipped (no usable HTTPS clearnet instances)"
-                continue
-            }
-            frontends +=
-                ConvertibleFrontend(
-                    id = toKebabCase(frontendKey),
-                    name = frontend.name,
-                    excludedTargets = frontend.excludeTargets.toSet(),
-                    instances = instances,
-                )
         }
         return frontends
     }
