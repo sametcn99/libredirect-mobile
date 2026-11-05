@@ -449,7 +449,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update {
             it.copy(
                 isMenuSheetVisible = visible,
-                instanceAlternatives = if (visible) computeInstanceAlternatives() else null,
+                // Kept after close, not nulled: the "try another instance"
+                // picker renders from it once the menu is gone (and a later
+                // pick or latency probe reads it too). Reopening the menu
+                // recomputes it against the active tab.
+                instanceAlternatives =
+                    if (visible) {
+                        computeInstanceAlternatives()
+                    } else {
+                        it.instanceAlternatives
+                    },
             )
         }
     }
