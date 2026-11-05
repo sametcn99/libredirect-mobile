@@ -76,9 +76,10 @@ class TargetHostExtractorTest {
         // Real bug: (reddit|reddittorjg...ooad)\.(com|onion) naively cross-products
         // into nonsense hosts like "reddittorjg...ooad.com". Only the genuine
         // clearnet combinations should survive.
+        val onionHash = "reddittorjg6rue252oqsxryoxengawnmo46qy4kyii5wtqnwfj4ooad"
         val hosts =
             extractor.extractHosts(
-                "^https?:\\/{2}(www\\.|old\\.)?(reddit|reddittorjg6rue252oqsxryoxengawnmo46qy4kyii5wtqnwfj4ooad)\\.(com|onion)(?=\\/r\\/|\\/?\$)",
+                "^https?:\\/{2}(www\\.|old\\.)?(reddit|$onionHash)\\.(com|onion)(?=\\/r\\/|\\/?\$)",
             )
         assertTrue(hosts!!.containsAll(listOf("reddit.com", "www.reddit.com", "old.reddit.com")))
         for (host in hosts) {

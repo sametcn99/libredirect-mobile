@@ -58,11 +58,12 @@ object ManifestGenerator {
     )
 
     private const val FALLBACK_FRONTEND_ID = "original"
-    private val fallbackFrontend = Frontend(
-        id = FALLBACK_FRONTEND_ID,
-        name = "Original site",
-        strategy = Strategy.Passthrough,
-    )
+    private val fallbackFrontend =
+        Frontend(
+            id = FALLBACK_FRONTEND_ID,
+            name = "Original site",
+            strategy = Strategy.Passthrough,
+        )
 
     private fun convertService(
         serviceKey: String,
@@ -141,12 +142,13 @@ object ManifestGenerator {
                 notes += "$serviceKey.$frontendKey: skipped (no usable HTTPS clearnet instances)"
                 continue
             }
-            frontends += ConvertibleFrontend(
-                id = toKebabCase(frontendKey),
-                name = frontend.name,
-                excludedTargets = frontend.excludeTargets.toSet(),
-                instances = instances,
-            )
+            frontends +=
+                ConvertibleFrontend(
+                    id = toKebabCase(frontendKey),
+                    name = frontend.name,
+                    excludedTargets = frontend.excludeTargets.toSet(),
+                    instances = instances,
+                )
         }
         return frontends
     }
@@ -200,28 +202,30 @@ object ManifestGenerator {
         for (group in groups.values) {
             val frontendIds = group.frontendIds.ifEmpty { listOf(FALLBACK_FRONTEND_ID) }
             val isPrimary = groupIndex == 0
-            routes += Route(
-                id = if (isPrimary) serviceId else "$serviceId-$groupIndex",
-                name = if (isPrimary) service.name else "${service.name} (additional hosts)",
-                hosts = group.hosts.toList(),
-                hostPatterns = group.hostPatterns.toList(),
-                frontends =
-                    frontendIds.map { frontendId ->
-                        if (frontendId == FALLBACK_FRONTEND_ID) {
-                            fallbackFrontend
-                        } else {
-                            val frontend = checkNotNull(frontendById[frontendId]) {
-                                "internal error: convertible frontend '$frontendId' vanished during grouping"
+            routes +=
+                Route(
+                    id = if (isPrimary) serviceId else "$serviceId-$groupIndex",
+                    name = if (isPrimary) service.name else "${service.name} (additional hosts)",
+                    hosts = group.hosts.toList(),
+                    hostPatterns = group.hostPatterns.toList(),
+                    frontends =
+                        frontendIds.map { frontendId ->
+                            if (frontendId == FALLBACK_FRONTEND_ID) {
+                                fallbackFrontend
+                            } else {
+                                val frontend =
+                                    checkNotNull(frontendById[frontendId]) {
+                                        "internal error: convertible frontend '$frontendId' vanished during grouping"
+                                    }
+                                Frontend(
+                                    id = frontend.id,
+                                    name = frontend.name,
+                                    strategy = Strategy.ReplaceOrigin,
+                                    instances = frontend.instances,
+                                )
                             }
-                            Frontend(
-                                id = frontend.id,
-                                name = frontend.name,
-                                strategy = Strategy.ReplaceOrigin,
-                                instances = frontend.instances,
-                            )
-                        }
-                    },
-            )
+                        },
+                )
             groupIndex++
         }
         return routes

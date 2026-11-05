@@ -37,12 +37,19 @@ internal object TargetHostExtractor {
      * or `null` if the pattern needs real regex expressiveness (wildcard
      * subdomains, lookaheads, quantified TLD suffixes, ...) this schema
      * doesn't support.
+     *
+     * A deliberate 1:1 port of the proven upstream adapter parser: the
+     * control flow mirrors it exactly, so restructuring would trade reviewed
+     * fidelity for style points. The suppressions stay scoped to this
+     * function.
      */
-    // A deliberate 1:1 port of the proven upstream adapter parser: the
-    // control flow mirrors it exactly, so restructuring would trade reviewed
-    // fidelity for style points. The suppressions stay scoped to this
-    // function.
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "NestedBlockDepth", "ReturnCount", "LoopWithTooManyJumpStatements")
+    @Suppress(
+        "LongMethod",
+        "CyclomaticComplexMethod",
+        "NestedBlockDepth",
+        "ReturnCount",
+        "LoopWithTooManyJumpStatements",
+    )
     fun extractHosts(pattern: String): List<String>? {
         var rest = stripTargetPrefix(pattern) ?: return null
 
@@ -129,8 +136,9 @@ internal object TargetHostExtractor {
      * predicates: the Android router resolves links by host, while preserving
      * the hostname regex is enough to cover wildcard subdomains and locale
      * TLDs without embedding arbitrary URL regexes in the manifest.
+     *
+     * Ported 1:1 alongside [extractHosts]; see the note there.
      */
-    // Ported 1:1 alongside [extractHosts]; see the note there.
     @Suppress("ReturnCount")
     fun extractHostPattern(pattern: String): String? {
         var rest = stripTargetPrefix(pattern) ?: return null

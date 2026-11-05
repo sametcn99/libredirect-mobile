@@ -2,11 +2,11 @@ package dev.libredirect.mobile.core.upstream
 
 import dev.libredirect.mobile.core.manifest.Frontend
 import dev.libredirect.mobile.core.manifest.Strategy
-import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 class ManifestGeneratorTest {
     private val fixedTime: Instant = Instant.parse("2026-11-05T12:00:00Z")
@@ -124,7 +124,13 @@ class ManifestGeneratorTest {
                 """.toByteArray(),
             )!!
 
-        val generation = ManifestGenerator.generate(config, instancesByFrontend = emptyMap(), previousRevision = 7, generatedAt = fixedTime)
+        val generation =
+            ManifestGenerator.generate(
+                config,
+                instancesByFrontend = emptyMap(),
+                previousRevision = 7,
+                generatedAt = fixedTime,
+            )
 
         val route = generation.manifest.routes.single()
         // The route id comes from the service key, the display name from the service.

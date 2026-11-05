@@ -20,7 +20,8 @@ object InstanceDataParser {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Matches the manifest's `instanceOrigin` contract enforced by `ManifestValidator` (strict, lowercase, origin-only). */
+    /** Matches the manifest's `instanceOrigin` contract enforced by `ManifestValidator`
+     *  (strict, lowercase, origin-only). */
     private val instanceOriginRegex =
         Regex("^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(:[0-9]{1,5})?$")
 
