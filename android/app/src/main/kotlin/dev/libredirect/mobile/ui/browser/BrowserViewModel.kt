@@ -6,6 +6,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -239,6 +240,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openNewTab(url: String? = null) {
+        captureActiveTabThumbnail()
         val targetUrl = url ?: _uiState.value.searchEngine.homeUrl
         val newTab = BrowserTab(id = UUID.randomUUID().toString(), url = targetUrl)
         _uiState.update { current ->
@@ -265,6 +267,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         frontendId: String? = null,
         instance: String? = null,
     ) {
+        captureActiveTabThumbnail()
         val origin = originalUrl ?: url
         // The same link arriving twice (e.g. two taps on one share) should
         // refocus the existing tab instead of piling up duplicates — but only
@@ -331,6 +334,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         )
 
     fun openUrlInNewOrActiveTab(url: String) {
+        captureActiveTabThumbnail()
         val active = _uiState.value.activeTab
         if (active == null || active.url != BrowserTab.DEFAULT_HOME_URL) {
             val newTab = BrowserTab(id = UUID.randomUUID().toString(), url = url, title = url)
@@ -411,7 +415,39 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Captures a scaled screenshot of the given tab's WebView as its switcher
+     * thumbnail. A WebView is attached and laid out only while its tab is
+     * active, so this runs in the moments before the active tab changes.
+     */
+    private fun captureActiveTabThumbnail() {
+        val tabId = _uiState.value.activeTabId
+        val webView = webViewPool[tabId] ?: return
+        val width = webView.width
+        val height = webView.height
+        if (width == 0 || height == 0) return
+        val scale = THUMBNAIL_WIDTH_PX.toFloat() / width
+        val bitmap =
+            Bitmap.createBitmap(
+                THUMBNAIL_WIDTH_PX,
+                (height * scale).toInt().coerceAtLeast(1),
+                Bitmap.Config.ARGB_8888,
+            )
+        val canvas = Canvas(bitmap)
+        canvas.scale(scale, scale)
+        webView.draw(canvas)
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map { tab ->
+                        if (tab.id == tabId) tab.copy(thumbnail = bitmap) else tab
+                    },
+            )
+        }
+    }
+
     fun selectTab(tabId: String) {
+        captureActiveTabThumbnail()
         webViewPool[_uiState.value.activeTabId]?.clearMatches()
         _uiState.update {
             it.copy(
@@ -466,7 +502,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun setInstancePickerVisible(visible: Boolean) {
         _uiState.update {
             if (visible) {
-                it.copy(isInstancePickerVisible = true, instanceLatencies = emptyMap(), isMeasuringInstances = false)
+                it.copy(
+                    isInstancePickerVisible = true,
+                    // Recompute on every open: the menu may have stayed open
+                    // while a previous pick already re-routed the tab, so the
+                    // "current instance" marker must reflect the latest
+                    // redirect, not the menu-open snapshot.
+                    instanceAlternatives = computeInstanceAlternatives(),
+                    instanceLatencies = emptyMap(),
+                    isMeasuringInstances = false,
+                )
             } else {
                 it.copy(isInstancePickerVisible = false)
             }
@@ -1449,6 +1494,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private companion object {
         const val SESSION_SAVE_DEBOUNCE_MILLIS = 500L
         const val MAX_RESTORED_TABS = 50
+        const val THUMBNAIL_WIDTH_PX = 240
         const val LATENCY_TIMEOUT_SECONDS = 5L
         const val LATENCY_PROBE_CONCURRENCY = 16
         const val LATENCY_FAILED_MILLIS = -1L

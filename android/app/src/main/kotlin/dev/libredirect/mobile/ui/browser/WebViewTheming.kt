@@ -9,13 +9,14 @@ import androidx.webkit.WebViewFeature
 import dev.libredirect.mobile.R
 
 /**
- * WebView (for apps targeting API 33+) derives the `prefers-color-scheme`
- * value it exposes to pages — and whether algorithmic darkening may kick in —
- * from the `android:isLightTheme` attribute of the theme of the Context it was
- * created with. Wrapping the Activity in a ContextThemeWrapper whose
- * configuration forces night mode on or off lets each WebView render pages
- * light or dark regardless of the system setting. The value is read when the
- * WebView is created, so switching the page theme requires a new WebView.
+ * WebView derives the `prefers-color-scheme` value it exposes to pages from
+ * the `isLightTheme` attribute of the theme of the Context it was created
+ * with — a DayNight theme always resolves that against the system setting,
+ * which is why the fixed ForceLight/ForceDark variants exist. The night-mode
+ * configuration override is applied as well, for resource resolution inside
+ * the WebView and for older WebView builds that key off uiMode. The value is
+ * read when the WebView is created, so switching the page theme requires a
+ * new WebView (see [BrowserViewModel.getOrCreateWebView]).
  */
 internal object WebViewTheming {
     private const val LIGHT_BACKGROUND = 0xFFFFFFFF.toInt()
@@ -30,7 +31,13 @@ internal object WebViewTheming {
             Configuration(base.resources.configuration).apply {
                 uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
             }
-        return ContextThemeWrapper(base, R.style.Theme_LibRedirectMobile).apply {
+        val themeRes =
+            if (dark) {
+                R.style.Theme_LibRedirectMobile_ForceDark
+            } else {
+                R.style.Theme_LibRedirectMobile_ForceLight
+            }
+        return ContextThemeWrapper(base, themeRes).apply {
             applyOverrideConfiguration(override)
         }
     }

@@ -3,6 +3,7 @@
 package dev.libredirect.mobile.ui.browser
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -176,7 +180,8 @@ private fun TabCard(
             }
         }
 
-        // Preview area: the site's icon front and center, with its host underneath.
+        // Preview area: a live screenshot of the page as it last looked, or the
+        // site's icon over its host for tabs that have never been active.
         Box(
             modifier =
                 Modifier
@@ -189,27 +194,40 @@ private fun TabCard(
                     ),
             contentAlignment = Alignment.Center,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                SiteIcon(tab = tab, size = 40.dp)
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 10.dp),
-                ) {
-                    Icon(
-                        imageVector = if (tab.isSecure) Icons.Default.Lock else Icons.Outlined.LockOpen,
-                        contentDescription = null,
-                        tint = if (tab.isSecure) colors.onSurfaceVariant else colors.error,
-                        modifier = Modifier.size(11.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = tab.displayHost,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            val thumbnail = tab.thumbnail
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier =
+                        Modifier
+                            .matchParentSize()
+                            .clip(RoundedCornerShape(16.dp)),
+                )
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    SiteIcon(tab = tab, size = 40.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (tab.isSecure) Icons.Default.Lock else Icons.Outlined.LockOpen,
+                            contentDescription = null,
+                            tint = if (tab.isSecure) colors.onSurfaceVariant else colors.error,
+                            modifier = Modifier.size(11.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = tab.displayHost,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }

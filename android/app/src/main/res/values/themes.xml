@@ -29,4 +29,23 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
+
+    <!--
+      Fixed (non-DayNight) creation themes for in-app browser WebViews: WebView
+      derives the `prefers-color-scheme` value pages see from the `isLightTheme`
+      attribute of the theme of the Context the WebView was created with, and a
+      DayNight theme always resolves that against the system setting — so the
+      per-page theme choice needs themes whose lightness never flips. The
+      night-mode configuration override in WebViewTheming stays as well, for
+      resource resolution and older WebView builds.
+    -->
+    <style name="Theme.LibRedirectMobile.ForceLight" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="isLightTheme">true</item>
+        <item name="android:windowBackground">#FFFFFBFE</item>
+    </style>
+
+    <style name="Theme.LibRedirectMobile.ForceDark" parent="Theme.AppCompat.NoActionBar">
+        <item name="isLightTheme">false</item>
+        <item name="android:windowBackground">#FF1C1B1F</item>
+    </style>
 </resources>

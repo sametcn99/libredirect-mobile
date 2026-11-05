@@ -28,6 +28,13 @@ data class BrowserTab(
     val originalUrl: String? = null,
     val isDesktopMode: Boolean = false,
     val favicon: Bitmap? = null,
+    /**
+     * Scaled screenshot of the page as it last looked on screen, captured in
+     * the moment the tab stops being active; null until then (fresh and
+     * restored tabs show a placeholder). Session-persist is URL-only, so
+     * thumbnails die with the process.
+     */
+    val thumbnail: Bitmap? = null,
 ) {
     /** Host shown when the address bar isn't being edited, e.g. "example.com". */
     val displayHost: String
