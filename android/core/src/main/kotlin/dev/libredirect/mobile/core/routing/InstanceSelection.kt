@@ -5,14 +5,19 @@ import kotlinx.serialization.Serializable
 
 /**
  * User preference for how a frontend's instance is chosen. Mirrors the
- * project plan's "Automatic / Pinned / Custom" modes (§23). This is app
- * settings state (DataStore-backed), never part of the remote manifest.
+ * project plan's "Automatic / Fastest / Pinned / Custom" modes (§23). This is
+ * app settings state (DataStore-backed), never part of the remote manifest.
  */
 @Serializable
 sealed interface InstanceSelection {
     @Serializable
     @SerialName("automatic")
     data object Automatic : InstanceSelection
+
+    /** Always the fastest measured instance; unmeasured instances are never preferred over measured ones. */
+    @Serializable
+    @SerialName("fastest")
+    data object Fastest : InstanceSelection
 
     @Serializable
     @SerialName("pinned")

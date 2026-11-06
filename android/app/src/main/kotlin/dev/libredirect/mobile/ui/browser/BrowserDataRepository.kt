@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -18,7 +19,8 @@ private val Context.browserDataStore by preferencesDataStore(
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
 )
 
-private const val MAX_HISTORY_ENTRIES = 200
+/** Mutable history cap; the effective limit comes from settings (4.5). */
+const val DEFAULT_HISTORY_LIMIT = 200
 
 /** Case-insensitive title/url filter behind the history search field (B5). */
 fun filterBrowserHistory(
@@ -39,6 +41,28 @@ fun filterLatencies(
     cached: Map<String, Long>,
     instances: List<String>,
 ): Map<String, Long> = if (cached.isEmpty()) emptyMap() else cached.filterKeys { it in instances.toSet() }
+
+/**
+ * Local privacy statistics (3.4): what routing actually did on this device.
+ * Purely cumulative counters, resettable, never leaves the device.
+ */
+@Serializable
+data class PrivacyStats(
+    val totalRedirects: Long = 0,
+    val strippedTrackingParams: Long = 0,
+    val unwrappedWrappers: Long = 0,
+    val resolvedShortLinks: Long = 0,
+    val blockedRequests: Long = 0,
+) {
+    operator fun plus(other: PrivacyStats): PrivacyStats =
+        PrivacyStats(
+            totalRedirects = totalRedirects + other.totalRedirects,
+            strippedTrackingParams = strippedTrackingParams + other.strippedTrackingParams,
+            unwrappedWrappers = unwrappedWrappers + other.unwrappedWrappers,
+            resolvedShortLinks = resolvedShortLinks + other.resolvedShortLinks,
+            blockedRequests = blockedRequests + other.blockedRequests,
+        )
+}
 
 @Suppress("TooManyFunctions")
 class BrowserDataRepository(private val context: Context) {
@@ -69,7 +93,48 @@ class BrowserDataRepository(private val context: Context) {
     suspend fun saveLatencies(latencies: Map<String, Long>) {
         if (latencies.isEmpty()) return
         context.browserDataStore.edit { prefs ->
-            prefs[Keys.INSTANCE_LATENCIES] = json.encodeToString(latencies)
+            val current = decodeOrDefault(prefs[Keys.INSTANCE_LATENCIES], emptyMap<String, Long>())
+            prefs[Keys.INSTANCE_LATENCIES] = json.encodeToString(current + latencies)
+        }
+    }
+
+    /**
+     * Epoch millis of each instance's last observed load failure (2.1/2.2);
+     * [InstanceHealth]'s cooldown logic reads this through RoutingContext.
+     */
+    suspend fun instanceFailures(): Map<String, Long> =
+        context.browserDataStore.data.first()[Keys.INSTANCE_FAILURES]?.let { raw ->
+            decodeOrDefault(raw, emptyMap<String, Long>())
+        } ?: emptyMap()
+
+    suspend fun recordInstanceFailure(
+        instance: String,
+        atMillis: Long = System.currentTimeMillis(),
+    ) {
+        if (instance.isBlank()) return
+        context.browserDataStore.edit { prefs ->
+            val current = decodeOrDefault(prefs[Keys.INSTANCE_FAILURES], emptyMap<String, Long>())
+            prefs[Keys.INSTANCE_FAILURES] = json.encodeToString(current + (instance to atMillis))
+        }
+    }
+
+    /** Local privacy counters (3.4); the card on Home shows and resets these. */
+    val privacyStats: Flow<PrivacyStats> =
+        context.browserDataStore.data.map { prefs ->
+            decodeOrDefault(prefs[Keys.PRIVACY_STATS], PrivacyStats())
+        }
+
+    suspend fun addPrivacyStats(delta: PrivacyStats) {
+        if (delta == PrivacyStats()) return
+        context.browserDataStore.edit { prefs ->
+            val current = decodeOrDefault(prefs[Keys.PRIVACY_STATS], PrivacyStats())
+            prefs[Keys.PRIVACY_STATS] = json.encodeToString(current + delta)
+        }
+    }
+
+    suspend fun resetPrivacyStats() {
+        context.browserDataStore.edit { prefs ->
+            prefs[Keys.PRIVACY_STATS] = json.encodeToString(PrivacyStats())
         }
     }
 
@@ -133,7 +198,9 @@ class BrowserDataRepository(private val context: Context) {
     suspend fun addHistory(
         title: String,
         url: String,
+        limit: Int = DEFAULT_HISTORY_LIMIT,
     ) {
+        if (limit <= 0) return // 0 = keep no history at all (4.5)
         if (url.isBlank() || url.equals("about:blank", ignoreCase = true)) return
         context.browserDataStore.edit { prefs ->
             val current = decodeList<BrowserHistoryItem>(prefs[Keys.HISTORY])
@@ -143,7 +210,7 @@ class BrowserDataRepository(private val context: Context) {
                     title = title.ifBlank { url },
                     url = url,
                 )
-            val updated = (listOf(newItem) + filtered).take(MAX_HISTORY_ENTRIES)
+            val updated = (listOf(newItem) + filtered).take(limit)
             prefs[Keys.HISTORY] = json.encodeToString(updated)
         }
     }
@@ -213,6 +280,8 @@ class BrowserDataRepository(private val context: Context) {
         val SESSION = stringPreferencesKey("session_json")
         val REDIRECT_STATS = stringPreferencesKey("redirect_stats_json")
         val INSTANCE_LATENCIES = stringPreferencesKey("instance_latencies_json")
+        val INSTANCE_FAILURES = stringPreferencesKey("instance_failures_json")
+        val PRIVACY_STATS = stringPreferencesKey("privacy_stats_json")
     }
 
     companion object {

@@ -78,6 +78,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserLauncher
+import dev.libredirect.mobile.settings.CustomTrackingParam
+import dev.libredirect.mobile.settings.TabAutoClose
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.browser.SearchEngine
 import dev.libredirect.mobile.ui.browser.SearchEngineDialog
@@ -95,6 +97,25 @@ data class SettingsActions(
     val onClipboardOfferChange: (Boolean) -> Unit = {},
     val onAutoInstanceRefreshChange: (Boolean) -> Unit = {},
     val onAppLockChange: (Boolean) -> Unit = {},
+    // 2.x/3.x/4.x/5.x batch (see SettingsExtrasSection)
+    val onUnwrapWrappersChange: (Boolean) -> Unit = {},
+    val onShortLinkResolveChange: (Boolean) -> Unit = {},
+    val onCustomTrackingParamsChange: (List<CustomTrackingParam>) -> Unit = {},
+    val onContentBlockerChange: (Boolean) -> Unit = {},
+    val onUpdateBlocklist: () -> Unit = {},
+    val onAutoFailoverChange: (Boolean) -> Unit = {},
+    val onBackgroundLatencyChange: (Boolean) -> Unit = {},
+    val onBackgroundAudioChange: (Boolean) -> Unit = {},
+    val onCloseIncognitoChange: (Boolean) -> Unit = {},
+    val onAutoCloseTabsChange: (TabAutoClose) -> Unit = {},
+    val onAutoHideToolbarChange: (Boolean) -> Unit = {},
+    val onExportSettings: (Uri) -> Unit = {},
+    val onImportSettings: (Uri) -> Unit = {},
+    val onApplyImport: () -> Unit = {},
+    val onDismissImport: () -> Unit = {},
+    val onOpenRelease: (String) -> Unit = {},
+    val onOpenDiagnostics: () -> Unit = {},
+    val onOpenOnboarding: () -> Unit = {},
 )
 
 @Suppress("CyclomaticComplexMethod")
@@ -267,6 +288,11 @@ fun SettingsScreen(
                 )
             }
 
+            // 2.x–5.x additions: privacy, browser extras, backup, diagnostics.
+            item {
+                SettingsExtrasSection(state = state, actions = actions)
+            }
+
             item {
                 SectionTitle(stringResource(R.string.settings_section_app_info))
             }
@@ -287,6 +313,16 @@ fun SettingsScreen(
                     onOpenSourceCode = {
                         context.openUrl(GITHUB_REPO_URL)
                     },
+                )
+            }
+
+            // 5.2: re-run the first-launch guide on demand.
+            item {
+                SettingsCardItem(
+                    icon = Icons.Default.Language,
+                    title = stringResource(R.string.settings_onboarding),
+                    subtitle = stringResource(R.string.onboarding_welcome_desc),
+                    onClick = actions.onOpenOnboarding,
                 )
             }
 
@@ -401,7 +437,7 @@ private fun LanguageDialog(
 }
 
 @Composable
-private fun SectionTitle(title: String) {
+internal fun SectionTitle(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.labelLarge,
@@ -412,7 +448,7 @@ private fun SectionTitle(title: String) {
 }
 
 @Composable
-private fun SettingsToggleItem(
+internal fun SettingsToggleItem(
     icon: ImageVector,
     title: String,
     subtitle: String,

@@ -125,6 +125,9 @@ fun InAppBrowserScreen(
     val focusManager = LocalFocusManager.current
     val darkPages = state.pageTheme.isDark(isSystemInDarkTheme())
     var isAddressFocused by remember { mutableStateOf(false) }
+    // 4.3/4.5: ephemeral UI overlays — per-site settings and the downloads list.
+    var showSiteSettings by remember { mutableStateOf(false) }
+    var showDownloads by remember { mutableStateOf(false) }
 
     // File upload fields (onShowFileChooser): the WebView client hands us a
     // prepared intent; the system picker's result goes back to the callback.
@@ -168,16 +171,25 @@ fun InAppBrowserScreen(
                 .background(MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            BrowserTopBar(
-                tab = activeTab,
-                onNavigate = { query ->
-                    viewModel.navigateActiveTab(query)
-                    focusManager.clearFocus()
-                },
-                onReload = viewModel::reloadActiveTab,
-                onStop = viewModel::stopActiveTab,
-                onFocusChange = { isAddressFocused = it },
-            )
+            val scrolledPast = (activeTab?.scrollY ?: 0) > TOOLBAR_HIDE_SCROLL_PX
+            val toolbarsHidden = state.autoHideToolbar && scrolledPast && !isAddressFocused
+            AnimatedVisibility(
+                visible = !toolbarsHidden,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                BrowserTopBar(
+                    tab = activeTab,
+                    onNavigate = { query ->
+                        viewModel.navigateActiveTab(query)
+                        focusManager.clearFocus()
+                    },
+                    onReload = viewModel::reloadActiveTab,
+                    onStop = viewModel::stopActiveTab,
+                    onFocusChange = { isAddressFocused = it },
+                    onSiteSettings = { showSiteSettings = true },
+                )
+            }
 
             AnimatedVisibility(
                 visible = state.isFindInPageVisible,
@@ -210,6 +222,16 @@ fun InAppBrowserScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
 
+                // 4.5: new-tab start page over a fresh home tab.
+                if (activeTab?.isFreshHomeTab() == true) {
+                    StartPageOverlay(
+                        bookmarks = state.bookmarks,
+                        history = state.history,
+                        onOpen = { url -> viewModel.openUrlInNewOrActiveTab(url) },
+                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                    )
+                }
+
                 if (activeTab?.pageError == true) {
                     PageErrorOverlay(
                         url = activeTab.url,
@@ -235,19 +257,25 @@ fun InAppBrowserScreen(
                 )
             }
 
-            BrowserBottomBar(
-                canGoBack = activeTab?.canGoBack == true,
-                canGoForward = activeTab?.canGoForward == true,
-                tabCount = state.tabs.size,
-                onBack = { viewModel.goBackActiveTab() },
-                onForward = { viewModel.goForwardActiveTab() },
-                onHome = { viewModel.navigateActiveTab(state.searchEngine.homeUrl) },
-                onTabs = { viewModel.setTabsSheetVisible(true) },
-                onMenu = {
-                    focusManager.clearFocus()
-                    viewModel.setMenuSheetVisible(true)
-                },
-            )
+            AnimatedVisibility(
+                visible = !toolbarsHidden,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                BrowserBottomBar(
+                    canGoBack = activeTab?.canGoBack == true,
+                    canGoForward = activeTab?.canGoForward == true,
+                    tabCount = state.tabs.size,
+                    onBack = { viewModel.goBackActiveTab() },
+                    onForward = { viewModel.goForwardActiveTab() },
+                    onHome = { viewModel.navigateActiveTab(state.searchEngine.homeUrl) },
+                    onTabs = { viewModel.setTabsSheetVisible(true) },
+                    onMenu = {
+                        focusManager.clearFocus()
+                        viewModel.setMenuSheetVisible(true)
+                    },
+                )
+            }
         }
 
         FullscreenVideoOverlay(state = state)
@@ -255,6 +283,14 @@ fun InAppBrowserScreen(
         BrowserSheets(
             state = state,
             viewModel = viewModel,
+            showSiteSettings = showSiteSettings,
+            onDismissSiteSettings = { showSiteSettings = false },
+            showDownloads = showDownloads,
+            onDismissDownloads = { showDownloads = false },
+            onOpenDownloads = {
+                viewModel.setMenuSheetVisible(false)
+                showDownloads = true
+            },
             onShare = {
                 activeTab?.url?.let {
                     context.shareUrl(it, context.getString(R.string.browser_share_link_title))
@@ -264,6 +300,9 @@ fun InAppBrowserScreen(
         )
     }
 }
+
+/** Scroll offset (px) past which the toolbars hide themselves (4.5). */
+private const val TOOLBAR_HIDE_SCROLL_PX = 300
 
 /**
  * Pull-to-refresh for the page area: observes drags in the final pass (the
@@ -430,6 +469,7 @@ private fun BrowserWebView(
                             .apply {
                                 setOnScrollChangeListener { _, _, scrollY, _, _ ->
                                     atTopCallback(scrollY <= 0)
+                                    viewModel.onTabScroll(activeTab.id, scrollY)
                                 }
                             }
                     },
@@ -444,10 +484,23 @@ private fun BrowserWebView(
 private fun BrowserSheets(
     state: BrowserUiState,
     viewModel: BrowserViewModel,
+    showSiteSettings: Boolean,
+    onDismissSiteSettings: () -> Unit,
+    showDownloads: Boolean,
+    onDismissDownloads: () -> Unit,
+    onOpenDownloads: () -> Unit,
     onShare: () -> Unit,
     onOpenExternal: () -> Unit,
 ) {
     val context = LocalContext.current
+    TransientBrowserDialogs(
+        state,
+        viewModel,
+        showSiteSettings,
+        onDismissSiteSettings,
+        showDownloads,
+        onDismissDownloads,
+    )
     state.linkContextUrl?.let { url ->
         LinkContextMenuDialog(
             url = url,
@@ -474,6 +527,7 @@ private fun BrowserSheets(
             autoDarken = state.autoDarken,
             textZoom = state.textZoom,
             instanceAlternatives = state.instanceAlternatives,
+            blockedCount = state.activeTab?.blockedCount ?: 0,
             onTextZoomChange = viewModel::setBrowserTextZoom,
             actions =
                 BrowserMenuActions(
@@ -492,6 +546,11 @@ private fun BrowserSheets(
                     onOpenExternal = onOpenExternal,
                     onClearBrowsingData = { viewModel.setClearDataConfirmVisible(true) },
                     onCloseTab = { state.activeTab?.let { viewModel.closeTab(it.id) } },
+                    onToggleReaderMode = viewModel::toggleReaderMode,
+                    onPrint = { viewModel.printActiveTab(context) },
+                    onOpenDownloads = onOpenDownloads,
+                    onShareOriginal = { viewModel.shareOriginalLink(context) },
+                    onCopyOriginal = viewModel::copyOriginalLink,
                     onDismiss = { viewModel.setMenuSheetVisible(false) },
                 ),
         )
@@ -540,6 +599,8 @@ private fun BrowserSheets(
                     onNewTab = { viewModel.openNewTab() },
                     onNewIncognitoTab = { viewModel.openIncognitoTab() },
                     onCloseAll = viewModel::closeAllTabs,
+                    onCloseOthers = { viewModel.closeOtherTabs(state.activeTabId) },
+                    onAssignGroup = viewModel::assignTabGroup,
                     onDismiss = { viewModel.setTabsSheetVisible(false) },
                 ),
         )
@@ -673,6 +734,7 @@ private fun BrowserTopBar(
     onReload: () -> Unit,
     onStop: () -> Unit,
     onFocusChange: (Boolean) -> Unit,
+    onSiteSettings: () -> Unit = {},
 ) {
     val isLoading = tab?.isLoading == true
     val progress by animateFloatAsState(
@@ -698,6 +760,7 @@ private fun BrowserTopBar(
                     onReload = onReload,
                     onStop = onStop,
                     onFocusChange = onFocusChange,
+                    onSiteSettings = onSiteSettings,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -737,6 +800,7 @@ private fun AddressBar(
     onReload: () -> Unit,
     onStop: () -> Unit,
     onFocusChange: (Boolean) -> Unit,
+    onSiteSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val url = tab?.url.orEmpty()
@@ -802,7 +866,12 @@ private fun AddressBar(
                         ).padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SiteSecurityIcon(tab = tab, isEditing = isFocused)
+                // 4.3: the security icon opens the per-site settings sheet.
+                SiteSecurityIcon(
+                    tab = tab,
+                    isEditing = isFocused,
+                    onClick = { if (!isFocused) onSiteSettings() },
+                )
                 Spacer(Modifier.width(12.dp))
                 Box(
                     modifier = Modifier.weight(1f),
@@ -836,6 +905,7 @@ private fun AddressBar(
 private fun SiteSecurityIcon(
     tab: BrowserTab?,
     isEditing: Boolean,
+    onClick: () -> Unit = {},
 ) {
     val (icon, tint, description) =
         when {
@@ -860,7 +930,7 @@ private fun SiteSecurityIcon(
         imageVector = icon,
         contentDescription = description,
         tint = tint,
-        modifier = Modifier.size(18.dp),
+        modifier = Modifier.size(18.dp).clickable(enabled = !isEditing, onClick = onClick),
     )
 }
 
@@ -1230,3 +1300,37 @@ private fun Context.openExternalUrl(url: String) {
     } catch (_: Exception) {
     }
 }
+
+/** The site-settings sheet and downloads dialog, split out of [BrowserSheets] (4.3/4.5). */
+@Composable
+private fun TransientBrowserDialogs(
+    state: BrowserUiState,
+    viewModel: BrowserViewModel,
+    showSiteSettings: Boolean,
+    onDismissSiteSettings: () -> Unit,
+    showDownloads: Boolean,
+    onDismissDownloads: () -> Unit,
+) {
+    if (showSiteSettings) {
+        val host = state.activeTab?.let { BrowserTab.hostOf(it.url) }.orEmpty()
+        if (host.isNotBlank()) {
+            SiteSettingsSheet(
+                host = host,
+                siteSetting = viewModel.currentSiteSetting(host),
+                onToggle = { transform -> viewModel.updateSiteSetting(host, transform) },
+                onReset = {
+                    viewModel.resetSiteSetting(host)
+                    onDismissSiteSettings()
+                },
+                onDismiss = onDismissSiteSettings,
+            )
+        }
+    }
+    if (showDownloads) {
+        val entries = remember(showDownloads) { viewModel.queryDownloads() }
+        DownloadsDialog(entries = entries, onDismiss = onDismissDownloads)
+    }
+}
+
+/** A fresh, untouched tab on the engine home page hosts the start-page overlay (4.5). */
+private fun BrowserTab.isFreshHomeTab(): Boolean = url == BrowserTab.DEFAULT_HOME_URL && !canGoBack && !isLoading

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Update
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -62,6 +63,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,14 +77,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.core.routing.RoutingOutcome
+import dev.libredirect.mobile.core.routing.RoutingTrace
+import dev.libredirect.mobile.core.routing.TraceReason
 import dev.libredirect.mobile.redirect.RedirectActivity
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.ServiceUiState
 import dev.libredirect.mobile.ui.browser.BrowserTab
+import dev.libredirect.mobile.ui.browser.PrivacyStats
 import dev.libredirect.mobile.ui.services.ServiceCard
 
 private const val TOP_SERVICES_LIMIT = 5
 
+// Mirrors MainViewModel.PAUSE_INDEFINITE: any pause stamp this far in the
+// future means "until I turn it back on".
+private const val PAUSE_INDEFINITE_SENTINEL = Long.MAX_VALUE / 4
+private const val PAUSE_MINUTES_SHORT = 15
+private const val PAUSE_MINUTES_HOUR = 60
+
+// Screen-level composition root: its branches only route to extracted
+// section composables, so the raw branch count stays here by design.
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun HomeScreen(
     state: MainUiState,
@@ -192,9 +207,12 @@ fun HomeScreen(
             item {
                 StatusHeroCard(
                     routingEnabled = state.routingEnabled,
+                    pausedUntilEpochMillis = state.pausedUntilEpochMillis,
                     activeServicesCount = state.services.count { it.enabled },
                     exceptionsCount = state.exceptions.size,
                     onRoutingToggle = actions.onRoutingEnabledChange,
+                    onPauseRouting = actions.onPauseRouting,
+                    onResumeRouting = actions.onResumeRouting,
                 )
             }
 
@@ -208,6 +226,28 @@ fun HomeScreen(
                     },
                     onOpenInApp = ::openInAppBrowser,
                     onOpenExternal = ::openInSystemBrowser,
+                    onExplain = {
+                        val normalized = normalizeLink(linkText.trim())
+                        if (normalized.isNotEmpty()) actions.onExplainRouting(normalized)
+                    },
+                )
+            }
+
+            // 2.8: routing explainer for the quick-link tester.
+            if (state.isTraceVisible && state.routingTrace != null) {
+                item {
+                    RoutingTraceCard(
+                        trace = state.routingTrace!!,
+                        onHide = actions.onHideTrace,
+                    )
+                }
+            }
+
+            // 3.4: local privacy counters.
+            item {
+                PrivacyStatsCard(
+                    stats = state.privacyStats,
+                    onReset = actions.onResetPrivacyStats,
                 )
             }
 
@@ -309,19 +349,23 @@ private fun LazyListScope.homeStatusCards(
 @Composable
 private fun StatusHeroCard(
     routingEnabled: Boolean,
+    pausedUntilEpochMillis: Long,
     activeServicesCount: Int,
     exceptionsCount: Int,
     onRoutingToggle: (Boolean) -> Unit,
+    onPauseRouting: (Int?) -> Unit,
+    onResumeRouting: () -> Unit,
 ) {
     // Opaque on purpose: a 50%-alpha container over the elevated card's own
     // shadowed backdrop composited into a darker edge ring + lighter inner
     // area, reading as a second card nested inside this one (worst in light
     // mode). An opaque color renders as one flat surface.
+    val isPaused = pausedUntilEpochMillis > System.currentTimeMillis()
     val containerColor =
-        if (routingEnabled) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
+        when {
+            isPaused -> MaterialTheme.colorScheme.tertiaryContainer
+            routingEnabled -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.surfaceVariant
         }
 
     ElevatedCard(
@@ -352,10 +396,10 @@ private fun StatusHeroCard(
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (routingEnabled) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.outline
+                                    when {
+                                        isPaused -> MaterialTheme.colorScheme.tertiary
+                                        routingEnabled -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.outline
                                     },
                                 ),
                     ) {
@@ -368,25 +412,34 @@ private fun StatusHeroCard(
                     }
 
                     Column {
-                        val routingStatusRes =
-                            if (routingEnabled) {
-                                R.string.home_routing_active
-                            } else {
-                                R.string.home_routing_disabled
+                        val (statusRes, descText) =
+                            when {
+                                isPaused -> {
+                                    val until =
+                                        if (pausedUntilEpochMillis >= PAUSE_INDEFINITE_SENTINEL) {
+                                            stringResource(R.string.home_pause_until_resume)
+                                        } else {
+                                            android.text.format.DateFormat
+                                                .getTimeFormat(LocalContext.current)
+                                                .format(java.util.Date(pausedUntilEpochMillis))
+                                        }
+                                    R.string.home_routing_paused to
+                                        stringResource(R.string.home_routing_paused_desc_fmt, until)
+                                }
+                                routingEnabled ->
+                                    R.string.home_routing_active to
+                                        stringResource(R.string.home_routing_active_desc)
+                                else ->
+                                    R.string.home_routing_disabled to
+                                        stringResource(R.string.home_routing_disabled_desc)
                             }
                         Text(
-                            text = stringResource(routingStatusRes),
+                            text = stringResource(statusRes),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                         )
-                        val routingDescRes =
-                            if (routingEnabled) {
-                                R.string.home_routing_active_desc
-                            } else {
-                                R.string.home_routing_disabled_desc
-                            }
                         Text(
-                            text = stringResource(routingDescRes),
+                            text = descText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -405,6 +458,30 @@ private fun StatusHeroCard(
                             uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                         ),
                 )
+            }
+
+            // 2.6: temporary pause row — visible while routing is on.
+            if (routingEnabled) {
+                if (isPaused) {
+                    TextButton(onClick = onResumeRouting) {
+                        Text(stringResource(R.string.home_resume_routing))
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(onClick = { onPauseRouting(PAUSE_MINUTES_SHORT) }) {
+                            Text(stringResource(R.string.home_pause_15m), style = MaterialTheme.typography.labelMedium)
+                        }
+                        TextButton(onClick = { onPauseRouting(PAUSE_MINUTES_HOUR) }) {
+                            Text(stringResource(R.string.home_pause_1h), style = MaterialTheme.typography.labelMedium)
+                        }
+                        TextButton(onClick = { onPauseRouting(null) }) {
+                            Text(
+                                stringResource(R.string.home_pause_until_resume),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
             }
 
             HorizontalDivider(
@@ -460,6 +537,7 @@ private fun QuickLinkCard(
     onLinkTextChange: (String) -> Unit,
     onOpenInApp: () -> Unit,
     onOpenExternal: () -> Unit,
+    onExplain: () -> Unit,
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(18.dp),
@@ -545,7 +623,225 @@ private fun QuickLinkCard(
                     )
                 }
             }
+
+            // 2.8: "why did it (not) redirect?" trace for the input above.
+            TextButton(onClick = onExplain, contentPadding = PaddingValues(0.dp)) {
+                Text(stringResource(R.string.home_why_button))
+            }
         }
+    }
+}
+
+/** The routing explainer card (2.8): what happened to the tested link, and why. */
+@Composable
+private fun RoutingTraceCard(
+    trace: RoutingTrace,
+    onHide: () -> Unit,
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.home_why_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                IconButton(onClick = onHide) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.home_why_hide),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+
+            Text(
+                text =
+                    when (trace.outcome) {
+                        RoutingOutcome.REDIRECT ->
+                            stringResource(R.string.trace_redirected_fmt, trace.resultUrl.orEmpty())
+                        RoutingOutcome.PASSTHROUGH -> stringResource(R.string.trace_passthrough_fmt)
+                        RoutingOutcome.FAILURE ->
+                            stringResource(traceReasonRes(trace.reason))
+                    },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            val reasonText = stringResource(traceReasonRes(trace.reason))
+            Text(
+                text = reasonText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            trace.detail?.let {
+                Text(
+                    text = stringResource(R.string.trace_exception_fmt, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            trace.routeId?.let { routeId ->
+                Text(
+                    text = stringResource(R.string.trace_route_fmt, routeId),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            trace.frontendId?.let { frontendId ->
+                Text(
+                    text = stringResource(R.string.trace_frontend_fmt, frontendId),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            trace.selectionMode?.let { mode ->
+                Text(
+                    text = stringResource(R.string.trace_selection_fmt, selectionLabel(mode)),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            trace.instance?.let { instance ->
+                Text(
+                    text = stringResource(R.string.trace_instance_fmt, instance),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (trace.strippedParams > 0) {
+                Text(
+                    text = stringResource(R.string.trace_stripped_fmt, trace.strippedParams),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (trace.unwrappedLayers > 0) {
+                Text(
+                    text = stringResource(R.string.trace_unwrapped_fmt, trace.unwrappedLayers),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun selectionLabel(mode: String): String =
+    when (mode) {
+        "fastest" -> stringResource(R.string.trace_selection_fastest)
+        "pinned" -> stringResource(R.string.trace_selection_pinned)
+        "custom" -> stringResource(R.string.trace_selection_custom)
+        "override" -> stringResource(R.string.trace_selection_override)
+        else -> stringResource(R.string.trace_selection_automatic)
+    }
+
+@Composable
+private fun traceReasonRes(reason: TraceReason): Int =
+    when (reason) {
+        TraceReason.NO_ROUTE -> R.string.trace_reason_no_route
+        TraceReason.ROUTE_DISABLED -> R.string.trace_reason_route_disabled
+        TraceReason.EXCEPTION_MATCHED -> R.string.trace_reason_exception_matched
+        TraceReason.ASK_MODE -> R.string.trace_reason_ask_mode
+        TraceReason.PAUSED -> R.string.trace_reason_paused
+        TraceReason.ROUTING_DISABLED -> R.string.trace_reason_routing_disabled
+        TraceReason.STRATEGY_PASSTHROUGH -> R.string.trace_reason_strategy_passthrough
+        TraceReason.NO_INSTANCE -> R.string.trace_reason_no_instance
+        TraceReason.TARGET_UNCHANGED -> R.string.trace_reason_target_unchanged
+        TraceReason.NOT_ELIGIBLE -> R.string.trace_reason_not_eligible
+        TraceReason.INSTANCE_COOLDOWN -> R.string.trace_reason_instance_cooldown
+        TraceReason.NONE -> R.string.trace_passthrough_fmt
+    }
+
+/** Local privacy counters (3.4): what routing did on this device, resettable. */
+@Composable
+private fun PrivacyStatsCard(
+    stats: PrivacyStats,
+    onReset: () -> Unit,
+) {
+    var confirmReset by remember { mutableStateOf(false) }
+    ElevatedCard(
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.home_privacy_stats_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                TextButton(onClick = { confirmReset = true }) {
+                    Text(stringResource(R.string.home_privacy_stats_reset))
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround,
+            ) {
+                StatusStatItem(stringResource(R.string.home_privacy_stat_redirects), stats.totalRedirects.toString())
+                StatusStatItem(
+                    stringResource(R.string.home_privacy_stat_stripped),
+                    stats.strippedTrackingParams.toString(),
+                )
+                StatusStatItem(stringResource(R.string.home_privacy_stat_unwrapped), stats.unwrappedWrappers.toString())
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround,
+            ) {
+                StatusStatItem(
+                    stringResource(R.string.home_privacy_stat_short_links),
+                    stats.resolvedShortLinks.toString(),
+                )
+                StatusStatItem(stringResource(R.string.home_privacy_stat_blocked), stats.blockedRequests.toString())
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text(stringResource(R.string.home_privacy_stats_reset)) },
+            text = { Text(stringResource(R.string.home_privacy_stats_reset_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmReset = false
+                        onReset()
+                    },
+                ) {
+                    Text(stringResource(R.string.action_clear), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 

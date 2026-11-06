@@ -18,14 +18,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -82,6 +86,11 @@ data class BrowserMenuActions(
     val onOpenExternal: () -> Unit,
     val onClearBrowsingData: () -> Unit,
     val onCloseTab: () -> Unit,
+    val onToggleReaderMode: () -> Unit = {},
+    val onPrint: () -> Unit = {},
+    val onOpenDownloads: () -> Unit = {},
+    val onShareOriginal: () -> Unit = {},
+    val onCopyOriginal: () -> Unit = {},
     val onDismiss: () -> Unit,
 )
 
@@ -94,6 +103,7 @@ fun BrowserMenuSheet(
     autoDarken: Boolean,
     textZoom: Int,
     instanceAlternatives: InstanceAlternatives?,
+    blockedCount: Int,
     onTextZoomChange: (Int) -> Unit,
     actions: BrowserMenuActions,
 ) {
@@ -121,6 +131,7 @@ fun BrowserMenuSheet(
             MenuHeader(
                 tab = tab,
                 isBookmarked = isBookmarked,
+                blockedCount = blockedCount,
                 onToggleBookmark = actions.onToggleBookmark,
             )
 
@@ -198,6 +209,41 @@ fun BrowserMenuSheet(
                     onClick = dismissThen(actions.onTryAnotherInstance),
                 )
             }
+            // Original-link actions (2.7): share/copy the pre-redirect URL.
+            if (tab?.originalUrl != null) {
+                MenuRow(
+                    icon = Icons.Default.Share,
+                    label = stringResource(R.string.browser_menu_share_original),
+                    onClick = dismissThen(actions.onShareOriginal),
+                )
+                MenuRow(
+                    icon = Icons.Default.ContentCopy,
+                    label = stringResource(R.string.browser_menu_copy_original),
+                    onClick = dismissThen(actions.onCopyOriginal),
+                )
+            }
+            MenuRow(
+                icon = Icons.AutoMirrored.Filled.MenuBook,
+                label =
+                    stringResource(
+                        if (tab?.isReaderMode == true) {
+                            R.string.browser_reader_exit
+                        } else {
+                            R.string.browser_menu_reader_mode
+                        },
+                    ),
+                onClick = dismissThen(actions.onToggleReaderMode),
+            )
+            MenuRow(
+                icon = Icons.Default.Print,
+                label = stringResource(R.string.browser_menu_print),
+                onClick = dismissThen(actions.onPrint),
+            )
+            MenuRow(
+                icon = Icons.Default.Download,
+                label = stringResource(R.string.browser_menu_downloads),
+                onClick = dismissThen(actions.onOpenDownloads),
+            )
             MenuRow(
                 icon = Icons.AutoMirrored.Filled.OpenInNew,
                 label = stringResource(R.string.browser_menu_open_external),
@@ -228,6 +274,7 @@ fun BrowserMenuSheet(
 private fun MenuHeader(
     tab: BrowserTab?,
     isBookmarked: Boolean,
+    blockedCount: Int,
     onToggleBookmark: () -> Unit,
 ) {
     Row(
@@ -274,6 +321,14 @@ private fun MenuHeader(
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // 4.2: per-page blocked-request counter.
+            if (blockedCount > 0) {
+                Text(
+                    text = stringResource(R.string.browser_blocked_fmt, blockedCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

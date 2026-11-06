@@ -12,14 +12,17 @@ import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.browser.InAppRedirectInfo
 import dev.libredirect.mobile.core.routing.RoutingFailure
 import dev.libredirect.mobile.core.routing.RoutingResult
-import dev.libredirect.mobile.core.routing.UrlRouter
+import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlCandidate
+import dev.libredirect.mobile.core.url.UrlParser
+import dev.libredirect.mobile.diagnostics.DiagnosticsLog
+import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
 import dev.libredirect.mobile.ui.browser.BrowserDataRepository
+import dev.libredirect.mobile.ui.browser.PrivacyStats
 import dev.libredirect.mobile.ui.browser.SearchEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -28,12 +31,20 @@ import kotlinx.coroutines.withContext
  * exists only to compute a destination and hand off to [BrowserLauncher]
  * before finishing, per the project plan's performance target
  * (route resolution should not block on drawing anything).
+ *
+ * Pipeline order (2.x/3.x): extract the URL → unwrap wrappers (3.1) →
+ * optionally resolve shorteners (3.3) → route with health data (2.1) →
+ * ask dialog when the service demands it (2.4) → launch; privacy counters
+ * land in the local stats store (3.4).
  */
 class RedirectActivity : ComponentActivity() {
     @Suppress("TooGenericExceptionCaught")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = applicationContext as LibRedirectApplication
+        // The referrer must be read now: by the time the routing coroutine
+        // runs this activity may already be destroyed (2.5).
+        val referrer = getReferrer()?.toString()
         // Route on the application scope, not the activity's: this screen is
         // invisible and finishes (or is torn down) as soon as the user moves
         // on — a lifecycle-scoped coroutine would be cancelled mid-route and
@@ -41,11 +52,12 @@ class RedirectActivity : ComponentActivity() {
         app.applicationScope.launch {
             try {
                 val incomingUrl = extractUrl(intent)
-                if (incomingUrl != null) route(app, incomingUrl)
+                if (incomingUrl != null) route(app, incomingUrl, referrer)
             } catch (_: CancellationException) {
                 // Scope cancellation means the process is going away anyway.
             } catch (error: Exception) {
                 Log.e(TAG, "Could not route incoming URL", error)
+                DiagnosticsLog.record(TAG, "Routing failed: ${error.message}")
                 showMessage(app, R.string.redirect_cannot_open)
             } finally {
                 // A no-op when the activity is already gone.
@@ -77,12 +89,17 @@ class RedirectActivity : ComponentActivity() {
             ?.getStringExtra(Intent.EXTRA_TEXT)
             ?.let(UrlCandidate::find)
 
+    @Suppress("LongMethod")
     private suspend fun route(
         app: LibRedirectApplication,
         url: String,
+        referrer: String?,
     ) {
         val manifest = withContext(Dispatchers.IO) { app.manifestRepository.activeManifest() }
-        val settings = SettingsRepository(app).settings.first()
+        val settings = SettingsRepository(app).current()
+        val dataRepository = BrowserDataRepository(app)
+        val sourceApp = LinkPipeline.sourcePackageFromReferrer(referrer)
+        val pipeline = LinkPipeline(settings, sourceApp)
 
         // Process-text input that is not a URL becomes a search in the user's
         // engine instead of being rejected as an unopenable string.
@@ -97,26 +114,41 @@ class RedirectActivity : ComponentActivity() {
                     ),
             )
 
+        val prepared = pipeline.prepare(effectiveUrl)
+        val health = pipeline.healthSnapshot(dataRepository)
+        val context = pipeline.routingContext(health, nowMillis = System.currentTimeMillis())
+
+        // Paused routing (2.6) behaves exactly like the master switch off:
+        // links pass through with tracking cleanup only.
+        val routingActive = settings.routingEnabled && !settings.isRoutingPaused()
         val result =
-            if (!settings.routingEnabled) {
-                RoutingResult.Passthrough(effectiveUrl)
-            } else if (manifest != null) {
-                UrlRouter(manifest).resolve(effectiveUrl, settings.routingContext())
+            if (!routingActive || manifest == null) {
+                RoutingResult.Passthrough(prepared.url)
             } else {
-                RoutingResult.Passthrough(effectiveUrl)
+                dev.libredirect.mobile.core.routing.UrlRouter(manifest).resolve(prepared.url, context)
             }
 
         val destination = destinationFor(result) ?: return showMessage(app, R.string.redirect_cannot_open)
 
-        val redirect =
-            (result as? RoutingResult.Redirect)?.also {
-                // Local per-route usage counter (A6), same as in-app redirects.
-                BrowserDataRepository(app).recordRedirect(it.routeId)
-            }
+        // 2.4: services in "ask every time" mode open the lightweight ask
+        // dialog instead of redirecting; the dialog finishes the launch.
+        val redirect = result as? RoutingResult.Redirect
+        if (redirect != null && settings.isRouteAskMode(redirect.routeId)) {
+            AskRouteActivity.start(app, redirect, prepared.url)
+            return
+        }
+
+        if (redirect != null) {
+            recordOutcome(dataRepository, settings, prepared, redirected = true)
+            dataRepository.recordRedirect(redirect.routeId)
+        } else if (result is RoutingResult.Passthrough && prepared.url != effectiveUrl) {
+            recordOutcome(dataRepository, settings, prepared, redirected = false)
+        }
+
         val redirectInfo =
             redirect?.let {
                 InAppRedirectInfo(
-                    originalUrl = it.originalUrl,
+                    originalUrl = prepared.url,
                     routeId = it.routeId,
                     frontendId = it.frontendId,
                     instance = it.instance,
@@ -135,6 +167,37 @@ class RedirectActivity : ComponentActivity() {
         if (!launched) {
             showMessage(app, R.string.redirect_no_browser)
         }
+    }
+
+    /**
+     * Local privacy counters (3.4): one redirect/passthrough event plus the
+     * tracking parameters the router cleaned off the routed URL and the
+     * wrappers/short-links the pipeline unwrapped on the way.
+     */
+    private suspend fun recordOutcome(
+        dataRepository: BrowserDataRepository,
+        settings: AppSettings,
+        prepared: LinkPipeline.Prepared,
+        redirected: Boolean,
+    ) {
+        val parsed = UrlParser.parse(prepared.url)
+        val scope = settings.customTrackingRules()
+        val stripped =
+            parsed?.let {
+                TrackingParams.removedCount(
+                    it.rawQuery,
+                    it.host,
+                    dev.libredirect.mobile.core.url.CustomTrackingScope(scope.global, scope.byHost),
+                )
+            } ?: 0
+        dataRepository.addPrivacyStats(
+            PrivacyStats(
+                totalRedirects = if (redirected) 1 else 0,
+                strippedTrackingParams = stripped.toLong(),
+                unwrappedWrappers = prepared.unwrappedLayers.toLong(),
+                resolvedShortLinks = if (prepared.shortLinkResolved) 1 else 0,
+            ),
+        )
     }
 
     /**

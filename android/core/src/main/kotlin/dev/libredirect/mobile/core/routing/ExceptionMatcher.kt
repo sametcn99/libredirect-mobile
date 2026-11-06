@@ -6,19 +6,31 @@ object ExceptionMatcher {
     fun matches(
         url: ParsedUrl,
         rules: List<ExceptionRule>,
-    ): Boolean = rules.any { matchesRule(url, it) }
+        sourceApp: String? = null,
+    ): Boolean = rules.any { matchesRule(url, it, sourceApp) }
 
     private fun matchesRule(
         url: ParsedUrl,
         rule: ExceptionRule,
+        sourceApp: String?,
     ): Boolean =
         when (rule) {
-            is ExceptionRule.Domain -> {
-                val host = rule.host.lowercase()
-                url.host == host || url.host.endsWith(".$host")
-            }
+            is ExceptionRule.Domain ->
+                if (rule.host.contains('*')) {
+                    WildcardPattern.matches(rule.host, url.host)
+                } else {
+                    val host = rule.host.lowercase()
+                    url.host == host || url.host.endsWith(".$host")
+                }
             is ExceptionRule.UrlPrefix -> {
-                "${url.host}${url.rawPath}".startsWith(rule.value, ignoreCase = true)
+                val target = "${url.host}${url.rawPath}"
+                if (rule.value.contains('*')) {
+                    WildcardPattern.matches(rule.value, target)
+                } else {
+                    target.startsWith(rule.value, ignoreCase = true)
+                }
             }
+            is ExceptionRule.SourceApp ->
+                sourceApp != null && sourceApp.equals(rule.packageName, ignoreCase = true)
         }
 }

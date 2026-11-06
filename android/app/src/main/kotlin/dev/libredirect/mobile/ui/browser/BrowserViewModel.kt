@@ -24,6 +24,7 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -36,34 +37,44 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.blocker.BlocklistStore
+import dev.libredirect.mobile.blocker.ContentBlocker
+import dev.libredirect.mobile.browser.InstanceFailover
+import dev.libredirect.mobile.browser.InstanceProbe
 import dev.libredirect.mobile.browser.ServiceShortcutResolver
+import dev.libredirect.mobile.browser.ShortLinkResolver
 import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Strategy
+import dev.libredirect.mobile.core.routing.ExceptionMatcher
+import dev.libredirect.mobile.core.routing.InstanceHealth
+import dev.libredirect.mobile.core.routing.ReverseRouter
 import dev.libredirect.mobile.core.routing.RouteMatcher
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
+import dev.libredirect.mobile.core.url.CustomTrackingScope
+import dev.libredirect.mobile.core.url.ShortLinkPolicy
+import dev.libredirect.mobile.core.url.TrackingParams
+import dev.libredirect.mobile.core.url.UrlParser
+import dev.libredirect.mobile.core.url.UrlUnwrapper
+import dev.libredirect.mobile.media.MediaPlaybackBus
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
+import dev.libredirect.mobile.settings.SiteSetting
+import dev.libredirect.mobile.settings.TabAutoClose
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 /**
  * Instance choices offered for the active tab's original link. Built when the
@@ -86,6 +97,14 @@ data class InstanceAlternatives(
 data class FileChooserRequest(
     val id: Long,
     val intent: Intent,
+)
+
+/** One row of the in-app downloads list (4.5), read from the system DownloadManager. */
+data class DownloadEntry(
+    val id: Long,
+    val title: String,
+    val status: Int,
+    val localUri: String?,
 )
 
 data class BrowserUiState(
@@ -113,6 +132,8 @@ data class BrowserUiState(
     /** Per-instance time-to-first-byte in ms; [LATENCY_FAILED] marks unreachable hosts. Empty until measured. */
     val instanceLatencies: Map<String, Long> = emptyMap(),
     val isMeasuringInstances: Boolean = false,
+    /** Hide the toolbars while the page is scrolled down (4.5 setting). */
+    val autoHideToolbar: Boolean = false,
     val pageTheme: PageTheme = PageTheme.DEFAULT,
     val autoDarken: Boolean = true,
     /** Page text scaling in percent (100 = default), editable from the browser menu. */
@@ -120,6 +141,10 @@ data class BrowserUiState(
     /** A page's `<video>`/fullscreen element is rendering its own view; the browser UI is hidden. */
     val isFullscreenVideo: Boolean = false,
     val fullscreenView: View? = null,
+    /** Width/height of the fullscreen view, for the PiP aspect ratio (4.1). */
+    val fullscreenAspectRatio: Float? = null,
+    /** The activity is currently in picture-in-picture (toolbars hidden anyway). */
+    val isInPipMode: Boolean = false,
     /** Long-pressed link/image target offered to the context menu; null hides the dialog. */
     val linkContextUrl: String? = null,
     /** Pending `onShowFileChooser` request; null when none. */
@@ -151,6 +176,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val manifestRepository = app.manifestRepository
     private val settingsRepository = SettingsRepository(app)
     private val browserDataRepository = BrowserDataRepository(app)
+    private val blocklistStore = BlocklistStore(app)
+    private val instanceProbe = InstanceProbe()
+    private val shortLinkResolver = ShortLinkResolver()
 
     private val initialTab = BrowserTab(id = UUID.randomUUID().toString(), url = BrowserTab.DEFAULT_HOME_URL)
 
@@ -196,6 +224,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private var cachedSettings: AppSettings = AppSettings()
 
     /**
+     * In-memory snapshot of instance latencies + failure cooldowns (2.1),
+     * kept current so the synchronous WebView navigation path can route with
+     * health data without suspending.
+     */
+    @Volatile
+    private var cachedHealth: Map<String, InstanceHealth> = emptyMap()
+
+    /**
      * Completed once the manifest and the first settings value have landed on
      * a cold start. Until then [resolveRedirection] would route against
      * defaults (or skip routing on a null manifest), so initial page loads
@@ -238,6 +274,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             // Take the first settings value synchronously so no navigation can
             // resolve against defaults while DataStore is still reading.
             cachedSettings = settingsRepository.settings.first()
+            refreshHealthSnapshot()
             initialStateLoaded.complete(Unit)
             refreshManifestDerivedState()
             settingsRepository.settings.collect { settings ->
@@ -255,6 +292,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         pageTheme = PageTheme.fromId(settings.browserPageTheme),
                         autoDarken = settings.browserAutoDarken,
                         textZoom = settings.browserTextZoom,
+                        autoHideToolbar = settings.autoHideToolbar,
                     )
                 }
                 applyAutoDarkenToAll(settings.browserAutoDarken)
@@ -279,6 +317,32 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             browserDataRepository.history.collect { history ->
                 _uiState.update { it.copy(history = history) }
             }
+        }
+        MediaPlaybackBus.commands
+            .onEach { command -> onMediaCommand(command) }
+            .launchIn(viewModelScope)
+    }
+
+    /** Reloads the in-memory instance-health snapshot from local storage (2.1). */
+    private fun refreshHealthSnapshot() {
+        viewModelScope.launch {
+            val latencies = browserDataRepository.cachedLatencies()
+            val failures = browserDataRepository.instanceFailures()
+            cachedHealth =
+                (latencies.keys + failures.keys).associateWith { host ->
+                    InstanceHealth(latencyMillis = latencies[host], lastFailedAtMillis = failures[host])
+                }
+        }
+    }
+
+    /** Notification actions (4.6): run play/pause as JS into the active page. */
+    private fun onMediaCommand(command: MediaPlaybackBus.Command) {
+        val webView = webViewPool[_uiState.value.activeTabId] ?: return
+        when (command) {
+            MediaPlaybackBus.Command.PLAY_PAUSE ->
+                mediaToggleJs()?.let { js -> webView.evaluateJavascript(js, null) }
+            MediaPlaybackBus.Command.STOP ->
+                MediaPlaybackBus.reportPlaying(false)
         }
     }
 
@@ -576,8 +640,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun selectTab(tabId: String) {
         captureActiveTabThumbnail()
         webViewPool[_uiState.value.activeTabId]?.clearMatches()
-        _uiState.update {
-            it.copy(
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map { tab ->
+                        // lastActiveAt drives the tab switcher's recent sort (4.5).
+                        if (tab.id == tabId) tab.copy(lastActiveAt = System.currentTimeMillis()) else tab
+                    },
                 activeTabId = tabId,
                 isTabsSheetVisible = false,
                 isFindInPageVisible = false,
@@ -676,45 +745,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (_uiState.value.isMeasuringInstances) return
         _uiState.update { it.copy(isMeasuringInstances = true, instanceLatencies = emptyMap()) }
         viewModelScope.launch {
-            val results =
-                withContext(Dispatchers.IO) {
-                    measureLatencies(alternatives.instances)
-                }
+            val results = instanceProbe.measure(alternatives.instances)
             _uiState.update { it.copy(instanceLatencies = results, isMeasuringInstances = false) }
             browserDataRepository.saveLatencies(results)
+            refreshHealthSnapshot()
         }
     }
-
-    private suspend fun measureLatencies(instances: List<String>): Map<String, Long> =
-        coroutineScope {
-            val client =
-                OkHttpClient
-                    .Builder()
-                    .connectTimeout(LATENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .readTimeout(LATENCY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .build()
-            val semaphore = Semaphore(LATENCY_PROBE_CONCURRENCY)
-            instances
-                .map { instance ->
-                    async { instance to semaphore.withPermit { probeInstance(client, instance) } }
-                }.awaitAll()
-                .toMap()
-        }
-
-    @Suppress("TooGenericExceptionCaught")
-    private fun probeInstance(
-        client: OkHttpClient,
-        instance: String,
-    ): Long =
-        try {
-            val request = Request.Builder().url(instance).head().build()
-            val startNanos = System.nanoTime()
-            client.newCall(request).execute().use {
-                (System.nanoTime() - startNanos) / NANOS_PER_MILLI
-            }
-        } catch (_: Exception) {
-            LATENCY_FAILED_MILLIS
-        }
 
     /**
      * Pooled WebViews keep the theme they were created with; the screen
@@ -776,7 +812,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             return
         }
         customViewCallback = callback
-        _uiState.update { it.copy(isFullscreenVideo = true, fullscreenView = view) }
+        // Capture the ratio now: once laid out the view is what PiP mirrors (4.1).
+        val aspect = if (view.width > 0 && view.height > 0) view.width.toFloat() / view.height else null
+        _uiState.update { it.copy(isFullscreenVideo = true, fullscreenView = view, fullscreenAspectRatio = aspect) }
     }
 
     /** User-initiated exit (back gesture/button): ends the fullscreen view via its callback. */
@@ -794,8 +832,31 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** Page/system-initiated exit: tear the custom view down and restore the browser UI. */
     private fun clearFullscreenVideoState() {
         val view = _uiState.value.fullscreenView
-        _uiState.update { it.copy(isFullscreenVideo = false, fullscreenView = null) }
+        _uiState.update { it.copy(isFullscreenVideo = false, fullscreenView = null, fullscreenAspectRatio = null) }
         (view?.parent as? ViewGroup)?.removeView(view)
+    }
+
+    // --- 4.1 picture-in-picture ---
+
+    /** True when leaving the app now should drop into PiP (fullscreen video playing). */
+    fun shouldEnterPictureInPicture(): Boolean = _uiState.value.isFullscreenVideo
+
+    /** Aspect ratio of the current fullscreen view, or null when unknown. */
+    fun fullscreenAspectRatio(): Float? =
+        _uiState.value.fullscreenAspectRatio
+            ?: _uiState.value.fullscreenView
+                ?.takeIf { it.width > 0 && it.height > 0 }
+                ?.let { view -> view.width.toFloat() / view.height }
+
+    /** Aspect-ratio hint captured when fullscreen video starts. */
+    fun onFullscreenVideoStarted(aspectRatio: Float?) {
+        if (aspectRatio != null && aspectRatio > 0f) {
+            _uiState.update { it.copy(fullscreenAspectRatio = aspectRatio) }
+        }
+    }
+
+    fun onPictureInPictureModeChanged(isInPipMode: Boolean) {
+        _uiState.update { it.copy(isInPipMode = isInPipMode) }
     }
 
     /** Shows the long-press context menu for a link/image target picked from [WebView.hitTestResult]. */
@@ -1123,22 +1184,72 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    @Suppress("ReturnCount")
+    @Suppress("ReturnCount", "LongMethod")
     private fun resolveRedirection(
         url: String,
         tabId: String,
     ): String? {
         val settings = cachedSettings
         val manifest = cachedManifest
-        if (!settings.routingEnabled || manifest == null) return null
+        // Paused routing (2.6) behaves like the master switch off here too.
+        if (!settings.routingEnabled || settings.isRoutingPaused() || manifest == null) return null
 
-        val result = UrlRouter(manifest).resolve(url, settings.routingContext())
+        // 3.1: unwrap wrappers/AMP locally before routing; an excepted URL is
+        // left byte-for-byte alone.
+        var workingUrl = url
+        if (settings.unwrapRedirectWrappersEnabled && !isExceptionMatch(url)) {
+            val unwrapped = UrlUnwrapper.unwrapAll(workingUrl)
+            if (unwrapped.url != workingUrl) {
+                workingUrl = unwrapped.url
+                addPrivacyStats(PrivacyStats(unwrappedWrappers = unwrapped.count.toLong()))
+            }
+        }
+
+        // 3.3: strictly opt-in short-link resolution needs the network, so it
+        // runs async and re-enters routing with the resolved target; the
+        // original link loads meanwhile (fail-open).
+        if (settings.shortLinkResolveEnabled && !isExceptionMatch(workingUrl) && isAllowedShortener(workingUrl)) {
+            viewModelScope.launch {
+                val resolved = shortLinkResolver.resolve(workingUrl)
+                if (resolved.changed && resolved.url != workingUrl) {
+                    addPrivacyStats(PrivacyStats(resolvedShortLinks = 1))
+                    routeAndApply(resolved.url, tabId, originalForRecord = workingUrl)
+                }
+            }
+        }
+        return routeAndApply(workingUrl, tabId, originalForRecord = null)
+    }
+
+    /**
+     * Runs the actual routing decision for a (preprocessed) URL and applies
+     * the redirect to the tab. Returns the redirected URL, or null when the
+     * link passes through.
+     */
+    @Suppress("ReturnCount") // guard chain: early-outs precede the redirect apply
+    private fun routeAndApply(
+        url: String,
+        tabId: String,
+        originalForRecord: String?,
+    ): String? {
+        val manifest = cachedManifest ?: return null
+        val settings = cachedSettings
+        val context =
+            settings
+                .routingContext()
+                .copy(instanceHealth = cachedHealth, nowMillis = System.currentTimeMillis())
+        val result = UrlRouter(manifest).resolve(url, context)
         if (result !is RoutingResult.Redirect) return null
 
-        // Local, per-route usage counter (A6): device-only, drives the
-        // service detail screen's "redirected N times" line.
+        // Local, per-route usage counter (A6) + privacy counters (3.4).
+        val strippedCount = strippedParamCount(url)
         viewModelScope.launch {
             browserDataRepository.recordRedirect(result.routeId)
+            addPrivacyStats(
+                PrivacyStats(
+                    totalRedirects = 1,
+                    strippedTrackingParams = strippedCount.toLong(),
+                ),
+            )
         }
 
         val route = manifest.routes.find { it.id == result.routeId }
@@ -1146,7 +1257,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         val frontendName = route?.frontends?.find { it.id == result.frontendId }?.name ?: result.frontendId
         val notice =
             RedirectNotice(
-                originalUrl = url,
+                originalUrl = originalForRecord ?: url,
                 redirectedUrl = result.redirectedUrl,
                 serviceName = serviceName,
                 frontendName = frontendName,
@@ -1164,7 +1275,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 tabs =
                     current.tabs.map { tab ->
                         if (tab.id == tabId) {
-                            tab.copy(lastRedirect = notice, originalUrl = url)
+                            tab.copy(
+                                lastRedirect = notice,
+                                originalUrl = originalForRecord ?: url,
+                                failoverAttempts = 0,
+                            )
                         } else {
                             tab
                         }
@@ -1172,6 +1287,33 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         return result.redirectedUrl
+    }
+
+    private fun isExceptionMatch(url: String): Boolean {
+        val parsed = UrlParser.parse(url) ?: return false
+        return ExceptionMatcher.matches(parsed, cachedSettings.exceptions)
+    }
+
+    private fun isAllowedShortener(url: String): Boolean {
+        val host = UrlParser.parse(url)?.host ?: return false
+        return ShortLinkPolicy.isAllowed(host)
+    }
+
+    private fun strippedParamCount(url: String): Int {
+        val parsed = UrlParser.parse(url) ?: return 0
+        val rules = cachedSettings.customTrackingRules()
+        return TrackingParams.removedCount(
+            parsed.rawQuery,
+            parsed.host,
+            CustomTrackingScope(global = rules.global, byHost = rules.byHost),
+        )
+    }
+
+    /** Local privacy counters (3.4); the Home card shows and resets these. */
+    private fun addPrivacyStats(delta: PrivacyStats) {
+        viewModelScope.launch {
+            browserDataRepository.addPrivacyStats(delta)
+        }
     }
 
     /**
@@ -1228,16 +1370,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Instances the active tab's original link could be served by, or null when
-     * the tab has no redirectable original link (routing off, disabled route,
-     * unknown route, or a frontend without instances).
+     * Instances the given tab's original link could be served by, or null
+     * when the tab has no redirectable original link (routing off, disabled
+     * route, unknown route, or a frontend without instances). Defaults to
+     * the active tab.
      */
     @Suppress("ReturnCount")
-    private fun computeInstanceAlternatives(): InstanceAlternatives? {
+    private fun computeInstanceAlternatives(tab: BrowserTab? = _uiState.value.activeTab): InstanceAlternatives? {
         val manifest = cachedManifest ?: return null
         if (!cachedSettings.routingEnabled) return null
-        val tab = _uiState.value.activeTab ?: return null
-        val original = tab.originalUrl ?: return null
+        val activeTab = tab ?: return null
+        val original = activeTab.originalUrl ?: return null
         val route = RouteMatcher(manifest).match(BrowserTab.hostOf(original)) ?: return null
         if (route.id in cachedSettings.disabledRoutes) return null
         val frontendId = cachedSettings.selectedFrontends[route.id] ?: route.frontends.first().id
@@ -1245,11 +1388,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (!Strategy.requiresInstances(frontend.strategy)) return null
 
         val currentInstance =
-            tab.lastRedirect
+            activeTab.lastRedirect
                 ?.takeIf { it.routeId == route.id && it.frontendId == frontend.id }
                 ?.instance
                 ?: frontend.instances.firstOrNull { instance ->
-                    BrowserTab.hostOf(tab.url) == BrowserTab.hostOf(instance)
+                    BrowserTab.hostOf(activeTab.url) == BrowserTab.hostOf(instance)
                 }
         return InstanceAlternatives(
             routeId = route.id,
@@ -1281,10 +1424,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
      */
     private suspend fun restoreSession() {
         val session = browserDataRepository.loadSession() ?: return
+        val staleCutoff = staleTabCutoff()
         val restoredTabs =
             session.tabs
                 .asSequence()
                 .filter { it.url.startsWith("http", ignoreCase = true) }
+                .filter { persisted -> isTabFreshEnough(persisted, staleCutoff) }
                 .take(MAX_RESTORED_TABS)
                 .map { persisted ->
                     val notice =
@@ -1305,6 +1450,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         title = BrowserTab.hostOf(persisted.url),
                         lastRedirect = notice,
                         originalUrl = persisted.originalUrl?.takeIf { notice != null },
+                        createdAt = persisted.createdAtEpochMillis.takeIf { it > 0 } ?: System.currentTimeMillis(),
+                        group = persisted.group,
                     )
                 }.toList()
         if (restoredTabs.isEmpty()) return
@@ -1344,6 +1491,25 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
+     * Cutoff below which restored tabs are dropped (4.5 auto-close); null
+     * when the setting is "never". Tabs persisted before the feature has no
+     * timestamp (0) and are always kept.
+     */
+    private fun isTabFreshEnough(
+        persisted: PersistedTab,
+        staleCutoff: Long?,
+    ): Boolean =
+        staleCutoff == null || persisted.createdAtEpochMillis <= 0 || persisted.createdAtEpochMillis >= staleCutoff
+
+    private fun staleTabCutoff(): Long? =
+        when (TabAutoClose.fromId(cachedSettings.autoCloseOldTabs)) {
+            TabAutoClose.NEVER -> null
+            TabAutoClose.ONE_DAY -> System.currentTimeMillis() - ONE_DAY_MILLIS
+            TabAutoClose.ONE_WEEK -> System.currentTimeMillis() - ONE_WEEK_MILLIS
+            TabAutoClose.ONE_MONTH -> System.currentTimeMillis() - ONE_MONTH_MILLIS
+        }
+
+    /**
      * Persists the open-tab session, debounced so bursts of updates (page
      * loads, tab churn) coalesce into one DataStore write. Destructive
      * operations (closing tabs) save immediately instead.
@@ -1376,6 +1542,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                             routeId = tab.lastRedirect?.routeId,
                             frontendId = tab.lastRedirect?.frontendId,
                             instance = tab.lastRedirect?.instance,
+                            createdAtEpochMillis = tab.createdAt,
+                            group = tab.group,
                         ),
                     )
                 }
@@ -1443,7 +1611,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         return newWebView
     }
 
+    // Every branch configures one distinct WebView concern (profile, JS,
+    // zoom, dark, desktop, bridge); splitting them would spread the setup
+    // for one object across helpers.
     @SuppressLint("SetJavaScriptEnabled")
+    @Suppress("CyclomaticComplexMethod")
     private fun buildWebView(
         tabId: String,
         context: Context,
@@ -1457,8 +1629,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 ProfileStore.getInstance().getOrCreateProfile(INCOGNITO_PROFILE_NAME)
                 WebViewCompat.setProfile(this, INCOGNITO_PROFILE_NAME)
             }
+            val site = siteSettingFor(tab)
             settings.apply {
-                javaScriptEnabled = true
+                // 4.3: per-site JavaScript override; default stays on.
+                javaScriptEnabled = site?.javaScriptEnabled ?: true
                 domStorageEnabled = true
                 loadWithOverviewMode = true
                 useWideViewPort = true
@@ -1466,7 +1640,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 builtInZoomControls = true
                 displayZoomControls = false
                 mediaPlaybackRequiresUserGesture = false
-                textZoom = cachedSettings.browserTextZoom
+                textZoom = site?.textZoom ?: cachedSettings.browserTextZoom
                 // Pinned privacy posture: explicit rather than relying on
                 // WebView defaults that may vary across versions.
                 mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -1478,8 +1652,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             // should not ship that default.
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             WebViewTheming.applyBackground(this, darkPages)
-            WebViewTheming.applyAutoDarken(this, darkPages, _uiState.value.autoDarken)
-            applyDesktopMode(this, tab?.isDesktopMode == true)
+            // 4.3: a site can force dark rendering regardless of the global switch.
+            WebViewTheming.applyAutoDarken(this, darkPages, site?.forceDark ?: _uiState.value.autoDarken)
+            applyDesktopMode(this, site?.desktopMode ?: (tab?.isDesktopMode == true))
+            if (cachedSettings.backgroundAudioEnabled) {
+                // 4.6: page media reports play/pause into the playback bus.
+                // Bridge added only while the opt-in setting is on.
+                addJavascriptInterface(MediaStateBridge(), MEDIA_BRIDGE_NAME)
+            }
             setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
                 _uiState.update {
                     it.copy(
@@ -1508,6 +1688,28 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 enqueueDownload(url, userAgent, contentDisposition, mimeType)
             }
         }
+
+    /** Effective per-site overrides for a tab's host (4.3); null = follow globals. */
+    private fun siteSettingFor(tab: BrowserTab?): SiteSetting? =
+        tab?.url?.let { url -> UrlParser.parse(url)?.host }?.let { host -> cachedSettings.siteSettingFor(host) }
+
+    /** Current override for a host, for the site-settings sheet. */
+    fun currentSiteSetting(host: String): SiteSetting? = cachedSettings.siteSettingFor(host)
+
+    /** Scroll position of a tab's WebView, for toolbar auto-hide (4.5). */
+    fun onTabScroll(
+        tabId: String,
+        scrollY: Int,
+    ) {
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map {
+                        if (it.id == tabId && it.scrollY != scrollY) it.copy(scrollY = scrollY) else it
+                    },
+            )
+        }
+    }
 
     private fun loadInitialPage(
         webView: WebView,
@@ -1615,6 +1817,333 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 .replace(Regex("\\((Linux; )?Android[^)]*\\)"), "(X11; Linux x86_64)")
                 .replace(" Mobile Safari", " Safari")
         return if (desktop == defaultUserAgent) BrowserTab.DESKTOP_USER_AGENT else desktop
+    }
+
+    // --- content blocking (4.2) ---
+
+    @Suppress("ReturnCount")
+    private fun blockingEnabledForTab(tabId: String): Boolean {
+        if (!cachedSettings.contentBlockerEnabled) return false
+        val tab = _uiState.value.tabs.find { it.id == tabId } ?: return true
+        val site = siteSettingFor(tab)
+        return site?.contentBlocking ?: true
+    }
+
+    private fun incrementBlockedCount(tabId: String) {
+        _uiState.update { current ->
+            current.copy(
+                tabs = current.tabs.map { if (it.id == tabId) it.copy(blockedCount = it.blockedCount + 1) else it },
+            )
+        }
+        addPrivacyStats(PrivacyStats(blockedRequests = 1))
+    }
+
+    private fun resetBlockedCount(tabId: String) {
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map {
+                        if (it.id == tabId && it.blockedCount != 0) {
+                            it.copy(
+                                blockedCount = 0,
+                            )
+                        } else {
+                            it
+                        }
+                    },
+            )
+        }
+    }
+
+    // --- automatic failover (2.2) ---
+
+    private fun isPendingRedirect(tabId: String): Boolean =
+        _uiState.value.tabs
+            .find { it.id == tabId }
+            ?.let { tab -> pendingRedirectTargets[tabId]?.contains(tab.url) == true }
+            ?: false
+
+    /**
+     * A routed main-frame load just failed (network error, 5xx/429, TLS,
+     * bot interstitial): mark the serving instance unhealthy and retry on
+     * the next healthy instance, at most [InstanceFailover.MAX_ATTEMPTS]
+     * times before the in-app error page takes over.
+     */
+    @Suppress("ReturnCount")
+    private fun handleRoutedLoadFailure(tabId: String) {
+        val tab = _uiState.value.tabs.find { it.id == tabId } ?: return
+        val alternatives = computeInstanceAlternatives(tab)
+        if (alternatives == null) {
+            // Not a routed tab (or no alternatives): plain error page.
+            setPageError(tabId, true)
+            return
+        }
+        val retry = resolveFailoverTarget(tab, alternatives)
+        if (retry == null) {
+            setPageError(tabId, true)
+            return
+        }
+        applyFailover(tabId, tab, alternatives, retry)
+    }
+
+    /** Decides the next instance (or null = give up) after a routed failure. */
+    private fun resolveFailoverTarget(
+        tab: BrowserTab,
+        alternatives: InstanceAlternatives,
+    ): String? {
+        val failedInstance =
+            tab.lastRedirect?.instance
+                ?: alternatives.instances.firstOrNull { instance ->
+                    BrowserTab.hostOf(tab.url) == BrowserTab.hostOf(instance)
+                }
+        failedInstance?.let { markInstanceFailed(it) }
+        if (!cachedSettings.autoFailoverEnabled) return null
+        return InstanceFailover.nextInstance(
+            instances = alternatives.instances,
+            failedInstance = failedInstance,
+            attemptsDone = tab.failoverAttempts,
+            health = cachedHealth,
+            nowMillis = System.currentTimeMillis(),
+        )
+    }
+
+    /** Re-routes the tab's original link onto [nextInstance] and reloads it. */
+    @Suppress("ReturnCount")
+    private fun applyFailover(
+        tabId: String,
+        tab: BrowserTab,
+        alternatives: InstanceAlternatives,
+        nextInstance: String,
+    ) {
+        val manifest = cachedManifest ?: return
+        val context =
+            cachedSettings
+                .routingContext()
+                .copy(
+                    instanceOverrides = mapOf("${alternatives.routeId}/${alternatives.frontendId}" to nextInstance),
+                    instanceHealth = cachedHealth,
+                    nowMillis = System.currentTimeMillis(),
+                )
+        val original = tab.originalUrl ?: return
+        val result = UrlRouter(manifest).resolve(original, context)
+        if (result !is RoutingResult.Redirect || result.redirectedUrl == tab.url) return
+        pendingRedirectTargets.getOrPut(tabId) { mutableSetOf() }.add(result.redirectedUrl)
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map { t ->
+                        if (t.id == tabId) {
+                            t.copy(
+                                url = result.redirectedUrl,
+                                failoverAttempts = t.failoverAttempts + 1,
+                                lastRedirect =
+                                    t.lastRedirect?.copy(
+                                        redirectedUrl = result.redirectedUrl,
+                                        instance = result.instance,
+                                    ),
+                            )
+                        } else {
+                            t
+                        }
+                    },
+            )
+        }
+        webViewPool[tabId]?.loadUrl(result.redirectedUrl)
+    }
+
+    private fun markInstanceFailed(instance: String) {
+        val now = System.currentTimeMillis()
+        cachedHealth =
+            cachedHealth + (
+                instance to
+                    InstanceHealth(
+                        latencyMillis = cachedHealth[instance]?.latencyMillis,
+                        lastFailedAtMillis = now,
+                    )
+            )
+        viewModelScope.launch {
+            browserDataRepository.recordInstanceFailure(instance, now)
+        }
+    }
+
+    // --- per-site settings (4.3) ---
+
+    fun updateSiteSetting(
+        host: String,
+        transform: (SiteSetting) -> SiteSetting,
+    ) {
+        val current = cachedSettings.siteSettingFor(host) ?: SiteSetting()
+        val updated = transform(current)
+        viewModelScope.launch {
+            settingsRepository.setSiteSetting(host, updated)
+            // A JS toggle only bites on the next load; the others apply
+            // live where possible, so reload the matching tabs either way.
+            _uiState.value.tabs
+                .filter { tab -> BrowserTab.hostOf(tab.url).equals(host, ignoreCase = true) }
+                .forEach { tab ->
+                    val webView = webViewPool[tab.id] ?: return@forEach
+                    val site = updated
+                    webView.settings.javaScriptEnabled = site.javaScriptEnabled ?: true
+                    (site.textZoom ?: cachedSettings.browserTextZoom).let { webView.settings.textZoom = it }
+                    webView.reload()
+                }
+        }
+    }
+
+    fun resetSiteSetting(host: String) {
+        viewModelScope.launch {
+            settingsRepository.setSiteSetting(host, null)
+            _uiState.value.tabs
+                .filter { BrowserTab.hostOf(it.url).equals(host, ignoreCase = true) }
+                .forEach { tab -> webViewPool[tab.id]?.reload() }
+        }
+    }
+
+    // --- print / PDF (4.5) ---
+
+    fun printActiveTab(context: Context) {
+        val webView = webViewPool[_uiState.value.activeTabId] ?: return
+        val printManager = context.getSystemService(Context.PRINT_SERVICE) as? android.print.PrintManager ?: return
+        val title = _uiState.value.activeTab?.title?.ifBlank { "page" } ?: "page"
+        printManager.print(title, webView.createPrintDocumentAdapter(title), null)
+    }
+
+    // --- downloads list (4.5) ---
+
+    fun queryDownloads(): List<DownloadEntry> {
+        val manager = app.getSystemService(DownloadManager::class.java) ?: return emptyList()
+        val query = DownloadManager.Query()
+        val entries = mutableListOf<DownloadEntry>()
+        manager.query(query).use { cursor ->
+            val idIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_ID)
+            val titleIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE)
+            val statusIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)
+            val uriIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+            while (cursor.moveToNext()) {
+                entries +=
+                    DownloadEntry(
+                        id = cursor.getLong(idIdx),
+                        title = cursor.getString(titleIdx),
+                        status = cursor.getInt(statusIdx),
+                        localUri = cursor.getString(uriIdx),
+                    )
+            }
+        }
+        return entries.takeLast(MAX_DOWNLOAD_ENTRIES).reversed()
+    }
+
+    // --- tab switcher extras (4.5) ---
+
+    fun closeOtherTabs(keepTabId: String) {
+        _uiState.value.tabs.filter { it.id != keepTabId }.forEach { tab ->
+            destroyWebView(tab.id, keepHistoryForReuse = false)
+            pendingRedirectTargets.remove(tab.id)
+        }
+        _uiState.update { current ->
+            val kept = current.tabs.filter { it.id == keepTabId }
+            if (kept.isEmpty()) return@update current
+            current.copy(tabs = kept, activeTabId = keepTabId, isTabsSheetVisible = false)
+        }
+        deleteIncognitoProfileIfUnused()
+        scheduleSessionPersist(immediate = true)
+    }
+
+    fun assignTabGroup(
+        tabId: String,
+        group: String?,
+    ) {
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map {
+                        if (it.id == tabId) {
+                            it.copy(
+                                group = group?.trim()?.ifBlank { null },
+                            )
+                        } else {
+                            it
+                        }
+                    },
+            )
+        }
+        scheduleSessionPersist()
+    }
+
+    fun closeIncognitoTabs() {
+        _uiState.value.tabs.filter { it.isIncognito }.forEach { tab -> closeTab(tab.id) }
+    }
+
+    // --- reader mode (4.4) ---
+
+    /** Toggles the local reader view; exit reloads the original page. */
+    fun toggleReaderMode() {
+        val tab = _uiState.value.activeTab ?: return
+        val webView = webViewPool[tab.id] ?: return
+        if (tab.isReaderMode) {
+            _uiState.update {
+                    current ->
+                current.copy(tabs = current.tabs.map { if (it.id == tab.id) it.copy(isReaderMode = false) else it })
+            }
+            webView.reload()
+        } else {
+            _uiState.update {
+                    current ->
+                current.copy(tabs = current.tabs.map { if (it.id == tab.id) it.copy(isReaderMode = true) else it })
+            }
+            readerJs()?.let { js -> webView.evaluateJavascript(js, null) }
+        }
+    }
+
+    // --- original link actions (2.7) ---
+
+    /**
+     * The tab's original link: the pre-redirect URL when known, otherwise
+     * the deterministic reverse of the frontend URL ("never guess" — null
+     * when it cannot be computed).
+     */
+    @Suppress("ReturnCount") // guard chain: known original → reverse → give up
+    fun originalLinkForActiveTab(): String? {
+        val tab = _uiState.value.activeTab ?: return null
+        tab.originalUrl?.let { return it }
+        val manifest = cachedManifest ?: return null
+        return ReverseRouter.reverse(tab.url, manifest)
+    }
+
+    fun shareOriginalLink(context: Context) {
+        val original = originalLinkForActiveTab()
+        if (original == null) {
+            Toast.makeText(app, R.string.browser_original_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val sendIntent =
+            Intent().apply {
+                action = Intent.ACTION_SEND
+                putExtra(Intent.EXTRA_TEXT, original)
+                type = "text/plain"
+            }
+        context.startActivity(Intent.createChooser(sendIntent, context.getString(R.string.browser_share_link_title)))
+    }
+
+    fun copyOriginalLink() {
+        val original = originalLinkForActiveTab()
+        if (original == null) {
+            Toast.makeText(app, R.string.browser_original_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("link", original))
+        Toast.makeText(app, R.string.browser_link_copied, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * JS bridge the page uses (when the opt-in setting is on) to report
+     * media playback state; only booleans cross the boundary.
+     */
+    inner class MediaStateBridge {
+        @android.webkit.JavascriptInterface
+        fun onMediaState(playing: Boolean) {
+            MediaPlaybackBus.reportPlaying(playing)
+        }
     }
 
     private fun updateTabUrl(
@@ -1729,6 +2258,24 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private inner class BrowserTabWebViewClient(private val tabId: String) : WebViewClient() {
+        /**
+         * Content blocking (4.2): fast host/suffix denylist check before any
+         * request leaves the app. The blocklist is cached in memory by the
+         * store; per-site overrides can switch blocking off for a host.
+         */
+        @Suppress("ReturnCount") // guard chain over the blocking path
+        override fun shouldInterceptRequest(
+            view: WebView?,
+            request: WebResourceRequest?,
+        ): WebResourceResponse? {
+            val url = request?.url ?: return null
+            val host = url.host?.lowercase() ?: return null
+            if (!blockingEnabledForTab(tabId)) return null
+            if (!ContentBlocker.shouldBlock(host, blocklistStore.activeBlocklist())) return null
+            incrementBlockedCount(tabId)
+            return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
+        }
+
         override fun shouldOverrideUrlLoading(
             view: WebView?,
             request: WebResourceRequest?,
@@ -1770,8 +2317,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         ) {
             super.onPageStarted(view, url, favicon)
             // A new navigation attempt starts with a clean slate: the error
-            // page of the previous load must not linger over fresh content.
+            // page of the previous load must not linger over fresh content,
+            // and the blocker counter belongs to the page being loaded now.
             setPageError(tabId, false)
+            resetBlockedCount(tabId)
             if (_uiState.value.isFullscreenVideo) clearFullscreenVideoState()
             if (url != null) {
                 if (pendingRedirectTargets[tabId]?.contains(url) == true) {
@@ -1807,8 +2356,20 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         ) {
             super.onReceivedError(view, request, error)
             // Subresource failures (favicon, analytics…) keep the page usable;
-            // only a main-frame failure gets the in-app error page.
-            if (request?.isForMainFrame == true) setPageError(tabId, true)
+            // a main-frame failure is a failover candidate (2.2) before it is
+            // an error page.
+            if (request?.isForMainFrame == true) handleRoutedLoadFailure(tabId)
+        }
+
+        override fun onReceivedHttpError(
+            view: WebView,
+            request: WebResourceRequest,
+            errorResponse: WebResourceResponse,
+        ) {
+            super.onReceivedHttpError(view, request, errorResponse)
+            if (request.isForMainFrame && InstanceFailover.isRetryableHttpError(errorResponse.statusCode)) {
+                handleRoutedLoadFailure(tabId)
+            }
         }
 
         override fun onReceivedSslError(
@@ -1819,10 +2380,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             super.onReceivedSslError(view, handler, error)
             // Pinned privacy posture: never proceed past an invalid
             // certificate. If the main frame is the one failing (nothing
-            // loaded yet), surface the error page instead of a blank screen.
+            // loaded yet), failover — or surface the error page.
             handler?.cancel()
             if (view?.url == null || view.url.equals("about:blank", ignoreCase = true)) {
-                setPageError(tabId, true)
+                handleRoutedLoadFailure(tabId)
             }
         }
 
@@ -1835,13 +2396,19 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 val pageTitle = view?.title ?: url
                 updateTabUrl(tabId, url)
                 updateTabTitle(tabId, pageTitle)
+                if (InstanceFailover.looksLikeBotInterstitial(pageTitle) && !isPendingRedirect(tabId)) {
+                    handleRoutedLoadFailure(tabId)
+                }
+                MediaPlaybackBus.setMeta(pageTitle, BrowserTab.hostOf(url))
+                injectPageScripts(view)
                 val isIncognito = _uiState.value.tabs.find { it.id == tabId }?.isIncognito == true
                 if (!isIncognito &&
                     url != BrowserTab.DEFAULT_HOME_URL &&
                     !url.equals("about:blank", ignoreCase = true)
                 ) {
+                    val limit = _uiState.value.let { cachedSettings.historyLimit }.coerceAtLeast(0)
                     viewModelScope.launch {
-                        browserDataRepository.addHistory(pageTitle, url)
+                        browserDataRepository.addHistory(pageTitle, url, limit)
                     }
                 }
             }
@@ -1854,6 +2421,22 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             val findState = _uiState.value
             if (tabId == findState.activeTabId && findState.isFindInPageVisible && findState.findQuery.isNotBlank()) {
                 view?.findAllAsync(findState.findQuery)
+            }
+        }
+
+        /**
+         * Page-level JS hooks (4.4/4.6): the media-state bridge reports
+         * play/pause through [MediaPlaybackBus]; the reader-mode script is
+         * idempotent and only acts when invoked.
+         */
+        private fun injectPageScripts(view: WebView?) {
+            view ?: return
+            val tab = _uiState.value.tabs.find { it.id == tabId } ?: return
+            if (cachedSettings.backgroundAudioEnabled) {
+                mediaHookJs()?.let { js -> view.evaluateJavascript(js, null) }
+            }
+            if (tab.isReaderMode) {
+                readerJs()?.let { js -> view.evaluateJavascript(js, null) }
             }
         }
     }
@@ -1966,14 +2549,51 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    // --- page scripts (4.4/4.6), loaded once from assets ---
+
+    @Volatile
+    private var cachedMediaHookJs: String? = null
+
+    @Volatile
+    private var cachedMediaToggleJs: String? = null
+
+    @Volatile
+    private var cachedReaderJs: String? = null
+
+    private fun assetScript(
+        name: String,
+        cached: String?,
+    ): String? {
+        cached?.let { return it }
+        return try {
+            app.assets.open(name).bufferedReader().use { it.readText() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun mediaHookJs(): String? {
+        val value = assetScript("media_hook.js", cachedMediaHookJs) ?: return null
+        cachedMediaHookJs = value
+        return value
+    }
+
+    private fun mediaToggleJs(): String? {
+        val value = assetScript("media_toggle.js", cachedMediaToggleJs) ?: return null
+        cachedMediaToggleJs = value
+        return value
+    }
+
+    private fun readerJs(): String? {
+        val value = assetScript("reader.js", cachedReaderJs) ?: return null
+        cachedReaderJs = value
+        return value
+    }
+
     private companion object {
         const val SESSION_SAVE_DEBOUNCE_MILLIS = 500L
         const val MAX_RESTORED_TABS = 50
         const val THUMBNAIL_WIDTH_PX = 240
-        const val LATENCY_TIMEOUT_SECONDS = 5L
-        const val LATENCY_PROBE_CONCURRENCY = 16
-        const val LATENCY_FAILED_MILLIS = -1L
-        const val NANOS_PER_MILLI = 1_000_000L
 
         /** WebViews kept alive across background tabs; beyond this, LRU eviction kicks in. */
         const val MAX_ALIVE_WEB_VIEWS = 8
@@ -1986,5 +2606,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
         /** Delay before retrying an in-use incognito profile deletion. */
         const val PROFILE_DELETE_RETRY_MILLIS = 1_000L
+
+        const val ONE_DAY_MILLIS = 24L * 60 * 60 * 1000
+        const val ONE_WEEK_MILLIS = 7L * ONE_DAY_MILLIS
+        const val ONE_MONTH_MILLIS = 30L * ONE_DAY_MILLIS
+
+        /** Rows shown in the in-app downloads dialog (4.5). */
+        const val MAX_DOWNLOAD_ENTRIES = 50
+
+        /** Name of the JS bridge pages use to report media state (4.6). */
+        const val MEDIA_BRIDGE_NAME = "AndroidMedia"
     }
 }

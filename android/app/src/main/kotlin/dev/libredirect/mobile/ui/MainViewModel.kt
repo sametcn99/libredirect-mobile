@@ -3,7 +3,9 @@ package dev.libredirect.mobile.ui
 import android.app.Application
 import android.content.ClipboardManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -14,6 +16,8 @@ import dev.libredirect.mobile.BuildConfig
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.MainActivity
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.blocker.BlocklistFetcher
+import dev.libredirect.mobile.blocker.BlocklistStore
 import dev.libredirect.mobile.browser.BrowserInfo
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.browser.ShortcutActions
@@ -21,12 +25,24 @@ import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
+import dev.libredirect.mobile.core.routing.RoutingOutcome
+import dev.libredirect.mobile.core.routing.RoutingTrace
+import dev.libredirect.mobile.core.routing.TraceReason
 import dev.libredirect.mobile.core.url.UrlCandidate
+import dev.libredirect.mobile.diagnostics.DiagnosticsLog
+import dev.libredirect.mobile.manifest.InstanceHealthWorker
 import dev.libredirect.mobile.manifest.InstanceRefreshWorker
 import dev.libredirect.mobile.manifest.RefreshResult
+import dev.libredirect.mobile.media.MediaPlaybackBus
+import dev.libredirect.mobile.media.MediaPlaybackService
+import dev.libredirect.mobile.redirect.LinkPipeline
 import dev.libredirect.mobile.settings.AppSettings
+import dev.libredirect.mobile.settings.RouteMode
+import dev.libredirect.mobile.settings.SettingsBackupCodec
 import dev.libredirect.mobile.settings.SettingsRepository
+import dev.libredirect.mobile.settings.TabAutoClose
 import dev.libredirect.mobile.ui.browser.BrowserDataRepository
+import dev.libredirect.mobile.ui.browser.BrowserViewModel
 import dev.libredirect.mobile.ui.browser.SearchEngine
 import dev.libredirect.mobile.update.UpdateCheckResult
 import dev.libredirect.mobile.update.UpdateRepository
@@ -38,8 +54,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
-@Suppress("TooManyFunctions")
+// The settings plumbing is intentionally consolidated here: every Settings
+// card maps 1:1 to a small setter, and splitting those across helpers would
+// add indirection without removing code.
+@Suppress("TooManyFunctions", "LargeClass")
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = getApplication<LibRedirectApplication>()
     private val settingsRepository = SettingsRepository(app)
@@ -47,6 +67,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val browserLauncher = BrowserLauncher(app)
     private val browserDataRepository = BrowserDataRepository(app)
     private val updateRepository = UpdateRepository(settingsRepository)
+    private val blocklistStore = BlocklistStore(app)
+    private val blocklistFetcher = BlocklistFetcher()
+
+    @Volatile
+    private var cachedBlocklistHostCount: Int = 0
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -137,6 +162,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(redirectStats = stats)
             }
         }
+        launchSafely {
+            browserDataRepository.privacyStats.collect { stats ->
+                _uiState.value = _uiState.value.copy(privacyStats = stats)
+            }
+        }
+        launchSafely {
+            cachedBlocklistHostCount = withContext(Dispatchers.IO) { blocklistStore.activeBlocklist().size }
+            _uiState.value = _uiState.value.copy(blocklistHostCount = cachedBlocklistHostCount)
+        }
     }
 
     /**
@@ -221,6 +255,341 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setRoutingEnabled(enabled: Boolean) = launchSafely { settingsRepository.setRoutingEnabled(enabled) }
 
+    /** Three-state service switch (2.4): ALWAYS / ASK / OFF. */
+    fun setRouteMode(
+        routeId: String,
+        mode: RouteMode,
+    ) = launchSafely { settingsRepository.setRouteMode(routeId, mode) }
+
+    fun setRouteEnabled(
+        routeId: String,
+        enabled: Boolean,
+    ) = launchSafely { settingsRepository.setRouteEnabled(routeId, enabled) }
+
+    // --- 2.6 pause ---
+
+    /** Pauses routing for [minutes] (null = until the user resumes). */
+    fun pauseRouting(minutes: Int?) {
+        val until =
+            if (minutes == null) {
+                PAUSE_INDEFINITE
+            } else {
+                System.currentTimeMillis() + minutes * MILLIS_PER_MINUTE
+            }
+        launchSafely { settingsRepository.setPausedUntil(until) }
+    }
+
+    fun resumeRouting() = launchSafely { settingsRepository.setPausedUntil(0L) }
+
+    // --- 2.8 routing explainer ---
+
+    fun toggleTraceVisible() {
+        _uiState.value = _uiState.value.copy(isTraceVisible = !_uiState.value.isTraceVisible)
+    }
+
+    fun hideTrace() {
+        _uiState.value = _uiState.value.copy(isTraceVisible = false, routingTrace = null)
+    }
+
+    /** Runs the explainer (2.8) for the quick-link tester's current input. */
+    fun explainRouting(url: String) {
+        launchSafely {
+            val manifest = manifest ?: loadManifest()
+            val settings = settingsRepository.current()
+            if (manifest == null) return@launchSafely
+            val sourceApp: String? = null
+            val pipeline = LinkPipeline(settings, sourceApp)
+            val prepared = pipeline.prepare(url)
+            val health = pipeline.healthSnapshot(browserDataRepository)
+            val context = pipeline.routingContext(health, System.currentTimeMillis())
+            val routingActive = settings.routingEnabled && !settings.isRoutingPaused()
+            val trace =
+                if (!routingActive) {
+                    RoutingTrace(
+                        input = prepared.url,
+                        outcome = RoutingOutcome.PASSTHROUGH,
+                        resultUrl = prepared.url,
+                        reason = if (settings.isRoutingPaused()) TraceReason.PAUSED else TraceReason.ROUTING_DISABLED,
+                    )
+                } else {
+                    dev.libredirect.mobile.core.routing.UrlRouter(manifest).explain(prepared.url, context)
+                }
+            _uiState.value = _uiState.value.copy(routingTrace = trace, isTraceVisible = true)
+        }
+    }
+
+    // --- 3.x privacy toggles ---
+
+    fun setUnwrapWrappersEnabled(enabled: Boolean) =
+        launchSafely { settingsRepository.setUnwrapRedirectWrappersEnabled(enabled) }
+
+    fun setShortLinkResolveEnabled(enabled: Boolean) =
+        launchSafely { settingsRepository.setShortLinkResolveEnabled(enabled) }
+
+    fun resetPrivacyStats() = launchSafely { browserDataRepository.resetPrivacyStats() }
+
+    /** "Update blocklist now" (4.2): fetch → validate → activate, with a user-visible outcome. */
+    fun updateBlocklistNow() {
+        if (_uiState.value.refreshInProgress) return
+        _uiState.value = _uiState.value.copy(refreshInProgress = true)
+        launchSafely {
+            val raw = blocklistFetcher.fetch()
+            val message =
+                if (raw == null) {
+                    app.getString(R.string.settings_blocker_update_failed)
+                } else if (blocklistStore.activate(raw)) {
+                    cachedBlocklistHostCount = blocklistStore.activeBlocklist().size
+                    _uiState.value = _uiState.value.copy(blocklistHostCount = cachedBlocklistHostCount)
+                    app.getString(R.string.settings_blocker_updated_fmt, cachedBlocklistHostCount)
+                } else {
+                    app.getString(R.string.settings_blocker_update_failed)
+                }
+            _uiState.value =
+                _uiState.value.copy(
+                    refreshInProgress = false,
+                    lastRefreshMessage = message,
+                )
+        }
+    }
+
+    // --- 4.x browser toggles ---
+
+    fun setContentBlockerEnabled(enabled: Boolean) =
+        launchSafely { settingsRepository.setContentBlockerEnabled(enabled) }
+
+    fun setBackgroundAudioEnabled(enabled: Boolean) =
+        launchSafely { settingsRepository.setBackgroundAudioEnabled(enabled) }
+
+    fun setCloseIncognitoOnExit(enabled: Boolean) = launchSafely { settingsRepository.setCloseIncognitoOnExit(enabled) }
+
+    fun setAutoCloseTabs(mode: TabAutoClose) = launchSafely { settingsRepository.setAutoCloseOldTabs(mode.id) }
+
+    fun setHistoryLimit(limit: Int) = launchSafely { settingsRepository.setHistoryLimit(limit) }
+
+    fun setAutoHideToolbar(enabled: Boolean) = launchSafely { settingsRepository.setAutoHideToolbar(enabled) }
+
+    fun setAutoFailoverEnabled(enabled: Boolean) = launchSafely { settingsRepository.setAutoFailoverEnabled(enabled) }
+
+    fun setBackgroundLatencyMeasureEnabled(enabled: Boolean) =
+        launchSafely {
+            settingsRepository.setBackgroundLatencyMeasureEnabled(enabled)
+            if (enabled) {
+                InstanceHealthWorker.schedule(app)
+            } else {
+                InstanceHealthWorker.cancel(app)
+            }
+        }
+
+    // --- 3.2 user-defined tracking parameters ---
+
+    fun setCustomTrackingParams(params: List<dev.libredirect.mobile.settings.CustomTrackingParam>) =
+        launchSafely { settingsRepository.setCustomTrackingParams(params) }
+
+    // --- 2.3 instance health panel ---
+
+    /** On-demand probe of one frontend's instances ("Measure all"). */
+    fun measureInstancesFor(frontendId: String) {
+        val frontend =
+            manifest?.routes?.flatMap { it.frontends }?.find { it.id == frontendId }
+                ?.takeIf { it.instances.isNotEmpty() }
+                ?: return
+        if (_uiState.value.isMeasuringHealth) return
+        _uiState.value = _uiState.value.copy(isMeasuringHealth = true)
+        launchSafely {
+            val probe = dev.libredirect.mobile.browser.InstanceProbe()
+            val results = probe.measure(frontend.instances)
+            browserDataRepository.saveLatencies(results)
+            val health =
+                (results.keys + browserDataRepository.instanceFailures().keys).associateWith { host ->
+                    dev.libredirect.mobile.core.routing.InstanceHealth(
+                        latencyMillis = results[host],
+                        lastFailedAtMillis = browserDataRepository.instanceFailures()[host],
+                    )
+                }
+            _uiState.value = _uiState.value.copy(instanceHealth = health, isMeasuringHealth = false)
+        }
+    }
+
+    /** Seeds the health panel from stored measurements when the detail screen opens. */
+    fun loadInstanceHealth() {
+        launchSafely {
+            val latencies = browserDataRepository.cachedLatencies()
+            val failures = browserDataRepository.instanceFailures()
+            val health =
+                (latencies.keys + failures.keys).associateWith { host ->
+                    dev.libredirect.mobile.core.routing.InstanceHealth(
+                        latencyMillis = latencies[host],
+                        lastFailedAtMillis = failures[host],
+                    )
+                }
+            _uiState.value = _uiState.value.copy(instanceHealth = health)
+        }
+    }
+
+    // --- 5.1 backup / restore ---
+
+    fun exportSettingsTo(uri: Uri) {
+        launchSafely {
+            val (verName, _, _) = versionInfo()
+            val settings = settingsRepository.current()
+            val backup =
+                SettingsBackupCodec.Backup(
+                    exportedAtEpochMillis = System.currentTimeMillis(),
+                    appVersionName = verName,
+                    settings = settings,
+                    customRoutes = manifestRepository.customRoutes(),
+                    bookmarks = browserDataRepository.bookmarks.first(),
+                    siteSettingHosts = settings.siteSettings.keys.toList(),
+                )
+            val encoded = SettingsBackupCodec.encode(backup)
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openOutputStream(uri, "wt")?.use { stream ->
+                    stream.write(encoded.toByteArray(Charsets.UTF_8))
+                } ?: throw IOException("Cannot open export target")
+            }
+            _uiState.value = _uiState.value.copy(customServiceMessage = app.getString(R.string.settings_backup_created))
+        }
+    }
+
+    /** Reads and validates a backup; the summary dialog applies it on confirm (5.1). */
+    fun importSettingsFrom(uri: Uri) {
+        launchSafely {
+            val content =
+                withContext(Dispatchers.IO) {
+                    app.contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.readBytes()
+                    } ?: throw IOException("Cannot open import source")
+                }
+            when (val result = SettingsBackupCodec.decode(String(content, Charsets.UTF_8))) {
+                is SettingsBackupCodec.ImportResult.Success ->
+                    _uiState.value = _uiState.value.copy(pendingSettingsImport = result.backup)
+                is SettingsBackupCodec.ImportResult.Failure -> {
+                    val reasonText =
+                        when (result.reason) {
+                            SettingsBackupCodec.Reason.MALFORMED -> R.string.backup_reason_malformed
+                            SettingsBackupCodec.Reason.UNSUPPORTED_VERSION -> R.string.backup_reason_unsupported_version
+                            SettingsBackupCodec.Reason.TOO_LARGE -> R.string.backup_reason_too_large
+                            SettingsBackupCodec.Reason.INVALID_CUSTOM_INSTANCE ->
+                                R.string.backup_reason_invalid_custom_instance
+                        }
+                    _uiState.value =
+                        _uiState.value.copy(
+                            errorMessage = app.getString(R.string.backup_import_failed_fmt, app.getString(reasonText)),
+                        )
+                }
+            }
+        }
+    }
+
+    fun applyPendingImport() {
+        val backup = _uiState.value.pendingSettingsImport ?: return
+        launchSafely {
+            settingsRepository.importAll(backup.settings)
+            for (route in backup.customRoutes) {
+                manifestRepository.addCustomRoute(route)
+            }
+            if (backup.bookmarks.isNotEmpty()) {
+                browserDataRepository.importBookmarks(backup.bookmarks)
+            }
+            _uiState.value =
+                _uiState.value.copy(
+                    pendingSettingsImport = null,
+                    customServiceMessage = app.getString(R.string.backup_import_applied),
+                )
+        }
+    }
+
+    fun dismissPendingImport() {
+        _uiState.value = _uiState.value.copy(pendingSettingsImport = null)
+    }
+
+    // --- 5.2 onboarding ---
+
+    fun completeOnboarding() = launchSafely { settingsRepository.setOnboardingCompleted(true) }
+
+    fun reopenOnboarding() {
+        launchSafely { settingsRepository.setOnboardingCompleted(false) }
+    }
+
+    /** Popular service apps installed on this device, for onboarding step 3 (5.2). */
+    fun installedServiceApps(): List<Pair<String, String>> =
+        ONBOARDING_SERVICE_APPS.mapNotNull { (packageName, label) ->
+            app.packageManager.getLaunchIntentForPackage(packageName) ?: return@mapNotNull null
+            packageName to label
+        }
+
+    /** Opens the system "open by default" page for a service app (API 31+; no-op below). */
+    fun openAppOpenByDefaultSettings(packageName: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        try {
+            app.startActivity(
+                Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .setData(Uri.parse("package:$packageName")),
+            )
+        } catch (_: Exception) {
+            // Some OEM builds lack the screen; ignore.
+        }
+    }
+
+    // --- 6 diagnostics ---
+
+    /** Everything the diagnostics screen shows, as copyable text (no URLs/history). */
+    fun diagnosticsText(): String {
+        val manifest = this.manifest
+        val routeCount = manifest?.routes?.size ?: 0
+        val frontendCount = manifest?.routes?.sumOf { it.frontends.size } ?: 0
+        val instanceCount = manifest?.routes?.sumOf { route -> route.frontends.sumOf { it.instances.size } } ?: 0
+        val settings = _uiState.value
+        val webviewVersion = webViewVersion()
+        return buildString {
+            appendLine("LibRedirect Mobile diagnostics")
+            appendLine("${settings.appVersionDisplay}")
+            appendLine("Android API: ${Build.VERSION.SDK_INT}")
+            appendLine("WebView: $webviewVersion")
+            appendLine("Routing data revision: ${settings.manifestRevision ?: "n/a"}")
+            appendLine("Rules: $routeCount services / $frontendCount frontends / $instanceCount instances")
+            appendLine(
+                "Settings: routing=${settings.routingEnabled} paused=${settings.pausedUntilEpochMillis > 0} " +
+                    "browser=inApp(${settings.selectedBrowserPackage == BrowserLauncher.IN_APP_BROWSER_PACKAGE}) " +
+                    "blocker=${settings.contentBlockerEnabled} unwrap=${settings.unwrapWrappersEnabled} " +
+                    "shortLinks=${settings.shortLinkResolveEnabled} failover=${settings.autoFailoverEnabled} " +
+                    "bgAudio=${settings.backgroundAudioEnabled} historyLimit=${settings.historyLimit}",
+            )
+            appendLine("Exceptions: ${settings.exceptions.size} rule(s)")
+            val counters =
+                "redirects=${settings.privacyStats.totalRedirects} " +
+                    "stripped=${settings.privacyStats.strippedTrackingParams}"
+            appendLine("Privacy counters: $counters")
+            appendLine("--- recent errors ---")
+            append(DiagnosticsLog.asText())
+        }
+    }
+
+    private fun webViewVersion(): String =
+        try {
+            val info = app.packageManager.getPackageInfo("com.google.android.webview", 0)
+            info.versionName ?: app.getString(R.string.diagnostics_webview_unknown)
+        } catch (_: Exception) {
+            app.getString(R.string.diagnostics_webview_unknown)
+        }
+
+    // --- 4.6 background audio hook ---
+
+    /**
+     * Called from MainActivity.onStop: when the user opted in and media is
+     * playing on the active tab, a foreground service keeps playback alive.
+     */
+    fun maybeStartMediaPlaybackService() {
+        if (!latestSettings.backgroundAudioEnabled) return
+        if (!MediaPlaybackBus.state.value.isPlaying) return
+        MediaPlaybackService.start(app)
+    }
+
+    fun maybeCloseIncognitoTabs(browserViewModel: BrowserViewModel) {
+        if (latestSettings.closeIncognitoOnExit) browserViewModel.closeIncognitoTabs()
+    }
+
     fun setSelectedBrowser(packageName: String?) = launchSafely { settingsRepository.setSelectedBrowser(packageName) }
 
     fun setSearchEngine(id: String) = launchSafely { settingsRepository.setSearchEngine(id) }
@@ -232,11 +601,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settingsRepository.setCustomSearchEngine(name, url)
         settingsRepository.setSearchEngine(SearchEngine.CUSTOM_ID)
     }
-
-    fun setRouteEnabled(
-        routeId: String,
-        enabled: Boolean,
-    ) = launchSafely { settingsRepository.setRouteEnabled(routeId, enabled) }
 
     fun setSelectedFrontend(
         routeId: String,
@@ -387,32 +751,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     private fun buildUiState(settings: AppSettings): MainUiState {
-        val currentManifest = manifest
-        val services =
-            currentManifest?.routes?.map { route ->
-                ServiceUiState(
-                    routeId = route.id,
-                    name = route.name,
-                    enabled = settings.isRouteEnabled(route.id),
-                    frontends =
-                        route.frontends.map { frontend ->
-                            FrontendUiState(
-                                id = frontend.id,
-                                name = frontend.name,
-                                needsInstance = frontend.instances.isNotEmpty(),
-                                instances = frontend.instances,
-                                selection =
-                                    settings.instanceSelections["${route.id}/${frontend.id}"]
-                                        ?: InstanceSelection.Automatic,
-                            )
-                        },
-                    selectedFrontendId = settings.selectedFrontends[route.id] ?: route.frontends.first().id,
-                )
-            } ?: emptyList()
+        val services = buildServiceStates(settings)
 
         val browserLabel = browserLabelFor(settings.selectedBrowserPackage)
 
         val (verName, verCode, verDisplay) = versionInfo()
+        val currentManifest = manifest
 
         return MainUiState(
             loading = false,
@@ -442,8 +786,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             autoInstanceRefreshEnabled = settings.autoInstanceRefreshEnabled,
             browserTextZoom = settings.browserTextZoom,
             appLockEnabled = settings.appLockEnabled,
+            askModeRoutes = settings.askModeRoutes,
+            pausedUntilEpochMillis = settings.pausedUntilEpochMillis,
+            routingTrace = _uiState.value.routingTrace,
+            isTraceVisible = _uiState.value.isTraceVisible,
+            privacyStats = _uiState.value.privacyStats,
+            unwrapWrappersEnabled = settings.unwrapRedirectWrappersEnabled,
+            shortLinkResolveEnabled = settings.shortLinkResolveEnabled,
+            customTrackingParams = settings.customTrackingParams,
+            contentBlockerEnabled = settings.contentBlockerEnabled,
+            blocklistHostCount = cachedBlocklistHostCount,
+            backgroundAudioEnabled = settings.backgroundAudioEnabled,
+            closeIncognitoOnExit = settings.closeIncognitoOnExit,
+            autoCloseTabs = TabAutoClose.fromId(settings.autoCloseOldTabs),
+            historyLimit = settings.historyLimit,
+            autoHideToolbar = settings.autoHideToolbar,
+            autoFailoverEnabled = settings.autoFailoverEnabled,
+            backgroundLatencyMeasureEnabled = settings.backgroundLatencyMeasureEnabled,
+            onboardingCompleted = settings.onboardingCompleted,
         )
     }
+
+    private fun buildServiceStates(settings: AppSettings): List<ServiceUiState> =
+        manifest?.routes?.map { route ->
+            ServiceUiState(
+                routeId = route.id,
+                name = route.name,
+                enabled = settings.isRouteEnabled(route.id),
+                frontends =
+                    route.frontends.map { frontend ->
+                        FrontendUiState(
+                            id = frontend.id,
+                            name = frontend.name,
+                            needsInstance = frontend.instances.isNotEmpty(),
+                            instances = frontend.instances,
+                            selection =
+                                settings.instanceSelections["${route.id}/${frontend.id}"]
+                                    ?: InstanceSelection.Automatic,
+                        )
+                    },
+                selectedFrontendId = settings.selectedFrontends[route.id] ?: route.frontends.first().id,
+                askModeRoutes = settings.askModeRoutes,
+            )
+        } ?: emptyList()
 
     private suspend fun loadManifest(): Manifest? =
         withContext(Dispatchers.IO) {
@@ -466,6 +851,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 throw error
             } catch (error: Exception) {
                 Log.e(TAG, "Unexpected error", error)
+                DiagnosticsLog.record(TAG, error.message ?: "unexpected error")
                 _uiState.value =
                     _uiState.value.copy(
                         errorMessage = error.message ?: app.getString(R.string.generic_error),
@@ -476,9 +862,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "MainViewModel"
+        const val MILLIS_PER_MINUTE = 60_000L
 
         /** Minimum gap between automatic startup manifest generations. */
         const val SILENT_GENERATION_INTERVAL_MS = 24 * 60 * 60 * 1000L
         const val SERVICE_SHORTCUT_ID_PREFIX = "service_"
+
+        /** Sentinel "until I turn it back on" pause timestamp (2.6). */
+        const val PAUSE_INDEFINITE = Long.MAX_VALUE / 4
+
+        /** Well-known service apps probed during onboarding step 3 (5.2). */
+        val ONBOARDING_SERVICE_APPS =
+            listOf(
+                "com.google.android.youtube" to "YouTube",
+                "com.reddit.frontpage" to "Reddit",
+                "com.twitter.android" to "X",
+                "com.instagram.android" to "Instagram",
+                "com.zhiliaoapp.musically" to "TikTok",
+                "com.medium.reader" to "Medium",
+                "tv.twitch.android.app" to "Twitch",
+                "com.spotify.music" to "Spotify",
+                "com.google.android.maps" to "Maps",
+                "com.google.android.googlequicksearchbox" to "Google",
+            )
     }
 }

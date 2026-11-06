@@ -279,4 +279,251 @@
     <string name="shortcut_pin_unsupported">Home screen shortcuts are not supported</string>
     <string name="process_text_label">Open with LibRedirect</string>
 
+    <!-- 2.1/2.3: instance selection modes & health -->
+    <string name="service_mode_label">Redirect mode</string>
+    <string name="service_mode_always">Always</string>
+    <string name="service_mode_ask">Ask every time</string>
+    <string name="service_mode_off">Off</string>
+    <string name="service_detail_instance_fastest">Fastest instance</string>
+    <string name="service_health_header">Instance health</string>
+    <string name="service_health_measure_all">Measure all</string>
+    <string name="service_health_measuring">Measuring…</string>
+    <string name="health_status_fast">Fast</string>
+    <string name="health_status_slow">Slow</string>
+    <string name="health_status_unreachable">Unreachable</string>
+    <string name="health_status_unmeasured">Not measured</string>
+    <string name="health_status_cooldown">Cooling down</string>
+    <string name="settings_background_latency">Measure instances in background</string>
+    <string name="settings_background_latency_desc">Measure the latency of your services\' chosen frontends once a day, so automatic selection starts informed. Off by default.</string>
+    <string name="settings_auto_failover">Automatic instance switching (failover)</string>
+    <string name="settings_auto_failover_desc">When a routed page fails to load, retry automatically on the next healthy instance (up to twice), then offer the original site.</string>
+
+    <!-- 2.4: ask-every-time dialog -->
+    <string name="ask_route_title">Open with a frontend?</string>
+    <string name="ask_route_desc_fmt">%1$s link detected</string>
+    <string name="ask_route_open_frontend">Open in frontend</string>
+    <string name="ask_route_open_original">Open original</string>
+    <string name="ask_route_add_exception">Exclude this site</string>
+    <string name="ask_route_exception_added">Site added to exceptions</string>
+
+    <!-- 2.5: source-app exceptions -->
+    <string name="exceptions_source_app_section">Links from apps</string>
+    <string name="exceptions_source_app_add">Exclude an app</string>
+    <string name="exceptions_source_app_hint">Package name, e.g. com.twitter.android</string>
+    <string name="exceptions_source_app_note">Referrer info can be faked by the sending app — treat this as a convenience, not a guarantee.</string>
+    <string name="exceptions_source_app_pick">Choose an installed app</string>
+    <string name="exceptions_wildcard_hint">* acts as a wildcard, e.g. *.example.com</string>
+
+    <!-- 2.6: temporary pause -->
+    <string name="home_routing_paused">Routing Paused</string>
+    <string name="home_routing_paused_desc_fmt">Links open unchanged until %1$s</string>
+    <string name="home_pause_menu">Pause routing</string>
+    <string name="home_pause_15m">15 minutes</string>
+    <string name="home_pause_1h">1 hour</string>
+    <string name="home_pause_until_resume">Until I turn it back on</string>
+    <string name="home_resume_routing">Resume now</string>
+    <string name="tile_routing_paused_subtitle">Routing paused</string>
+
+    <!-- 2.7: original link -->
+    <string name="browser_menu_share_original">Share original link</string>
+    <string name="browser_menu_copy_original">Copy original link</string>
+    <string name="browser_original_unavailable">Original link could not be determined</string>
+
+    <!-- 2.8: routing explainer -->
+    <string name="home_why_button">Why?</string>
+    <string name="home_why_title">Routing details</string>
+    <string name="home_why_hide">Hide details</string>
+    <string name="trace_route_fmt">Service: %1$s</string>
+    <string name="trace_frontend_fmt">Frontend: %1$s</string>
+    <string name="trace_instance_fmt">Instance: %1$s</string>
+    <string name="trace_selection_fmt">Selection: %1$s</string>
+    <string name="trace_stripped_fmt">%1$d tracking parameter(s) removed</string>
+    <string name="trace_unwrapped_fmt">Unwrapped %1$d redirect wrapper(s)</string>
+    <string name="trace_exception_fmt">Exception matched: %1$s</string>
+    <string name="trace_selection_automatic">Automatic (latency-weighted)</string>
+    <string name="trace_selection_fastest">Fastest</string>
+    <string name="trace_selection_pinned">Pinned</string>
+    <string name="trace_selection_custom">Custom</string>
+    <string name="trace_selection_override">One-off override</string>
+    <string name="trace_reason_no_route">No redirect rule matches this site</string>
+    <string name="trace_reason_route_disabled">This service is turned off</string>
+    <string name="trace_reason_exception_matched">A routing exception covers this link</string>
+    <string name="trace_reason_ask_mode">This service is set to ask every time</string>
+    <string name="trace_reason_paused">Routing is paused</string>
+    <string name="trace_reason_routing_disabled">Routing is switched off</string>
+    <string name="trace_reason_strategy_passthrough">The chosen frontend keeps the original site</string>
+    <string name="trace_reason_no_instance">No instance could be selected</string>
+    <string name="trace_reason_target_unchanged">The redirect target equals the original link</string>
+    <string name="trace_reason_not_eligible">This input is not a routable web link</string>
+    <string name="trace_reason_instance_cooldown">All instances are cooling down</string>
+    <string name="trace_redirected_fmt">Redirected to %1$s</string>
+    <string name="trace_passthrough_fmt">Opened unchanged</string>
+
+    <!-- 3.1/3.3/3.4: privacy -->
+    <string name="settings_section_privacy">Privacy &amp; Link Cleaning</string>
+    <string name="settings_unwrap_wrappers">Unwrap redirect wrappers &amp; AMP</string>
+    <string name="settings_unwrap_wrappers_desc">Extract the real target from google.com/url, facebook, out.reddit, AMP cache links and similar wrappers before routing. Entirely offline.</string>
+    <string name="settings_short_links">Resolve shortener links</string>
+    <string name="settings_short_links_desc">Follow t.co, bit.ly and similar shorteners to their target before routing. On by default off: this makes a network request to the shortener service. Only well-known shortener hosts are followed.</string>
+    <string name="settings_custom_tracking">Custom tracking parameters</string>
+    <string name="settings_custom_tracking_desc_fmt">%1$d user-defined parameter rule(s)</string>
+    <string name="tracking_params_title">Custom tracking parameters</string>
+    <string name="tracking_params_section_global">Global parameters</string>
+    <string name="tracking_params_section_host">Host-specific parameters</string>
+    <string name="tracking_params_hint_name">Parameter name, e.g. ref_*</string>
+    <string name="tracking_params_hint_host">Host, e.g. shop.example.com</string>
+    <string name="tracking_params_note">Global rules apply to every site; host rules only to that host and its subdomains. A trailing * matches prefixes.</string>
+    <string name="home_privacy_stats_title">Privacy activity</string>
+    <string name="home_privacy_stat_redirects">Redirects</string>
+    <string name="home_privacy_stat_stripped">Params cleaned</string>
+    <string name="home_privacy_stat_unwrapped">Wrappers opened</string>
+    <string name="home_privacy_stat_short_links">Short links</string>
+    <string name="home_privacy_stat_blocked">Blocked requests</string>
+    <string name="home_privacy_stats_reset">Reset</string>
+    <string name="home_privacy_stats_reset_confirm">Reset the local privacy counters? This cannot be undone.</string>
+
+    <!-- 4.2: content blocker -->
+    <string name="settings_content_blocking">Block trackers in browser</string>
+    <string name="settings_content_blocking_desc">Block known analytics/ad hosts in the built-in browser. A bundled list works offline; updates come from a fixed source through the same validation pipeline as the routing data.</string>
+    <string name="settings_blocker_update_now">Update blocklist now</string>
+    <string name="settings_blocker_updated_fmt">Blocklist updated (%1$d hosts)</string>
+    <string name="settings_blocker_update_failed">Blocklist update failed; keeping the current list</string>
+    <string name="browser_blocked_fmt">%1$d blocked</string>
+
+    <!-- 4.3: site settings -->
+    <string name="browser_site_settings_title">Site settings</string>
+    <string name="browser_site_settings_host_fmt">Settings for %1$s</string>
+    <string name="site_settings_javascript">JavaScript</string>
+    <string name="site_settings_javascript_desc">Blocking JS can break pages; use it for aggressive sites</string>
+    <string name="site_settings_desktop">Desktop site</string>
+    <string name="site_settings_text_size">Text size</string>
+    <string name="site_settings_force_dark">Force dark</string>
+    <string name="site_settings_content_blocking">Content blocking</string>
+    <string name="site_settings_reset">Reset this site\'s settings</string>
+    <string name="site_settings_follow_global">Follow global setting</string>
+
+    <!-- 4.4: reader mode -->
+    <string name="browser_menu_reader_mode">Reader mode</string>
+    <string name="browser_reader_exit">Exit reader mode</string>
+    <string name="browser_reader_unavailable">No readable article found on this page</string>
+
+    <!-- 4.5: browser extras -->
+    <string name="browser_menu_print">Print / Save as PDF</string>
+    <string name="browser_menu_downloads">Downloads</string>
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_empty">No downloads yet</string>
+    <string name="downloads_status_running">In progress</string>
+    <string name="downloads_status_done">Completed</string>
+    <string name="downloads_status_failed">Failed</string>
+    <string name="downloads_status_paused">Paused</string>
+    <string name="browser_start_page_top_sites">Frequently visited</string>
+    <string name="browser_start_page_bookmarks">Bookmarks</string>
+    <string name="browser_start_page_empty">Your bookmarks and frequent sites will appear here</string>
+    <string name="tab_switcher_close_others">Close other tabs</string>
+    <string name="tab_switcher_sort">Sort tabs</string>
+    <string name="tab_switcher_sort_recent">Recently used</string>
+    <string name="tab_switcher_sort_order">Opened order</string>
+    <string name="tab_switcher_group_add">Group…</string>
+    <string name="tab_switcher_group_hint">Group name</string>
+    <string name="tab_switcher_group_remove">Remove from group</string>
+    <string name="settings_history_limit">History size</string>
+    <string name="history_limit_off">No history</string>
+    <string name="history_limit_fmt">%1$d entries</string>
+    <string name="settings_auto_close_tabs">Close old tabs automatically</string>
+    <string name="settings_auto_close_tabs_desc">Tabs older than the chosen age are dropped when the browser restores its session</string>
+    <string name="tab_auto_close_never">Never</string>
+    <string name="tab_auto_close_1d">After 1 day</string>
+    <string name="tab_auto_close_1w">After 1 week</string>
+    <string name="tab_auto_close_1m">After 1 month</string>
+    <string name="settings_close_incognito">Close incognito tabs on exit</string>
+    <string name="settings_close_incognito_desc">Private tabs are wiped whenever the app goes to the background</string>
+    <string name="settings_auto_hide_toolbar">Hide toolbar while scrolling</string>
+    <string name="settings_auto_hide_toolbar_desc">The address and navigation bars slide away while you scroll down a page</string>
+
+    <!-- 4.6: background audio -->
+    <string name="settings_background_audio">Background audio playback</string>
+    <string name="settings_background_audio_desc">Keep audio playing when the screen is off or the app is in the background, with media controls in a notification. Off by default.</string>
+    <string name="media_playback_channel_name">Background media playback</string>
+    <string name="media_playback_title">Playing in background</string>
+    <string name="media_playback_subtitle">Media from this tab keeps playing</string>
+    <string name="media_playback_play_pause">Play / Pause</string>
+    <string name="media_playback_stop">Stop</string>
+
+    <!-- 5.1: backup & restore -->
+    <string name="settings_backup">Backup &amp; restore</string>
+    <string name="settings_backup_desc_fmt">All settings, custom services, tracking rules and site settings in one file</string>
+    <string name="settings_backup_export">Export settings</string>
+    <string name="settings_backup_import">Import settings</string>
+    <string name="settings_backup_created">Settings file saved</string>
+    <string name="settings_backup_export_failed">Could not write the settings file</string>
+    <string name="backup_import_title">Import settings?</string>
+    <string name="backup_import_summary_fmt">Version %1$s backup with %2$d services and %3$d exception rule(s) will replace your current settings.</string>
+    <string name="backup_import_include_bookmarks_fmt">Includes %1$d bookmark(s)</string>
+    <string name="backup_import_apply">Replace settings</string>
+    <string name="backup_import_applied">Settings restored</string>
+    <string name="backup_import_failed_fmt">Import failed: %1$s</string>
+    <string name="backup_reason_malformed">the file is not a valid settings backup</string>
+    <string name="backup_reason_unsupported_version">the backup was created by a different version</string>
+    <string name="backup_reason_too_large">the file is too large</string>
+    <string name="backup_reason_invalid_custom_instance">a pinned instance is not a valid HTTPS origin</string>
+
+    <!-- 5.2: onboarding -->
+    <string name="onboarding_step_fmt">Step %1$d of 4</string>
+    <string name="onboarding_welcome_title">Welcome to LibRedirect</string>
+    <string name="onboarding_welcome_desc">This app redirects links from big platforms (YouTube, Reddit, X…) to privacy-friendly frontends, in your browser or the built-in one. Everything happens on your device.</string>
+    <string name="onboarding_default_browser_title">Make it your browser</string>
+    <string name="onboarding_default_browser_desc">Set LibRedirect as the default browser so links are routed automatically when you tap them.</string>
+    <string name="onboarding_default_browser_btn">Set as default browser</string>
+    <string name="onboarding_app_links_title">Let apps open links here</string>
+    <string name="onboarding_app_links_desc">Apps like YouTube may capture their own web links. For each installed service app below, disable “Open by default” so links reach LibRedirect instead.</string>
+    <string name="onboarding_app_links_btn_fmt">Open “%1$s” settings</string>
+    <string name="onboarding_app_links_none">No known service apps detected on this device.</string>
+    <string name="onboarding_share_title">Share and select text</string>
+    <string name="onboarding_share_desc">Any link can also be shared to LibRedirect, or selected in another app and opened with “Open with LibRedirect” in the text menu.</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_get_started">Get started</string>
+    <string name="settings_onboarding">Show intro again</string>
+
+    <!-- 5.3: widget -->
+    <string name="widget_routing_on">Routing on</string>
+    <string name="widget_routing_off">Routing off</string>
+    <string name="widget_paused">Paused</string>
+    <string name="widget_route_clipboard">Route clipboard link</string>
+    <string name="widget_clipboard_empty">No link found in the clipboard</string>
+
+    <!-- 5.4: what's new -->
+    <string name="settings_whats_new_title">What\'s new in %1$s</string>
+    <string name="update_open_release">Open release page</string>
+
+    <!-- 5.5/5.6: services discovery -->
+    <string name="services_filter_category">Category</string>
+    <string name="service_category_all">All</string>
+    <string name="service_category_video">Video</string>
+    <string name="service_category_social">Social</string>
+    <string name="service_category_search">Search</string>
+    <string name="service_category_translate">Translate</string>
+    <string name="service_category_news">News</string>
+    <string name="service_category_maps">Maps</string>
+    <string name="service_category_dev">Developer</string>
+    <string name="service_category_music">Music</string>
+    <string name="service_category_other">Other</string>
+    <string name="service_frontend_about_title">About this frontend</string>
+    <string name="service_frontend_desc_default">A community frontend for this service.</string>
+
+    <!-- Diagnostics (§6) -->
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_desc">Local, copyable app info — no telemetry</string>
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_app_version">App version</string>
+    <string name="diagnostics_manifest_revision">Routing data revision</string>
+    <string name="diagnostics_rule_counts_fmt">%1$d services · %2$d frontends · %3$d instance(s)</string>
+    <string name="diagnostics_webview_version">WebView version</string>
+    <string name="diagnostics_android_api">Android API level</string>
+    <string name="diagnostics_settings_summary">Settings summary</string>
+    <string name="diagnostics_recent_errors">Recent errors (in memory)</string>
+    <string name="diagnostics_copy">Copy diagnostics</string>
+    <string name="diagnostics_copied">Diagnostics copied to clipboard</string>
+    <string name="diagnostics_webview_unknown">unknown</string>
+
 </resources>

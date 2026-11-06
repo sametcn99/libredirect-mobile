@@ -19,6 +19,8 @@ data class BrowserTab(
     val url: String = DEFAULT_HOME_URL,
     /** Page title; blank until the page reports one. UI layers show a localized "new tab" fallback. */
     val title: String = "",
+    /** When the tab came into existence; persisted for auto-close-old-tabs (4.5). */
+    val createdAt: Long = System.currentTimeMillis(),
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val canGoBack: Boolean = false,
@@ -43,6 +45,18 @@ data class BrowserTab(
      * thumbnails die with the process.
      */
     val thumbnail: Bitmap? = null,
+    /** Monotonic marker for tab-switcher sorting (4.5); 0 = never activated. */
+    val lastActiveAt: Long = 0L,
+    /** Optional user-assigned tab group name (4.5); null = ungrouped. */
+    val group: String? = null,
+    /** Requests this tab's page was denied by the content blocker, this load (4.2). */
+    val blockedCount: Int = 0,
+    /** True while the tab renders the extracted reader view (4.4). */
+    val isReaderMode: Boolean = false,
+    /** Automatic failover attempts already spent on the current routed load (2.2). */
+    val failoverAttempts: Int = 0,
+    /** Last vertical scroll offset in px; drives toolbar auto-hide (4.5). */
+    val scrollY: Int = 0,
 ) {
     /** Host shown when the address bar isn't being edited, e.g. "example.com". */
     val displayHost: String

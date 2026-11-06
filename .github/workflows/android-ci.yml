@@ -56,3 +56,34 @@ jobs:
       # silently break without a release dispatch.
       - name: Assemble release APK (unsigned, R8)
         run: ./gradlew assembleRelease
+
+  # 5.4: reproducible-build guard — the release APK must build byte-for-byte
+  # identically twice in a row (fixed toolchain, no timestamps). A failure
+  # means Obtainium/F-Droid-style reproducibility broke and must be fixed
+  # before release.
+  reproducible-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release APK twice
+        run: |
+          ./gradlew --no-daemon clean assembleRelease
+          sha256sum app/build/outputs/apk/release/app-release-unsigned.apk | tee build-a.txt
+          ./gradlew --no-daemon clean assembleRelease
+          sha256sum app/build/outputs/apk/release/app-release-unsigned.apk | tee build-b.txt
+
+      - name: Compare checksums
+        run: |
+          if ! diff -u build-a.txt build-b.txt; then
+            echo "::error::Release build is not reproducible"; exit 1
+          fi

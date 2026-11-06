@@ -45,19 +45,27 @@ class RoutingTileService : TileService() {
 
     private fun refreshTile() {
         tileScope.launch {
-            val enabled = settingsRepository.settings.first().routingEnabled
+            val settings = settingsRepository.settings.first()
+            val enabled = settings.routingEnabled
+            val paused = settings.isRoutingPaused()
             withContext(Dispatchers.Main) {
-                updateTile(enabled)
+                updateTile(enabled, paused)
             }
         }
     }
 
-    private fun updateTile(enabled: Boolean) {
+    private fun updateTile(
+        enabled: Boolean,
+        paused: Boolean,
+    ) {
         val tile = qsTile ?: return
-        tile.state = if (enabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.state = if (enabled && !paused) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Tile.setSubtitle exists only from API 29; the label alone is fine below that.
-            tile.subtitle = getString(R.string.tile_routing_subtitle)
+            tile.subtitle =
+                getString(
+                    if (paused) R.string.tile_routing_paused_subtitle else R.string.tile_routing_subtitle,
+                )
         }
         tile.updateTile()
     }

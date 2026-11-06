@@ -22,7 +22,7 @@ object ServiceShortcutResolver {
         return when (val selection = instanceSelections["${route.id}/${frontend.id}"]) {
             is InstanceSelection.Pinned -> selection.instance
             is InstanceSelection.Custom -> selection.instance
-            InstanceSelection.Automatic, null -> frontend.instances.firstOrNull()
+            InstanceSelection.Automatic, InstanceSelection.Fastest, null -> frontend.instances.firstOrNull()
         }
     }
 }

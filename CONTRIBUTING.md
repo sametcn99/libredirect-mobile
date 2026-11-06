@@ -9,6 +9,21 @@ repository must be written in English, with no exceptions. (User-facing
 translations live in `android/app/src/main/res/values-tr/` for the Turkish
 locale and are maintained alongside the English source strings.)
 
+### Translating / Weblate
+
+UI text lives in two files:
+`android/app/src/main/res/values/strings.xml` (source of truth, English)
+and `android/app/src/main/res/values-tr/strings.xml` (Turkish). Adding or
+changing any user-visible string requires updating **both** files in the
+same change — a missing translation falls back to English silently, so CI
+cannot catch it. Keep format specifiers (`%1$s`, `%1$d`) intact and prefer
+full sentences over fragments so word order can be translated. New
+locales: copy `values/` to `values-<lang>/`, translate the strings, and add
+the language to `android/app/src/main/res/xml/locales_config.xml` and the
+in-app language dialog. If you want to contribute a translation at scale,
+open an issue so a Weblate project can be set up rather than sending
+one-off PRs.
+
 ## Repository structure
 
 - `android/app/` — the Kotlin/Compose Android application: navigation,

@@ -1,0 +1,22 @@
+# Baseline profile (§6): hot paths for the link-tap experience. RedirectActivity
+# runs on every routed link and the routing core decides the destination, so
+# those classes are precompiled to keep the cold-start redirect snappy.
+HSPLdev/libredirect/mobile/redirect/RedirectActivity;-><init>()V
+HSPLdev/libredirect/mobile/redirect/RedirectActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLdev/libredirect/mobile/redirect/ProcessTextResolver;->resolve(Ljava/lang/String;Ldev/libredirect/mobile/ui/browser/SearchEngine;)Ljava/lang/String;
+HSPLdev/libredirect/mobile/redirect/LinkPipeline;->prepare(Ljava/lang/String;)Ldev/libredirect/mobile/redirect/LinkPipeline$Prepared;
+HSPLdev/libredirect/mobile/core/routing/UrlRouter;->resolve(Ljava/lang/String;Ldev/libredirect/mobile/core/routing/RoutingContext;)Ldev/libredirect/mobile/core/routing/RoutingResult;
+HSPLdev/libredirect/mobile/core/routing/RouteMatcher;->match(Ljava/lang/String;)Ldev/libredirect/mobile/core/manifest/Route;
+HSPLdev/libredirect/mobile/core/routing/InstancePicker;->pick(Ldev/libredirect/mobile/core/manifest/Frontend;Ldev/libredirect/mobile/core/routing/InstanceSelection;Ljava/util/Map;J)Ljava/lang/String;
+HSPLdev/libredirect/mobile/core/url/TrackingParams;->stripFrom(Ljava/lang/String;Ldev/libredirect/mobile/core/url/ParsedUrl;Ldev/libredirect/mobile/core/url/CustomTrackingScope;)Ljava/lang/String;
+HSPLdev/libredirect/mobile/core/url/UrlUnwrapper;->unwrapAll(Ljava/lang/String;I)Ldev/libredirect/mobile/core/url/UrlUnwrapper$UnwrapResult;
+HSPLdev/libredirect/mobile/core/url/UrlParser;->parse(Ljava/lang/String;)Ldev/libredirect/mobile/core/url/ParsedUrl;
+HSPLdev/libredirect/mobile/core/routing/TemplateRenderer;->render(Ljava/lang/String;Ldev/libredirect/mobile/core/url/ParsedUrl;Ljava/lang/String;)Ljava/lang/String;
+HSPLdev/libredirect/mobile/browser/BrowserLauncher;->launch(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ldev/libredirect/mobile/browser/InAppRedirectInfo;)Z
+Ldev/libredirect/mobile/redirect/RedirectActivity;
+Ldev/libredirect/mobile/core/routing/UrlRouter;
+Ldev/libredirect/mobile/core/routing/RouteMatcher;
+Ldev/libredirect/mobile/core/routing/InstancePicker;
+Ldev/libredirect/mobile/core/url/UrlUnwrapper;
+Ldev/libredirect/mobile/core/url/TrackingParams;
+Ldev/libredirect/mobile/core/url/UrlParser;

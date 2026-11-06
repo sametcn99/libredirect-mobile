@@ -1,0 +1,27 @@
+LibRedirect Mobile redirects links from big platforms (YouTube, Reddit, X/Twitter and more) to privacy-friendly frontends such as Invidious, Piped or Redlib — automatically, entirely on your device, with no accounts and no telemetry.
+
+ROUTING
+• System-wide: set it as your default browser or share any link to it.
+• Open routed links in the built-in multi-tab browser or your preferred external browser.
+• Per-service control: always route, ask every time, or switch a service off.
+• Automatic instance selection weighted by measured latency, with automatic failover when an instance is down.
+• Routing exceptions: domains, path prefixes, wildcards, and per-app exclusions.
+• Temporarily pause routing for 15 minutes, an hour, or until you turn it back on.
+• "Why?" explainer shows exactly what happened to any link you test.
+
+PRIVACY
+• Tracking parameters (utm_*, fbclid, and more) are stripped locally, including host-specific ones you define yourself.
+• Redirect wrappers (google.com/url, out.reddit, AMP caches…) are unwrapped entirely offline.
+• Optional (off by default) short-link resolution, strictly limited to a fixed allowlist.
+• Local content blocking of well-known tracker hosts inside the built-in browser.
+• A local privacy statistics card — counters stay on your device.
+
+BUILT-IN BROWSER
+• Multi-tab browsing with incognito tabs (ephemeral profile), bookmarks, history with configurable limits.
+• Picture-in-picture video, background audio playback (opt-in), reader mode, print to PDF, per-site settings.
+• Downloads via the system Download Manager, in-app downloads list, find in page, pull-to-refresh.
+
+EVERYTHING IS LOCAL
+• No telemetry, no analytics, no accounts. Routing data is generated on-device from the live LibRedirect upstream lists and validated before activation. Fail-open: if routing cannot decide, the original link opens unchanged.
+
+Source code: https://github.com/sametcn99/libredirect-mobile (public domain, Unlicense).

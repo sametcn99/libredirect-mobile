@@ -49,6 +49,8 @@ class SettingsRepository(private val context: Context) {
 
     val settings: Flow<AppSettings> = context.settingsDataStore.data.map(::toAppSettings)
 
+    suspend fun current(): AppSettings = settings.first()
+
     suspend fun setRoutingEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[Keys.ROUTING_ENABLED] = enabled }
     }
@@ -103,15 +105,122 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.APP_LOCK_ENABLED] = enabled }
     }
 
+    // --- 2.x routing-rule settings ---
+
+    /**
+     * Sets a service's three-state mode (2.4): OFF adds to disabled routes and
+     * clears the ask list, ASK does the reverse, ALWAYS clears both.
+     */
+    suspend fun setRouteMode(
+        routeId: String,
+        mode: RouteMode,
+    ) {
+        context.settingsDataStore.edit { prefs ->
+            val disabled = decodeSet(prefs[Keys.DISABLED_ROUTES]).toMutableSet()
+            val ask = decodeSet(prefs[Keys.ASK_MODE_ROUTES]).toMutableSet()
+            when (mode) {
+                RouteMode.ALWAYS -> {
+                    disabled -= routeId
+                    ask -= routeId
+                }
+                RouteMode.ASK -> {
+                    disabled -= routeId
+                    ask += routeId
+                }
+                RouteMode.OFF -> {
+                    disabled += routeId
+                    ask -= routeId
+                }
+            }
+            prefs[Keys.DISABLED_ROUTES] = json.encodeToString(disabled)
+            prefs[Keys.ASK_MODE_ROUTES] = json.encodeToString(ask)
+        }
+    }
+
+    /** Pauses routing until [untilEpochMillis] (2.6); 0 or a past stamp resumes. */
+    suspend fun setPausedUntil(untilEpochMillis: Long) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.PAUSED_UNTIL] = untilEpochMillis }
+    }
+
+    suspend fun setAutoFailoverEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.AUTO_FAILOVER_ENABLED] = enabled }
+    }
+
+    suspend fun setBackgroundLatencyMeasureEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.BACKGROUND_LATENCY_ENABLED] = enabled }
+    }
+
+    // --- 3.x privacy settings ---
+
+    suspend fun setUnwrapRedirectWrappersEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.UNWRAP_WRAPPERS_ENABLED] = enabled }
+    }
+
+    suspend fun setShortLinkResolveEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.SHORT_LINK_RESOLVE_ENABLED] = enabled }
+    }
+
+    suspend fun setCustomTrackingParams(params: List<CustomTrackingParam>) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.CUSTOM_TRACKING_PARAMS] = json.encodeToString(params) }
+    }
+
+    // --- 4.x browser settings ---
+
+    suspend fun setContentBlockerEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.CONTENT_BLOCKER_ENABLED] = enabled }
+    }
+
+    suspend fun setCloseIncognitoOnExit(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.CLOSE_INCOGNITO_ON_EXIT] = enabled }
+    }
+
+    suspend fun setAutoCloseOldTabs(id: String) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.AUTO_CLOSE_OLD_TABS] = id }
+    }
+
+    suspend fun setHistoryLimit(limit: Int) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.HISTORY_LIMIT] = limit }
+    }
+
+    suspend fun setAutoHideToolbar(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.AUTO_HIDE_TOOLBAR] = enabled }
+    }
+
+    suspend fun setBackgroundAudioEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.BACKGROUND_AUDIO_ENABLED] = enabled }
+    }
+
+    suspend fun setSiteSetting(
+        host: String,
+        setting: SiteSetting?,
+    ) {
+        context.settingsDataStore.edit { prefs ->
+            val current = decodeOrDefault(prefs[Keys.SITE_SETTINGS], emptyMap<String, SiteSetting>())
+            val updated =
+                if (setting == null || setting.isEmpty) {
+                    current - host.lowercase()
+                } else {
+                    current + (host.lowercase() to setting)
+                }
+            if (updated.isEmpty()) {
+                prefs.remove(Keys.SITE_SETTINGS)
+            } else {
+                prefs[Keys.SITE_SETTINGS] = json.encodeToString(updated)
+            }
+        }
+    }
+
+    // --- 5.x app settings ---
+
+    suspend fun setOnboardingCompleted(done: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.ONBOARDING_COMPLETED] = done }
+    }
+
     suspend fun setRouteEnabled(
         routeId: String,
         enabled: Boolean,
     ) {
-        context.settingsDataStore.edit { prefs ->
-            val current = decodeSet(prefs[Keys.DISABLED_ROUTES])
-            val updated = if (enabled) current - routeId else current + routeId
-            prefs[Keys.DISABLED_ROUTES] = json.encodeToString(updated)
-        }
+        setRouteMode(routeId, if (enabled) RouteMode.ALWAYS else RouteMode.OFF)
     }
 
     suspend fun setSelectedFrontend(
@@ -139,6 +248,48 @@ class SettingsRepository(private val context: Context) {
     suspend fun setExceptions(exceptions: List<ExceptionRule>) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.EXCEPTIONS] = json.encodeToString(exceptions) }
     }
+
+    /**
+     * Replaces every user preference in one shot (5.1 backup restore). The
+     * caller must have validated the payload first; runtime-only keys
+     * (update-check bookkeeping, throttles) are left untouched.
+     */
+    suspend fun importAll(settings: AppSettings) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[Keys.ROUTING_ENABLED] = settings.routingEnabled
+            prefs[Keys.SELECTED_BROWSER] = settings.selectedBrowserPackage ?: BrowserLauncher.SYSTEM_DEFAULT_PACKAGE
+            prefs[Keys.DISABLED_ROUTES] = json.encodeToString(settings.disabledRoutes)
+            prefs[Keys.ASK_MODE_ROUTES] = json.encodeToString(settings.askModeRoutes)
+            prefs[Keys.SELECTED_FRONTENDS] = json.encodeToString(settings.selectedFrontends)
+            prefs[Keys.INSTANCE_SELECTIONS] = json.encodeToString(settings.instanceSelections)
+            prefs[Keys.EXCEPTIONS] = json.encodeToString(settings.exceptions)
+            prefs[Keys.SEARCH_ENGINE] = settings.searchEngine
+            prefs[Keys.CUSTOM_SEARCH_ENGINE_NAME] = settings.customSearchEngineName
+            prefs[Keys.CUSTOM_SEARCH_ENGINE_URL] = settings.customSearchEngineUrl
+            prefs[Keys.BROWSER_PAGE_THEME] = settings.browserPageTheme
+            prefs[Keys.BROWSER_AUTO_DARKEN] = settings.browserAutoDarken
+            prefs[Keys.CLIPBOARD_OFFER_ENABLED] = settings.clipboardOfferEnabled
+            prefs[Keys.AUTO_INSTANCE_REFRESH_ENABLED] = settings.autoInstanceRefreshEnabled
+            prefs[Keys.BROWSER_TEXT_ZOOM] = settings.browserTextZoom
+            prefs[Keys.APP_LOCK_ENABLED] = settings.appLockEnabled
+            prefs[Keys.AUTO_FAILOVER_ENABLED] = settings.autoFailoverEnabled
+            prefs[Keys.BACKGROUND_LATENCY_ENABLED] = settings.backgroundLatencyMeasureEnabled
+            prefs[Keys.UNWRAP_WRAPPERS_ENABLED] = settings.unwrapRedirectWrappersEnabled
+            prefs[Keys.SHORT_LINK_RESOLVE_ENABLED] = settings.shortLinkResolveEnabled
+            prefs[Keys.CUSTOM_TRACKING_PARAMS] = json.encodeToString(settings.customTrackingParams)
+            prefs[Keys.CONTENT_BLOCKER_ENABLED] = settings.contentBlockerEnabled
+            prefs[Keys.CLOSE_INCOGNITO_ON_EXIT] = settings.closeIncognitoOnExit
+            prefs[Keys.AUTO_CLOSE_OLD_TABS] = settings.autoCloseOldTabs
+            prefs[Keys.HISTORY_LIMIT] = settings.historyLimit
+            prefs[Keys.AUTO_HIDE_TOOLBAR] = settings.autoHideToolbar
+            prefs[Keys.BACKGROUND_AUDIO_ENABLED] = settings.backgroundAudioEnabled
+            prefs[Keys.SITE_SETTINGS] = json.encodeToString(settings.siteSettings)
+            prefs[Keys.ONBOARDING_COMPLETED] = true
+            prefs[Keys.PAUSED_UNTIL] = 0L
+        }
+    }
+
+    // --- runtime bookkeeping (not part of backups) ---
 
     /** Epoch millis of the last successful GitHub Releases update check; 0 when never checked. */
     suspend fun updateLastCheckAt(): Long = context.settingsDataStore.data.first()[Keys.UPDATE_LAST_CHECK_AT] ?: 0L
@@ -199,11 +350,16 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    // One line per stored key is the whole point — splitting the mapping
+    // would scatter the key list and make drift between write and read
+    // harder to spot, so the mechanical complexity stays in one place.
+    @Suppress("CyclomaticComplexMethod")
     private fun toAppSettings(prefs: Preferences): AppSettings =
         AppSettings(
             routingEnabled = prefs[Keys.ROUTING_ENABLED] ?: true,
             selectedBrowserPackage = prefs[Keys.SELECTED_BROWSER] ?: BrowserLauncher.IN_APP_BROWSER_PACKAGE,
             disabledRoutes = decodeSet(prefs[Keys.DISABLED_ROUTES]),
+            askModeRoutes = decodeSet(prefs[Keys.ASK_MODE_ROUTES]),
             selectedFrontends = decodeStringMap(prefs[Keys.SELECTED_FRONTENDS]),
             instanceSelections = decodeInstanceSelections(prefs[Keys.INSTANCE_SELECTIONS]),
             exceptions = decodeList(prefs[Keys.EXCEPTIONS]),
@@ -216,6 +372,20 @@ class SettingsRepository(private val context: Context) {
             autoInstanceRefreshEnabled = prefs[Keys.AUTO_INSTANCE_REFRESH_ENABLED] ?: false,
             browserTextZoom = prefs[Keys.BROWSER_TEXT_ZOOM] ?: 100,
             appLockEnabled = prefs[Keys.APP_LOCK_ENABLED] ?: false,
+            autoFailoverEnabled = prefs[Keys.AUTO_FAILOVER_ENABLED] ?: true,
+            backgroundLatencyMeasureEnabled = prefs[Keys.BACKGROUND_LATENCY_ENABLED] ?: false,
+            unwrapRedirectWrappersEnabled = prefs[Keys.UNWRAP_WRAPPERS_ENABLED] ?: true,
+            shortLinkResolveEnabled = prefs[Keys.SHORT_LINK_RESOLVE_ENABLED] ?: false,
+            customTrackingParams = decodeOrDefault(prefs[Keys.CUSTOM_TRACKING_PARAMS], emptyList()),
+            contentBlockerEnabled = prefs[Keys.CONTENT_BLOCKER_ENABLED] ?: true,
+            closeIncognitoOnExit = prefs[Keys.CLOSE_INCOGNITO_ON_EXIT] ?: false,
+            autoCloseOldTabs = prefs[Keys.AUTO_CLOSE_OLD_TABS] ?: TabAutoClose.NEVER.id,
+            historyLimit = prefs[Keys.HISTORY_LIMIT] ?: 200,
+            autoHideToolbar = prefs[Keys.AUTO_HIDE_TOOLBAR] ?: false,
+            backgroundAudioEnabled = prefs[Keys.BACKGROUND_AUDIO_ENABLED] ?: false,
+            siteSettings = decodeOrDefault(prefs[Keys.SITE_SETTINGS], emptyMap()),
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            pausedUntilEpochMillis = prefs[Keys.PAUSED_UNTIL] ?: 0L,
         )
 
     private fun decodeSet(raw: String?): Set<String> = decodeOrDefault(raw, emptySet())
@@ -243,6 +413,7 @@ class SettingsRepository(private val context: Context) {
         val ROUTING_ENABLED = booleanPreferencesKey("routing_enabled")
         val SELECTED_BROWSER = stringPreferencesKey("selected_browser")
         val DISABLED_ROUTES = stringPreferencesKey("disabled_routes_json")
+        val ASK_MODE_ROUTES = stringPreferencesKey("ask_mode_routes_json")
         val SELECTED_FRONTENDS = stringPreferencesKey("selected_frontends_json")
         val INSTANCE_SELECTIONS = stringPreferencesKey("instance_selections_json")
         val EXCEPTIONS = stringPreferencesKey("exceptions_json")
@@ -255,10 +426,31 @@ class SettingsRepository(private val context: Context) {
         val AUTO_INSTANCE_REFRESH_ENABLED = booleanPreferencesKey("auto_instance_refresh_enabled")
         val BROWSER_TEXT_ZOOM = intPreferencesKey("browser_text_zoom")
         val APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
+        val PAUSED_UNTIL = longPreferencesKey("paused_until")
+        val AUTO_FAILOVER_ENABLED = booleanPreferencesKey("auto_failover_enabled")
+        val BACKGROUND_LATENCY_ENABLED = booleanPreferencesKey("background_latency_measure_enabled")
+        val UNWRAP_WRAPPERS_ENABLED = booleanPreferencesKey("unwrap_wrappers_enabled")
+        val SHORT_LINK_RESOLVE_ENABLED = booleanPreferencesKey("short_link_resolve_enabled")
+        val CUSTOM_TRACKING_PARAMS = stringPreferencesKey("custom_tracking_params_json")
+        val CONTENT_BLOCKER_ENABLED = booleanPreferencesKey("content_blocker_enabled")
+        val CLOSE_INCOGNITO_ON_EXIT = booleanPreferencesKey("close_incognito_on_exit")
+        val AUTO_CLOSE_OLD_TABS = stringPreferencesKey("auto_close_old_tabs")
+        val HISTORY_LIMIT = intPreferencesKey("history_limit")
+        val AUTO_HIDE_TOOLBAR = booleanPreferencesKey("auto_hide_toolbar")
+        val BACKGROUND_AUDIO_ENABLED = booleanPreferencesKey("background_audio_enabled")
+        val SITE_SETTINGS = stringPreferencesKey("site_settings_json")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
         val MANIFEST_LAST_GENERATION_AT = longPreferencesKey("manifest_last_generation_at")
         val UPDATE_FAILED_CHECKS = intPreferencesKey("update_failed_checks")
         val UPDATE_CACHED_VERSION = stringPreferencesKey("update_cached_version")
         val UPDATE_CACHED_RELEASE_URL = stringPreferencesKey("update_cached_release_url")
     }
+}
+
+/** The three-state per-service routing mode (2.4). */
+enum class RouteMode {
+    ALWAYS,
+    ASK,
+    OFF,
 }

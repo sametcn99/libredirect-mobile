@@ -1,0 +1,27 @@
+LibRedirect Mobile, büyük platformların (YouTube, Reddit, X/Twitter ve daha fazlası) bağlantılarını Invidious, Piped veya Redlib gibi gizlilik dostu frontend'lere yönlendirir — otomatik olarak, tamamen cihazınızda, hesapsız ve telemetrisiz.
+
+YÖNLENDİRME
+• Sistem genelinde: varsayılan tarayıcınız yapın veya herhangi bir bağlantıyı ona paylaşın.
+• Yönlendirilen bağlantılar dahili çok sekmeli tarayıcıda ya da tercih ettiğiniz harici tarayıcıda açılır.
+• Servis başına kontrol: her zaman yönlendir, her seferinde sor veya servisi kapat.
+• Ölçülen gecikmeye göre ağırlıklandırılmış otomatik instance seçimi; kapalı instance'larda otomatik geçiş.
+• Yönlendirme istisnaları: alan adı, yol öneki, joker karakter ve uygulama bazlı hariç tutma.
+• Yönlendirmeyi 15 dakika, 1 saat veya tekrar kapatana kadar duraklatın.
+• "Neden?" açıklayıcı, test ettiğiniz bağlantıya tam olarak ne olduğunu gösterir.
+
+GİZLİLİK
+• Takip parametreleri (utm_*, fbclid ve daha fazlası) yerel olarak temizlenir; kendi tanımladığınız siteye özel kurallar dahil.
+• Yönlendirme sarmalayıcıları (google.com/url, out.reddit, AMP önbelleği…) tamamen çevrimdışı açılır.
+• İsteğe bağlı (varsayılan kapalı) kısa bağlantı çözümü, sabit bir izin listesiyle sınırlıdır.
+• Dahili tarayıcıda bilinen izleyici alan adlarının yerel engellenmesi.
+• Cihazınızda kalan yerel gizlilik istatistikleri kartı.
+
+DAHİLİ TARAYICI
+• Gizli sekmeli (geçici profil) çok sekmeli gezinme, yer imleri, sınırı ayarlanabilir geçmiş.
+• Resim içinde resim video, arka planda ses çalma (isteğe bağlı), okuma modu, PDF yazdırma, site bazlı ayarlar.
+• Sistem İndirme Yöneticisi ile indirmeler, uygulama içi indirme listesi, sayfada bul, çekerek yenile.
+
+HER ŞEY YERELDE
+• Telemetri yok, analitik yok, hesap yok. Yönlendirme verisi, canlı LibRedirect üst akış listelerinden cihazda üretilir ve etkinleştirilmeden önce doğrulanır. Fail-open: yönlendirme karar veremezse orijinal bağlantı değişmeden açılır.
+
+Kaynak kodu: https://github.com/sametcn99/libredirect-mobile (kamu malı, Unlicense).

@@ -279,4 +279,251 @@
     <string name="shortcut_pin_unsupported">Ana ekran kısayolları desteklenmiyor</string>
     <string name="process_text_label">LibRedirect ile aç</string>
 
+    <!-- 2.1/2.3: instance selection modes & health -->
+    <string name="service_mode_label">Yönlendirme modu</string>
+    <string name="service_mode_always">Her zaman</string>
+    <string name="service_mode_ask">Her seferinde sor</string>
+    <string name="service_mode_off">Kapalı</string>
+    <string name="service_detail_instance_fastest">En hızlı instance</string>
+    <string name="service_health_header">Instance sağlığı</string>
+    <string name="service_health_measure_all">Tümünü ölç</string>
+    <string name="service_health_measuring">Ölçülüyor…</string>
+    <string name="health_status_fast">Hızlı</string>
+    <string name="health_status_slow">Yavaş</string>
+    <string name="health_status_unreachable">Ulaşılamıyor</string>
+    <string name="health_status_unmeasured">Ölçülmedi</string>
+    <string name="health_status_cooldown">Beklemede</string>
+    <string name="settings_background_latency">Instance\'ları arka planda ölç</string>
+    <string name="settings_background_latency_desc">Seçili frontend\'lerin gecikmesini günde bir kez ölçer; böylece otomatik seçim bilinçli başlar. Varsayılan olarak kapalıdır.</string>
+    <string name="settings_auto_failover">Otomatik instance geçişi (failover)</string>
+    <string name="settings_auto_failover_desc">Yönlendirilmiş bir sayfa açılmazsa bir sonraki sağlıklı instance ile otomatik yeniden denenir (en fazla iki kez), ardından orijinal site önerilir.</string>
+
+    <!-- 2.4: ask-every-time dialog -->
+    <string name="ask_route_title">Frontend ile açılsın mı?</string>
+    <string name="ask_route_desc_fmt">%1$s bağlantısı algılandı</string>
+    <string name="ask_route_open_frontend">Frontend\'de aç</string>
+    <string name="ask_route_open_original">Orijinali aç</string>
+    <string name="ask_route_add_exception">Bu siteyi hariç tut</string>
+    <string name="ask_route_exception_added">Site istisnalara eklendi</string>
+
+    <!-- 2.5: source-app exceptions -->
+    <string name="exceptions_source_app_section">Uygulamalardan gelen bağlantılar</string>
+    <string name="exceptions_source_app_add">Uygulama hariç tut</string>
+    <string name="exceptions_source_app_hint">Paket adı, örn. com.twitter.android</string>
+    <string name="exceptions_source_app_note">Gönderen uygulamayı taklit etmek mümkündür — bunu bir kolaylık olarak kullanın, garanti olarak değil.</string>
+    <string name="exceptions_source_app_pick">Yüklü bir uygulama seç</string>
+    <string name="exceptions_wildcard_hint">* joker karakterdir, örn. *.example.com</string>
+
+    <!-- 2.6: temporary pause -->
+    <string name="home_routing_paused">Yönlendirme Duraklatıldı</string>
+    <string name="home_routing_paused_desc_fmt">Bağlantılar %1$s değerine kadar değişmeden açılır</string>
+    <string name="home_pause_menu">Yönlendirmeyi duraklat</string>
+    <string name="home_pause_15m">15 dakika</string>
+    <string name="home_pause_1h">1 saat</string>
+    <string name="home_pause_until_resume">Tekrar kapatana kadar</string>
+    <string name="home_resume_routing">Şimdi devam et</string>
+    <string name="tile_routing_paused_subtitle">Yönlendirme duraklatıldı</string>
+
+    <!-- 2.7: original link -->
+    <string name="browser_menu_share_original">Orijinal linki paylaş</string>
+    <string name="browser_menu_copy_original">Orijinal linki kopyala</string>
+    <string name="browser_original_unavailable">Orijinal link belirlenemedi</string>
+
+    <!-- 2.8: routing explainer -->
+    <string name="home_why_button">Neden?</string>
+    <string name="home_why_title">Yönlendirme ayrıntıları</string>
+    <string name="home_why_hide">Ayrıntıları gizle</string>
+    <string name="trace_route_fmt">Servis: %1$s</string>
+    <string name="trace_frontend_fmt">Frontend: %1$s</string>
+    <string name="trace_instance_fmt">Instance: %1$s</string>
+    <string name="trace_selection_fmt">Seçim: %1$s</string>
+    <string name="trace_stripped_fmt">%1$d takip parametresi temizlendi</string>
+    <string name="trace_unwrapped_fmt">%1$d yönlendirme sarmalayıcısı açıldı</string>
+    <string name="trace_exception_fmt">Eşleşen istisna: %1$s</string>
+    <string name="trace_selection_automatic">Otomatik (gecikme ağırlıklı)</string>
+    <string name="trace_selection_fastest">En hızlı</string>
+    <string name="trace_selection_pinned">Sabitlenmiş</string>
+    <string name="trace_selection_custom">Özel</string>
+    <string name="trace_selection_override">Tek seferlik seçim</string>
+    <string name="trace_reason_no_route">Bu siteye uygun bir yönlendirme kuralı yok</string>
+    <string name="trace_reason_route_disabled">Bu servis kapalı</string>
+    <string name="trace_reason_exception_matched">Bir yönlendirme istisnası bu bağlantıyı kapsıyor</string>
+    <string name="trace_reason_ask_mode">Bu servis her seferinde sormak üzere ayarlı</string>
+    <string name="trace_reason_paused">Yönlendirme duraklatıldı</string>
+    <string name="trace_reason_routing_disabled">Yönlendirme kapalı</string>
+    <string name="trace_reason_strategy_passthrough">Seçilen frontend orijinal siteyi koruyor</string>
+    <string name="trace_reason_no_instance">Instance seçilemedi</string>
+    <string name="trace_reason_target_unchanged">Yönlendirme hedefi orijinal bağlantıyla aynı</string>
+    <string name="trace_reason_not_eligible">Bu giriş yönlendirilebilir bir web bağlantısı değil</string>
+    <string name="trace_reason_instance_cooldown">Tüm instance\'lar beklemede</string>
+    <string name="trace_redirected_fmt">%1$s adresine yönlendirildi</string>
+    <string name="trace_passthrough_fmt">Değişmeden açıldı</string>
+
+    <!-- 3.1/3.3/3.4: privacy -->
+    <string name="settings_section_privacy">Gizlilik ve Bağlantı Temizliği</string>
+    <string name="settings_unwrap_wrappers">Yönlendirme sarmalayıcılarını ve AMP aç</string>
+    <string name="settings_unwrap_wrappers_desc">google.com/url, facebook, out.reddit, AMP önbelleği gibi sarmalayıcı bağlantıların gerçek hedefini yönlendirmeden önce çıkarır. Tamamen çevrimdışı çalışır.</string>
+    <string name="settings_short_links">Kısaltılmış bağlantıları çöz</string>
+    <string name="settings_short_links_desc">t.co, bit.ly ve benzeri kısaltıcıları yönlendirmeden önce hedefine kadar takip eder. Varsayılan olarak kapalıdır: kısaltıcı servise ağ isteği yapılır. Yalnızca bilinen kısaltıcı alan adları takip edilir.</string>
+    <string name="settings_custom_tracking">Özel takip parametreleri</string>
+    <string name="settings_custom_tracking_desc_fmt">%1$d kullanıcı tanımlı kural</string>
+    <string name="tracking_params_title">Özel takip parametreleri</string>
+    <string name="tracking_params_section_global">Genel parametreler</string>
+    <string name="tracking_params_section_host">Siteye özel parametreler</string>
+    <string name="tracking_params_hint_name">Parametre adı, örn. ref_*</string>
+    <string name="tracking_params_hint_host">Alan adı, örn. shop.example.com</string>
+    <string name="tracking_params_note">Genel kurallar tüm sitelerde, site kuralları yalnızca o alan adı ve alt alan adlarında geçerlidir. Sondaki * ön ek eşleştirir.</string>
+    <string name="home_privacy_stats_title">Gizlilik etkinliği</string>
+    <string name="home_privacy_stat_redirects">Yönlendirme</string>
+    <string name="home_privacy_stat_stripped">Temizlenen parametre</string>
+    <string name="home_privacy_stat_unwrapped">Açılan sarmalayıcı</string>
+    <string name="home_privacy_stat_short_links">Kısa bağlantı</string>
+    <string name="home_privacy_stat_blocked">Engellenen istek</string>
+    <string name="home_privacy_stats_reset">Sıfırla</string>
+    <string name="home_privacy_stats_reset_confirm">Yerel gizlilik sayaçları sıfırlansın mı? Bu işlem geri alınamaz.</string>
+
+    <!-- 4.2: content blocker -->
+    <string name="settings_content_blocking">Tarayıcıda izleyicileri engelle</string>
+    <string name="settings_content_blocking_desc">Dahili tarayıcıda bilinen analiz/reklam alan adlarını engeller. Gömülü liste çevrimdışı çalışır; güncellemeler, yönlendirme verisiyle aynı doğrulama hattından sabit bir kaynaktan gelir.</string>
+    <string name="settings_blocker_update_now">Engelleme listesini güncelle</string>
+    <string name="settings_blocker_updated_fmt">Liste güncellendi (%1$d alan adı)</string>
+    <string name="settings_blocker_update_failed">Liste güncellenemedi; mevcut liste korunuyor</string>
+    <string name="browser_blocked_fmt">%1$d engellendi</string>
+
+    <!-- 4.3: site settings -->
+    <string name="browser_site_settings_title">Site ayarları</string>
+    <string name="browser_site_settings_host_fmt">%1$s için ayarlar</string>
+    <string name="site_settings_javascript">JavaScript</string>
+    <string name="site_settings_javascript_desc">JS\'i kapatmak sayfaları bozabilir; agresif siteler için kullanın</string>
+    <string name="site_settings_desktop">Masaüstü sitesi</string>
+    <string name="site_settings_text_size">Metin boyutu</string>
+    <string name="site_settings_force_dark">Karanlığı zorla</string>
+    <string name="site_settings_content_blocking">İçerik engelleme</string>
+    <string name="site_settings_reset">Bu sitenin ayarlarını sıfırla</string>
+    <string name="site_settings_follow_global">Genel ayarı izle</string>
+
+    <!-- 4.4: reader mode -->
+    <string name="browser_menu_reader_mode">Okuma modu</string>
+    <string name="browser_reader_exit">Okuma modundan çık</string>
+    <string name="browser_reader_unavailable">Bu sayfada okunabilir bir makale bulunamadı</string>
+
+    <!-- 4.5: browser extras -->
+    <string name="browser_menu_print">Yazdır / PDF olarak kaydet</string>
+    <string name="browser_menu_downloads">İndirmeler</string>
+    <string name="downloads_title">İndirmeler</string>
+    <string name="downloads_empty">Henüz indirme yok</string>
+    <string name="downloads_status_running">Devam ediyor</string>
+    <string name="downloads_status_done">Tamamlandı</string>
+    <string name="downloads_status_failed">Başarısız</string>
+    <string name="downloads_status_paused">Duraklatıldı</string>
+    <string name="browser_start_page_top_sites">Sık ziyaret edilenler</string>
+    <string name="browser_start_page_bookmarks">Yer imleri</string>
+    <string name="browser_start_page_empty">Yer imleriniz ve sık ziyaret ettiğiniz siteler burada görünecek</string>
+    <string name="tab_switcher_close_others">Diğer sekmeleri kapat</string>
+    <string name="tab_switcher_sort">Sekmeleri sırala</string>
+    <string name="tab_switcher_sort_recent">Son kullanılan</string>
+    <string name="tab_switcher_sort_order">Açılış sırası</string>
+    <string name="tab_switcher_group_add">Grupla…</string>
+    <string name="tab_switcher_group_hint">Grup adı</string>
+    <string name="tab_switcher_group_remove">Gruptan çıkar</string>
+    <string name="settings_history_limit">Geçmiş boyutu</string>
+    <string name="history_limit_off">Geçmiş tutulmaz</string>
+    <string name="history_limit_fmt">%1$d kayıt</string>
+    <string name="settings_auto_close_tabs">Eski sekmeleri otomatik kapat</string>
+    <string name="settings_auto_close_tabs_desc">Seçilen yaştan eski sekmeler tarayıcı oturumu geri yüklerken temizlenir</string>
+    <string name="tab_auto_close_never">Asla</string>
+    <string name="tab_auto_close_1d">1 gün sonra</string>
+    <string name="tab_auto_close_1w">1 hafta sonra</string>
+    <string name="tab_auto_close_1m">1 ay sonra</string>
+    <string name="settings_close_incognito">Çıkışta gizli sekmeleri kapat</string>
+    <string name="settings_close_incognito_desc">Gizli sekmeler uygulama arka plana geçtiğinde silinir</string>
+    <string name="settings_auto_hide_toolbar">Kaydırırken araç çubuğunu gizle</string>
+    <string name="settings_auto_hide_toolbar_desc">Aşağı kaydırırken adres ve gezinme çubukları kenara çekilir</string>
+
+    <!-- 4.6: background audio -->
+    <string name="settings_background_audio">Arka planda ses çalma</string>
+    <string name="settings_background_audio_desc">Ekran kapalıyken veya uygulama arka plandayken ses çalmaya devam eder; bildirimde medya kontrolleri görünür. Varsayılan olarak kapalıdır.</string>
+    <string name="media_playback_channel_name">Arka planda medya çalma</string>
+    <string name="media_playback_title">Arka planda çalıyor</string>
+    <string name="media_playback_subtitle">Bu sekmedeki medya çalmaya devam ediyor</string>
+    <string name="media_playback_play_pause">Oynat / Duraklat</string>
+    <string name="media_playback_stop">Durdur</string>
+
+    <!-- 5.1: backup & restore -->
+    <string name="settings_backup">Yedekleme ve geri yükleme</string>
+    <string name="settings_backup_desc_fmt">Tüm ayarlar, özel servisler, takip kuralları ve site ayarları tek dosyada</string>
+    <string name="settings_backup_export">Ayarları dışa aktar</string>
+    <string name="settings_backup_import">Ayarları içe aktar</string>
+    <string name="settings_backup_created">Ayar dosyası kaydedildi</string>
+    <string name="settings_backup_export_failed">Ayar dosyası yazılamadı</string>
+    <string name="backup_import_title">Ayarlar içe aktarılsın mı?</string>
+    <string name="backup_import_summary_fmt">%1$s sürümü yedeği: %2$d servis ve %3$d istisna kuralı mevcut ayarlarınızın yerine geçecek.</string>
+    <string name="backup_import_include_bookmarks_fmt">%1$d yer imi içeriyor</string>
+    <string name="backup_import_apply">Ayarları değiştir</string>
+    <string name="backup_import_applied">Ayarlar geri yüklendi</string>
+    <string name="backup_import_failed_fmt">İçe aktarma başarısız: %1$s</string>
+    <string name="backup_reason_malformed">dosya geçerli bir ayar yedeği değil</string>
+    <string name="backup_reason_unsupported_version">yedek farklı bir sürümle oluşturulmuş</string>
+    <string name="backup_reason_too_large">dosya çok büyük</string>
+    <string name="backup_reason_invalid_custom_instance">sabitlenmiş bir instance geçerli bir HTTPS kökeni değil</string>
+
+    <!-- 5.2: onboarding -->
+    <string name="onboarding_step_fmt">Adım %1$d/4</string>
+    <string name="onboarding_welcome_title">LibRedirect\'e hoş geldiniz</string>
+    <string name="onboarding_welcome_desc">Bu uygulama büyük platformların (YouTube, Reddit, X…) bağlantılarını gizlilik dostu frontend\'lere yönlendirir; kendi tarayıcınızda veya dahili tarayıcıda. Her şey cihazınızda kalır.</string>
+    <string name="onboarding_default_browser_title">Varsayılan tarayıcınız yapın</string>
+    <string name="onboarding_default_browser_desc">LibRedirect\'i varsayılan tarayıcı yapın; böylece dokunduğunuz bağlantılar otomatik yönlendirilir.</string>
+    <string name="onboarding_default_browser_btn">Varsayılan tarayıcı yap</string>
+    <string name="onboarding_app_links_title">Uygulamalar bağlantıları buraya açsın</string>
+    <string name="onboarding_app_links_desc">YouTube gibi uygulamalar kendi web bağlantılarını kendileri açabilir. Aşağıdaki yüklü servis uygulamalarının her biri için \"Varsayılan olarak aç\" seçeneğini kapatın; böylece bağlantılar LibRedirect\'e ulaşır.</string>
+    <string name="onboarding_app_links_btn_fmt">\"%1$s\" ayarlarını aç</string>
+    <string name="onboarding_app_links_none">Bu cihazda bilinen servis uygulaması bulunamadı.</string>
+    <string name="onboarding_share_title">Paylaşın ve metin seçin</string>
+    <string name="onboarding_share_desc">Herhangi bir bağlantı LibRedirect\'e paylaşılabilir; ya da başka bir uygulamada metni seçip menüden \"LibRedirect ile aç\" ile açabilirsiniz.</string>
+    <string name="onboarding_skip">Atla</string>
+    <string name="onboarding_next">İleri</string>
+    <string name="onboarding_get_started">Başlayalım</string>
+    <string name="settings_onboarding">Tanıtımı tekrar göster</string>
+
+    <!-- 5.3: widget -->
+    <string name="widget_routing_on">Yönlendirme açık</string>
+    <string name="widget_routing_off">Yönlendirme kapalı</string>
+    <string name="widget_paused">Duraklatıldı</string>
+    <string name="widget_route_clipboard">Panodaki bağlantıyı yönlendir</string>
+    <string name="widget_clipboard_empty">Panoda bağlantı bulunamadı</string>
+
+    <!-- 5.4: what's new -->
+    <string name="settings_whats_new_title">%1$s sürümündeki yenilikler</string>
+    <string name="update_open_release">Sürüm sayfasını aç</string>
+
+    <!-- 5.5/5.6: services discovery -->
+    <string name="services_filter_category">Kategori</string>
+    <string name="service_category_all">Tümü</string>
+    <string name="service_category_video">Video</string>
+    <string name="service_category_social">Sosyal</string>
+    <string name="service_category_search">Arama</string>
+    <string name="service_category_translate">Çeviri</string>
+    <string name="service_category_news">Haber</string>
+    <string name="service_category_maps">Harita</string>
+    <string name="service_category_dev">Geliştirici</string>
+    <string name="service_category_music">Müzik</string>
+    <string name="service_category_other">Diğer</string>
+    <string name="service_frontend_about_title">Bu frontend hakkında</string>
+    <string name="service_frontend_desc_default">Bu servis için topluluk yapımı bir frontend.</string>
+
+    <!-- Diagnostics (§6) -->
+    <string name="settings_diagnostics">Tanılama</string>
+    <string name="settings_diagnostics_desc">Kopyalanabilir yerel uygulama bilgisi — telemetri yok</string>
+    <string name="diagnostics_title">Tanılama</string>
+    <string name="diagnostics_app_version">Uygulama sürümü</string>
+    <string name="diagnostics_manifest_revision">Yönlendirme verisi revizyonu</string>
+    <string name="diagnostics_rule_counts_fmt">%1$d servis · %2$d frontend · %3$d instance</string>
+    <string name="diagnostics_webview_version">WebView sürümü</string>
+    <string name="diagnostics_android_api">Android API seviyesi</string>
+    <string name="diagnostics_settings_summary">Ayar özeti</string>
+    <string name="diagnostics_recent_errors">Son hatalar (bellekte)</string>
+    <string name="diagnostics_copy">Tanılamayı kopyala</string>
+    <string name="diagnostics_copied">Tanılama panoya kopyalandı</string>
+    <string name="diagnostics_webview_unknown">bilinmiyor</string>
+
 </resources>

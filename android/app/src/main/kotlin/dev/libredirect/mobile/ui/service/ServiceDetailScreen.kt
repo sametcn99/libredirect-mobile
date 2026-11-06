@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddToHomeScreen
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +29,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -41,13 +47,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.core.routing.InstanceHealth
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.url.UrlValidation
+import dev.libredirect.mobile.settings.RouteMode
 import dev.libredirect.mobile.ui.FrontendUiState
 import dev.libredirect.mobile.ui.ServiceUiState
 import kotlinx.coroutines.delay
 
 private const val CUSTOM_COMMIT_DEBOUNCE_MILLIS = 600L
+private const val FAST_THRESHOLD_MS = 500L
 
 @Composable
 fun ServiceDetailScreen(
@@ -57,6 +66,12 @@ fun ServiceDetailScreen(
     onInstanceSelectionChange: (frontendId: String, selection: InstanceSelection) -> Unit,
     redirectCount: Int = 0,
     onPinShortcut: () -> Unit = {},
+    routeMode: RouteMode = RouteMode.ALWAYS,
+    onRouteModeChange: (RouteMode) -> Unit = {},
+    instanceHealth: Map<String, InstanceHealth> = emptyMap(),
+    isMeasuringHealth: Boolean = false,
+    onMeasureHealth: () -> Unit = {},
+    nowMillis: () -> Long = System::currentTimeMillis,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -89,6 +104,13 @@ fun ServiceDetailScreen(
                 )
             }
             item {
+                // 2.4: three-state per-service routing mode.
+                RouteModeSelector(
+                    mode = routeMode,
+                    onChange = onRouteModeChange,
+                )
+            }
+            item {
                 Text(
                     text = stringResource(R.string.service_detail_frontend_header),
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
@@ -104,6 +126,14 @@ fun ServiceDetailScreen(
                     InstanceSelector(
                         frontend = frontend,
                         onSelectionChange = { selection -> onInstanceSelectionChange(frontend.id, selection) },
+                    )
+                    // 2.3: instance health panel for the selected frontend.
+                    InstanceHealthPanel(
+                        instances = frontend.instances,
+                        health = instanceHealth,
+                        isMeasuring = isMeasuringHealth,
+                        onMeasureAll = onMeasureHealth,
+                        nowMillis = nowMillis,
                     )
                 }
             }
@@ -145,6 +175,146 @@ private fun ServiceSummaryRow(
         }
     }
 }
+
+/** Always / Ask every time / Off — one segmented row (2.4). */
+@Composable
+private fun RouteModeSelector(
+    mode: RouteMode,
+    onChange: (RouteMode) -> Unit,
+) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Text(
+            text = stringResource(R.string.service_mode_label),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.width(4.dp))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            val modes = listOf(RouteMode.ALWAYS, RouteMode.ASK, RouteMode.OFF)
+            modes.forEachIndexed { index, candidate ->
+                SegmentedButton(
+                    selected = mode == candidate,
+                    onClick = { onChange(candidate) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                ) {
+                    Text(
+                        text =
+                            stringResource(
+                                when (candidate) {
+                                    RouteMode.ALWAYS -> R.string.service_mode_always
+                                    RouteMode.ASK -> R.string.service_mode_ask
+                                    RouteMode.OFF -> R.string.service_mode_off
+                                },
+                            ),
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 2.3: all instances of the selected frontend with status badges + "measure all". */
+@Composable
+private fun InstanceHealthPanel(
+    instances: List<String>,
+    health: Map<String, InstanceHealth>,
+    isMeasuring: Boolean,
+    onMeasureAll: () -> Unit,
+    nowMillis: () -> Long,
+) {
+    if (instances.isEmpty()) return
+    Column(modifier = Modifier.padding(start = 32.dp, end = 16.dp, bottom = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.service_health_header),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            if (isMeasuring) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.service_health_measuring),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            } else {
+                TextButton(onClick = onMeasureAll) {
+                    Text(stringResource(R.string.service_health_measure_all))
+                }
+            }
+        }
+        instances.forEach { instance ->
+            val status = healthStatus(health[instance], nowMillis())
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color =
+                        when (status) {
+                            HealthStatus.FAST -> MaterialTheme.colorScheme.primaryContainer
+                            HealthStatus.SLOW -> MaterialTheme.colorScheme.secondaryContainer
+                            HealthStatus.UNREACHABLE, HealthStatus.COOLDOWN -> MaterialTheme.colorScheme.errorContainer
+                            HealthStatus.UNMEASURED -> MaterialTheme.colorScheme.surfaceVariant
+                        },
+                ) {
+                    Text(
+                        text = stringResource(statusLabelRes(status)),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = instance.removePrefix("https://"),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                health[instance]?.latencyMillis?.takeIf { it > 0 }?.let { latency ->
+                    Text(
+                        text = stringResource(R.string.browser_instance_latency_fmt, latency),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private enum class HealthStatus { FAST, SLOW, UNREACHABLE, UNMEASURED, COOLDOWN }
+
+private fun healthStatus(
+    health: InstanceHealth?,
+    nowMillis: Long,
+): HealthStatus {
+    val latency = health?.latencyMillis
+    return when {
+        health?.isCoolingDown(nowMillis) == true -> HealthStatus.COOLDOWN
+        latency != null && latency < 0 -> HealthStatus.UNREACHABLE
+        latency == null -> HealthStatus.UNMEASURED
+        latency <= FAST_THRESHOLD_MS -> HealthStatus.FAST
+        else -> HealthStatus.SLOW
+    }
+}
+
+private fun statusLabelRes(status: HealthStatus): Int =
+    when (status) {
+        HealthStatus.FAST -> R.string.health_status_fast
+        HealthStatus.SLOW -> R.string.health_status_slow
+        HealthStatus.UNREACHABLE -> R.string.health_status_unreachable
+        HealthStatus.UNMEASURED -> R.string.health_status_unmeasured
+        HealthStatus.COOLDOWN -> R.string.health_status_cooldown
+    }
 
 @Composable
 private fun FrontendRow(
@@ -188,6 +358,15 @@ private fun InstanceSelector(
             onClick = {
                 customTouched = false
                 onSelectionChange(InstanceSelection.Automatic)
+            },
+        )
+        // 2.1: fastest-measured mode.
+        InstanceModeRow(
+            label = stringResource(R.string.service_detail_instance_fastest),
+            selected = frontend.selection is InstanceSelection.Fastest,
+            onClick = {
+                customTouched = false
+                onSelectionChange(InstanceSelection.Fastest)
             },
         )
         for (instance in frontend.instances) {

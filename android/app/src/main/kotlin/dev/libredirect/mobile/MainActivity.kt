@@ -1,9 +1,13 @@
 package dev.libredirect.mobile
 
+import android.app.PictureInPictureParams
 import android.app.role.RoleManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +17,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.browser.ShortcutActions
+import dev.libredirect.mobile.media.MediaPlaybackService
 import dev.libredirect.mobile.ui.AppNavHost
 import dev.libredirect.mobile.ui.MainViewModel
 import dev.libredirect.mobile.ui.ROUTE_SERVICES
@@ -22,11 +27,22 @@ import dev.libredirect.mobile.ui.settings.BrowserRoleHost
 import dev.libredirect.mobile.ui.theme.LibRedirectMobileTheme
 
 class MainActivity : AppCompatActivity(), BrowserRoleHost {
+    private companion object {
+        const val ASPECT_SCALE = 1000
+        const val MIN_PIP_ASPECT = 0.4f
+        const val MAX_PIP_ASPECT = 2.4f
+        const val WIDE_ASPECT = 16
+    }
+
     private val browserViewModel: BrowserViewModel by viewModels()
     private val mainViewModel: MainViewModel by viewModels()
 
     private val roleRequestLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+
+    /** Runtime notification permission for the media notification (4.6, API 33+). */
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +81,52 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
         // transient overlays like share sheets); the gate itself no-ops when
         // the feature is off.
         mainViewModel.lockApp()
+        // 4.5: opt-in wipe of incognito tabs when the app leaves the foreground.
+        mainViewModel.maybeCloseIncognitoTabs(browserViewModel)
+        // 4.6: keep audio alive behind a foreground service while opted in
+        // and the active tab's page is actually playing media.
+        mainViewModel.maybeStartMediaPlaybackService()
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) {
+            MediaPlaybackService.stop(this)
+        }
+        super.onDestroy()
+    }
+
+    // --- 4.1 picture-in-picture ---
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Entering PiP when the user leaves while fullscreen video plays.
+        if (browserViewModel.shouldEnterPictureInPicture()) {
+            tryEnterPip()
+        }
+    }
+
+    private fun tryEnterPip() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val aspect = browserViewModel.fullscreenAspectRatio()
+        val rational =
+            when {
+                aspect != null && aspect in MIN_PIP_ASPECT..MAX_PIP_ASPECT ->
+                    Rational((aspect * ASPECT_SCALE).toInt(), ASPECT_SCALE.toInt())
+                else -> Rational(WIDE_ASPECT, 1)
+            }
+        val params = PictureInPictureParams.Builder().setAspectRatio(rational).build()
+        try {
+            enterPictureInPictureMode(params)
+        } catch (_: IllegalStateException) {
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPipMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPipMode, newConfig)
+        browserViewModel.onPictureInPictureModeChanged(isInPipMode)
     }
 
     override fun requestBrowserRole() {
@@ -79,6 +141,14 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
         if (canRequest) {
             roleRequestLauncher.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_BROWSER))
         }
+    }
+
+    /** Runtime POST_NOTIFICATIONS request for the media notification (API 33+). */
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = PackageManager.PERMISSION_GRANTED
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == granted) return
+        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private fun handleIntent(

@@ -31,8 +31,8 @@ android {
         applicationId = "dev.libredirect.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.4.0"
+        versionCode = 15
+        versionName = "1.3.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -104,6 +104,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.work.runtime)
+    // Baseline profile installation (§6: RedirectActivity cold-start latency).
+    implementation(libs.androidx.profileinstaller)
 
     testImplementation(libs.junit)
 

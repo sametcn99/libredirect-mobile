@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -50,8 +51,11 @@ import dev.libredirect.mobile.ui.custom.CustomServicesScreen
 import dev.libredirect.mobile.ui.exceptions.ExceptionsScreen
 import dev.libredirect.mobile.ui.home.HomeActions
 import dev.libredirect.mobile.ui.home.HomeScreen
+import dev.libredirect.mobile.ui.onboarding.OnboardingScreen
 import dev.libredirect.mobile.ui.service.ServiceDetailScreen
 import dev.libredirect.mobile.ui.services.ServicesScreen
+import dev.libredirect.mobile.ui.settings.BrowserRoleHost
+import dev.libredirect.mobile.ui.settings.DiagnosticsScreen
 import dev.libredirect.mobile.ui.settings.SettingsActions
 import dev.libredirect.mobile.ui.settings.SettingsScreen
 
@@ -66,6 +70,7 @@ private const val ROUTE_BROWSERS = "browsers"
 private const val ROUTE_EXCEPTIONS = "exceptions"
 private const val ROUTE_SERVICE = "service/{routeId}"
 private const val ROUTE_CUSTOM_SERVICES = "custom-services"
+private const val ROUTE_DIAGNOSTICS = "diagnostics"
 
 private data class NavItem(
     val route: String,
@@ -88,6 +93,7 @@ fun AppNavHost(
     navController: NavHostController = rememberNavController(),
 ) {
     val state by mainViewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val currentState by rememberUpdatedState(state)
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -141,6 +147,33 @@ fun AppNavHost(
 
     val showBottomBar = currentRoute in NAV_ITEMS.map { it.route }
 
+    // The service detail screen is shared by the narrow-screen route and the
+    // two-pane Services layout (5.5).
+    val serviceDetail: @Composable (String) -> Unit = { routeId ->
+        val service = currentState.services.find { it.routeId == routeId }
+        if (service != null) {
+            ServiceDetailScreen(
+                service = service,
+                onBack = navController::popBackStack,
+                onFrontendSelected = { frontendId ->
+                    mainViewModel.setSelectedFrontend(service.routeId, frontendId)
+                },
+                onInstanceSelectionChange = { frontendId, selection ->
+                    mainViewModel.setInstanceSelection(service.routeId, frontendId, selection)
+                },
+                redirectCount = currentState.redirectStats[service.routeId] ?: 0,
+                onPinShortcut = { mainViewModel.pinServiceShortcut(service.routeId) },
+                routeMode = service.routeMode,
+                onRouteModeChange = { mode -> mainViewModel.setRouteMode(service.routeId, mode) },
+                instanceHealth = currentState.instanceHealth,
+                isMeasuringHealth = currentState.isMeasuringHealth,
+                onMeasureHealth = { mainViewModel.measureInstancesFor(service.selectedFrontendId) },
+            )
+        } else {
+            ServiceUnavailableScreen(onBack = navController::popBackStack)
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
@@ -177,6 +210,16 @@ fun AppNavHost(
                     .fillMaxSize()
                     .padding(bottom = padding.calculateBottomPadding()),
         ) {
+            // 5.2: first-launch guide shown over everything until completed/skipped.
+            if (!state.onboardingCompleted && !state.loading) {
+                OnboardingScreen(
+                    installedServiceApps = mainViewModel.installedServiceApps(),
+                    onRequestBrowserRole = { (context as? BrowserRoleHost)?.requestBrowserRole() },
+                    onOpenAppByDefault = mainViewModel::openAppOpenByDefaultSettings,
+                    onDone = mainViewModel::completeOnboarding,
+                    modifier = Modifier.fillMaxSize().zIndex(2f),
+                )
+            }
             NavHost(
                 navController = navController,
                 startDestination = ROUTE_HOME,
@@ -221,6 +264,11 @@ fun AppNavHost(
                                 },
                                 onCheckClipboard = mainViewModel::checkClipboardForLinkOffer,
                                 onDismissClipboardOffer = mainViewModel::dismissClipboardOffer,
+                                onPauseRouting = mainViewModel::pauseRouting,
+                                onResumeRouting = mainViewModel::resumeRouting,
+                                onExplainRouting = mainViewModel::explainRouting,
+                                onHideTrace = mainViewModel::hideTrace,
+                                onResetPrivacyStats = mainViewModel::resetPrivacyStats,
                             ),
                     )
                 }
@@ -234,6 +282,7 @@ fun AppNavHost(
                         state = currentState,
                         onServiceClick = { routeId -> navController.navigate("service/$routeId") },
                         onServiceEnabledChange = mainViewModel::setRouteEnabled,
+                        detailPane = serviceDetail,
                     )
                 }
 
@@ -254,7 +303,34 @@ fun AppNavHost(
                                 onClipboardOfferChange = mainViewModel::setClipboardOfferEnabled,
                                 onAutoInstanceRefreshChange = mainViewModel::setAutoInstanceRefreshEnabled,
                                 onAppLockChange = mainViewModel::setAppLockEnabled,
+                                onUnwrapWrappersChange = mainViewModel::setUnwrapWrappersEnabled,
+                                onShortLinkResolveChange = mainViewModel::setShortLinkResolveEnabled,
+                                onCustomTrackingParamsChange = { params ->
+                                    mainViewModel.setCustomTrackingParams(params)
+                                },
+                                onContentBlockerChange = mainViewModel::setContentBlockerEnabled,
+                                onUpdateBlocklist = mainViewModel::updateBlocklistNow,
+                                onAutoFailoverChange = mainViewModel::setAutoFailoverEnabled,
+                                onBackgroundLatencyChange = mainViewModel::setBackgroundLatencyMeasureEnabled,
+                                onBackgroundAudioChange = mainViewModel::setBackgroundAudioEnabled,
+                                onCloseIncognitoChange = mainViewModel::setCloseIncognitoOnExit,
+                                onAutoCloseTabsChange = mainViewModel::setAutoCloseTabs,
+                                onAutoHideToolbarChange = mainViewModel::setAutoHideToolbar,
+                                onExportSettings = mainViewModel::exportSettingsTo,
+                                onImportSettings = mainViewModel::importSettingsFrom,
+                                onApplyImport = mainViewModel::applyPendingImport,
+                                onDismissImport = mainViewModel::dismissPendingImport,
+                                onOpenRelease = { url -> context.openReleaseUrl(url) },
+                                onOpenDiagnostics = { navController.navigate(ROUTE_DIAGNOSTICS) },
+                                onOpenOnboarding = mainViewModel::reopenOnboarding,
                             ),
+                    )
+                }
+
+                composable(ROUTE_DIAGNOSTICS) {
+                    DiagnosticsScreen(
+                        diagnosticsText = mainViewModel.diagnosticsText(),
+                        onBack = navController::popBackStack,
                     )
                 }
 
@@ -292,18 +368,8 @@ fun AppNavHost(
                     val routeId = backStackEntry.arguments?.getString("routeId")
                     val service = currentState.services.find { it.routeId == routeId }
                     if (service != null) {
-                        ServiceDetailScreen(
-                            service = service,
-                            onBack = navController::popBackStack,
-                            onFrontendSelected = { frontendId ->
-                                mainViewModel.setSelectedFrontend(service.routeId, frontendId)
-                            },
-                            onInstanceSelectionChange = { frontendId, selection ->
-                                mainViewModel.setInstanceSelection(service.routeId, frontendId, selection)
-                            },
-                            redirectCount = currentState.redirectStats[service.routeId] ?: 0,
-                            onPinShortcut = { mainViewModel.pinServiceShortcut(service.routeId) },
-                        )
+                        LaunchedEffect(service.routeId) { mainViewModel.loadInstanceHealth() }
+                        serviceDetail(service.routeId)
                     } else {
                         // The route vanished from the manifest (e.g. after a
                         // data refresh); show a navigable fallback instead of
@@ -313,6 +379,17 @@ fun AppNavHost(
                 }
             }
         }
+    }
+}
+
+/** Opens a release page in the system browser (5.4). */
+private fun android.content.Context.openReleaseUrl(url: String) {
+    try {
+        startActivity(
+            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    } catch (_: Exception) {
     }
 }
 

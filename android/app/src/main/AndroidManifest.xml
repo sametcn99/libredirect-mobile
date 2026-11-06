@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- The only permission the routing core needs. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 4.6 background audio: opt-in foreground media service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Media notification on Android 13+ (runtime, requested only when the
+         user enables background audio). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <queries>
         <intent>
@@ -11,6 +18,12 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
+        </intent>
+        <!-- 2.5: launchable apps for the source-app exception picker (no
+             QUERY_ALL_PACKAGES — only launchable activities are visible). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 
@@ -29,6 +42,8 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:label="@string/app_name"
+            android:supportsPictureInPicture="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:theme="@style/Theme.LibRedirectMobile">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -99,6 +114,33 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- 2.4: transparent dialog activity for "ask every time" services. -->
+        <activity
+            android:name=".redirect.AskRouteActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- 4.6: opt-in foreground media playback service. -->
+        <service
+            android:name=".media.MediaPlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- 5.3: home-screen routing widget. -->
+        <receiver
+            android:name=".widget.RoutingWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="dev.libredirect.mobile.widget.TOGGLE_ROUTING" />
+                <action android:name="dev.libredirect.mobile.widget.ROUTE_CLIPBOARD" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
 
     </application>
 

@@ -15,6 +15,9 @@ data class PersistedTab(
     val routeId: String? = null,
     val frontendId: String? = null,
     val instance: String? = null,
+    /** When the tab was created; drives the auto-close-old-tabs setting (4.5). */
+    val createdAtEpochMillis: Long = 0L,
+    val group: String? = null,
 )
 
 @Serializable

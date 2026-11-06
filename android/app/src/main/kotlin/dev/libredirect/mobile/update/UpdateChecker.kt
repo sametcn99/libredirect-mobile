@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 private data class GitHubRelease(
     @SerialName("tag_name") val tagName: String,
     @SerialName("html_url") val htmlUrl: String,
+    @SerialName("body") val body: String? = null,
     @SerialName("draft") val draft: Boolean = false,
     @SerialName("prerelease") val prerelease: Boolean = false,
 )
@@ -72,6 +73,7 @@ class UpdateChecker(
             UpdateInfo(
                 versionName = release.tagName.removePrefix("v").removePrefix("V"),
                 releaseUrl = release.htmlUrl,
+                releaseNotes = ReleaseNotes.extract(release.body),
             )
         }
 

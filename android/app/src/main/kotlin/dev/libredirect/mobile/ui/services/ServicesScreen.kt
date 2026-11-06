@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +60,10 @@ import dev.libredirect.mobile.ui.ServiceUiState
 import dev.libredirect.mobile.ui.home.ServiceSort
 import dev.libredirect.mobile.ui.home.ServiceSorter
 
+// Relative width of the detail pane in the two-pane layout (5.5).
+private const val DETAIL_PANE_WEIGHT = 1.5f
+private const val TWO_PANE_MIN_WIDTH_DP = 600
+
 private enum class ServiceFilter(
     @StringRes val labelRes: Int,
 ) {
@@ -66,16 +72,23 @@ private enum class ServiceFilter(
     DISABLED(R.string.services_filter_disabled),
 }
 
+// Composition root of the services screen; the filter pipeline reads as
+// three named matches, and the two-pane split is structural.
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ServicesScreen(
     state: MainUiState,
     onServiceClick: (String) -> Unit,
     onServiceEnabledChange: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    detailPane: (@Composable (String) -> Unit)? = null,
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(ServiceFilter.ALL) }
     var selectedSort by rememberSaveable { mutableStateOf(ServiceSort.POPULARITY) }
+    // 5.6 category filter + 5.5 two-pane selection (tablets/foldables).
+    var selectedCategory by rememberSaveable { mutableStateOf(ServiceCategory.ALL) }
+    var selectedRouteId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val sortedServices = ServiceSorter.sort(state.services, selectedSort)
     val filteredServices =
@@ -90,7 +103,9 @@ fun ServicesScreen(
                     ServiceFilter.ENABLED -> service.enabled
                     ServiceFilter.DISABLED -> !service.enabled
                 }
-            matchesSearch && matchesFilter
+            val matchesCategory =
+                selectedCategory == ServiceCategory.ALL || ServiceCategory.of(service.routeId) == selectedCategory
+            matchesSearch && matchesFilter && matchesCategory
         }
 
     Scaffold(
@@ -102,103 +117,157 @@ fun ServicesScreen(
         },
         modifier = modifier.fillMaxSize(),
     ) { padding ->
-        Column(
+        androidx.compose.foundation.layout.BoxWithConstraints(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(padding),
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                placeholder = {
-                    // One line even for long translations: a wrapping
-                    // placeholder grows the whole search field to two rows.
-                    Text(
-                        text = stringResource(R.string.services_search_placeholder),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.action_clear))
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                colors =
-                    OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                        unfocusedBorderColor = Color.Transparent,
-                    ),
-            )
+            val isTwoPane = maxWidth >= TWO_PANE_MIN_WIDTH_DP.dp && detailPane != null
 
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(ServiceFilter.entries) { filter ->
-                    FilterChip(
-                        selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter },
-                        label = { Text(stringResource(filter.labelRes)) },
-                    )
-                }
-
-                item {
-                    val sortLabelRes =
-                        if (selectedSort == ServiceSort.NAME_ASC) {
-                            R.string.services_sort_name_asc
-                        } else {
-                            R.string.services_sort_popularity
-                        }
-                    FilterChip(
-                        selected = selectedSort == ServiceSort.NAME_ASC,
-                        onClick = {
-                            selectedSort =
-                                if (selectedSort == ServiceSort.NAME_ASC) {
-                                    ServiceSort.POPULARITY
-                                } else {
-                                    ServiceSort.NAME_ASC
-                                }
-                        },
-                        label = { Text(stringResource(sortLabelRes)) },
-                    )
+            fun openService(routeId: String) {
+                if (isTwoPane) {
+                    selectedRouteId = routeId
+                } else {
+                    onServiceClick(routeId)
                 }
             }
 
-            Text(
-                text = stringResource(R.string.services_count_fmt, filteredServices.size),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            ) {
-                items(filteredServices, key = ServiceUiState::routeId) { service ->
-                    ServiceCard(
-                        service = service,
-                        onClick = { onServiceClick(service.routeId) },
-                        onEnabledChange = { enabled -> onServiceEnabledChange(service.routeId, enabled) },
+            val listPane: @Composable (Modifier) -> Unit = { listModifier ->
+                Column(modifier = listModifier) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                        placeholder = {
+                            // One line even for long translations: a wrapping
+                            // placeholder grows the whole search field to two rows.
+                            Text(
+                                text = stringResource(R.string.services_search_placeholder),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = stringResource(R.string.action_clear),
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors =
+                            OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                unfocusedBorderColor = Color.Transparent,
+                            ),
                     )
-                }
 
-                item {
-                    Spacer(Modifier.height(16.dp))
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(ServiceFilter.entries) { filter ->
+                            FilterChip(
+                                selected = selectedFilter == filter,
+                                onClick = { selectedFilter = filter },
+                                label = { Text(stringResource(filter.labelRes)) },
+                            )
+                        }
+                        // 5.6: category chips.
+                        items(ServiceCategory.DISPLAY) { category ->
+                            FilterChip(
+                                selected = selectedCategory == category,
+                                onClick = {
+                                    selectedCategory =
+                                        if (selectedCategory == category) ServiceCategory.ALL else category
+                                },
+                                label = { Text(stringResource(category.labelRes)) },
+                            )
+                        }
+
+                        item {
+                            val sortLabelRes =
+                                if (selectedSort == ServiceSort.NAME_ASC) {
+                                    R.string.services_sort_name_asc
+                                } else {
+                                    R.string.services_sort_popularity
+                                }
+                            FilterChip(
+                                selected = selectedSort == ServiceSort.NAME_ASC,
+                                onClick = {
+                                    selectedSort =
+                                        if (selectedSort == ServiceSort.NAME_ASC) {
+                                            ServiceSort.POPULARITY
+                                        } else {
+                                            ServiceSort.NAME_ASC
+                                        }
+                                },
+                                label = { Text(stringResource(sortLabelRes)) },
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = stringResource(R.string.services_count_fmt, filteredServices.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    ) {
+                        items(filteredServices, key = ServiceUiState::routeId) { service ->
+                            ServiceCard(
+                                service = service,
+                                onClick = { openService(service.routeId) },
+                                onEnabledChange = { enabled -> onServiceEnabledChange(service.routeId, enabled) },
+                            )
+                        }
+
+                        item {
+                            Spacer(Modifier.height(16.dp))
+                        }
+                    }
                 }
+            }
+
+            if (isTwoPane) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    listPane(Modifier.weight(1f))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
+                    // 5.5: right detail pane on wide screens.
+                    Box(modifier = Modifier.weight(DETAIL_PANE_WEIGHT)) {
+                        val selected = selectedRouteId ?: filteredServices.firstOrNull()?.routeId
+                        if (selected != null) {
+                            detailPane!!(selected)
+                        } else {
+                            Text(
+                                text = stringResource(R.string.services_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(24.dp),
+                            )
+                        }
+                    }
+                }
+            } else {
+                listPane(Modifier.fillMaxSize())
             }
         }
     }

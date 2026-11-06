@@ -1,10 +1,14 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+)
 
 package dev.libredirect.mobile.ui.browser
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,6 +70,17 @@ fun TabSwitcherSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isCloseAllConfirmVisible by remember { mutableStateOf(false) }
+    // 4.5: tab sort + lightweight grouping are sheet-local choices.
+    var sortRecent by remember { mutableStateOf(true) }
+    var groupTargetTabId by remember { mutableStateOf<String?>(null) }
+    var groupName by remember { mutableStateOf("") }
+
+    val sortedTabs =
+        if (sortRecent) {
+            tabs.sortedByDescending { it.lastActiveAt }
+        } else {
+            tabs.sortedWith(compareBy<BrowserTab> { it.group ?: "" }.thenBy { tabs.indexOf(it) })
+        }
 
     ModalBottomSheet(
         onDismissRequest = actions.onDismiss,
@@ -108,6 +123,13 @@ fun TabSwitcherSheet(
                     )
                 }
                 if (tabs.size > 1) {
+                    TextButton(onClick = { sortRecent = !sortRecent }) {
+                        Text(
+                            stringResource(
+                                if (sortRecent) R.string.tab_switcher_sort_recent else R.string.tab_switcher_sort_order,
+                            ),
+                        )
+                    }
                     TextButton(onClick = { isCloseAllConfirmVisible = true }) {
                         Text(stringResource(R.string.tab_switcher_close_all))
                     }
@@ -133,16 +155,54 @@ fun TabSwitcherSheet(
                         .fillMaxWidth()
                         .heightIn(max = 520.dp),
             ) {
-                items(tabs, key = BrowserTab::id) { tab ->
+                items(sortedTabs, key = BrowserTab::id) { tab ->
                     SwipeableTabCard(
                         tab = tab,
                         isActive = tab.id == activeTabId,
                         onSelect = { actions.onTabSelect(tab.id) },
                         onClose = { actions.onTabClose(tab.id) },
+                        onGroup = { groupTargetTabId = tab.id },
                     )
                 }
             }
         }
+    }
+
+    // Lightweight tab groups (4.5): type a name on the group sheet; grouped
+    // tabs sort together and show a chip on the card.
+    if (groupTargetTabId != null) {
+        AlertDialog(
+            onDismissRequest = { groupTargetTabId = null },
+            title = { Text(stringResource(R.string.tab_switcher_group_add)) },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = groupName,
+                    onValueChange = { groupName = it },
+                    label = { Text(stringResource(R.string.tab_switcher_group_hint)) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        groupTargetTabId?.let { actions.onAssignGroup(it, groupName.ifBlank { null }) }
+                        groupTargetTabId = null
+                    },
+                ) {
+                    Text(stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        groupTargetTabId?.let { actions.onAssignGroup(it, null) }
+                        groupTargetTabId = null
+                    },
+                ) {
+                    Text(stringResource(R.string.tab_switcher_group_remove))
+                }
+            },
+        )
     }
 
     if (isCloseAllConfirmVisible) {
@@ -161,8 +221,19 @@ fun TabSwitcherSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { isCloseAllConfirmVisible = false }) {
-                    Text(stringResource(R.string.action_cancel))
+                Column(horizontalAlignment = Alignment.End) {
+                    // 4.5: keep the current tab, drop the rest.
+                    TextButton(
+                        onClick = {
+                            isCloseAllConfirmVisible = false
+                            actions.onCloseOthers()
+                        },
+                    ) {
+                        Text(stringResource(R.string.tab_switcher_close_others))
+                    }
+                    TextButton(onClick = { isCloseAllConfirmVisible = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
                 }
             },
         )
@@ -175,6 +246,10 @@ data class TabSwitcherActions(
     val onNewTab: () -> Unit,
     val onNewIncognitoTab: () -> Unit,
     val onCloseAll: () -> Unit,
+    /** Close every tab except the current one (4.5). */
+    val onCloseOthers: () -> Unit = {},
+    /** Assign the tab to a named group (or null to ungroup) — 4.5. */
+    val onAssignGroup: (String, String?) -> Unit = { _, _ -> },
     val onDismiss: () -> Unit,
 )
 
@@ -188,6 +263,7 @@ private fun SwipeableTabCard(
     isActive: Boolean,
     onSelect: () -> Unit,
     onClose: () -> Unit,
+    onGroup: () -> Unit = {},
 ) {
     val dismissState =
         rememberSwipeToDismissBoxState(
@@ -226,6 +302,7 @@ private fun SwipeableTabCard(
             isActive = isActive,
             onSelect = onSelect,
             onClose = onClose,
+            onGroup = onGroup,
         )
     }
 }
@@ -236,6 +313,7 @@ private fun TabCard(
     isActive: Boolean,
     onSelect: () -> Unit,
     onClose: () -> Unit,
+    onGroup: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     Card(
@@ -283,16 +361,27 @@ private fun TabCard(
                     modifier = Modifier.size(16.dp),
                 )
             }
+            if (tab.group != null) {
+                Text(
+                    text = tab.group.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.primary,
+                    maxLines = 1,
+                    modifier = Modifier.padding(end = 4.dp),
+                )
+            }
         }
 
         // Preview area: a live screenshot of the page as it last looked, or the
         // site's icon over its host for tabs that have never been active.
+        // Long-press offers the tab-group dialog (4.5); Card handles taps.
         Box(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .height(104.dp)
                     .padding(start = 6.dp, end = 6.dp, bottom = 6.dp)
+                    .combinedClickable(onClick = {}, onLongClick = onGroup)
                     .background(
                         color = if (isActive) colors.surfaceContainerLowest else colors.surfaceContainerLow,
                         shape = RoundedCornerShape(16.dp),

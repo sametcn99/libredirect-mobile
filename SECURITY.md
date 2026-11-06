@@ -21,9 +21,8 @@ We aim to acknowledge reports within 5 business days.
 
 ## Attack surface overview
 
-The app makes exactly three kinds of outbound network requests, all direct
-HTTPS to their upstream sources; there is no backend of our own and no
-telemetry:
+The app's outbound network requests are direct HTTPS to fixed, documented
+sources; there is no backend of our own and no telemetry:
 
 1. **Live instance refresh** — fetches `data.json` from
    `https://raw.githubusercontent.com/libredirect/instances/main/data.json`
@@ -31,8 +30,31 @@ telemetry:
 2. **Update check** — fetches the GitHub Releases API "latest release"
    endpoint at app start. Purely informational and fail-safe: any failure
    returns no result and the app shows nothing.
-3. **In-app browser traffic** — whatever the user navigates to in the
+3. **Blocklist refresh (content blocking)** — fetches a hosts-format
+   blocklist from one fixed source (`BlocklistEndpoints.REMOTE_URL`,
+   StevenBlack hosts) daily via WorkManager, with a byte cap, strict
+   host-line parsing, and atomic activation; the APK's bundled list is the
+   offline fallback.
+4. **Short-link resolution (opt-in, off by default)** — when the user
+   enables it, links from a fixed allowlist of shortener hosts are followed
+   with HEAD requests (max 5 hops, HTTPS-only hops, no cookies, public
+   hosts only, per-hop validation; any failure returns the original link).
+   This is the one deliberate exception to "routing never touches the
+   network": requests go to the shortener service, which is why the feature
+   is opt-in and prominently documented.
+5. **In-app browser traffic** — whatever the user navigates to in the
    built-in WebView browser.
+
+## Permissions
+
+`INTERNET` is the only permission required for routing. The opt-in
+background-audio feature additionally declares `FOREGROUND_SERVICE`,
+`FOREGROUND_SERVICE_MEDIA_PLAYBACK`, and (runtime, on Android 13+)
+`POST_NOTIFICATIONS`, solely to keep WebView media playing behind a
+notification with play/pause/stop controls. No storage, location, contact,
+or identifier permissions exist, and `QUERY_ALL_PACKAGES` is not used — the
+app sees only launchable activities (for the per-app exception picker and
+onboarding) and VIEW-capable browsers.
 
 ## Routing data updates (manifest refresh)
 
@@ -68,12 +90,25 @@ model. The app adds the following local behavior:
   storage and never leave the device. Bookmark import accepts standard
   HTML and JSON exports and is decoded leniently (malformed entries are
   dropped, not executed).
+- **Content blocking** is purely host-based: requests are denied by
+  hostname lookup (exact or parent-domain suffix) — no JavaScript, no
+  element hiding, no regex, and no code can ever come from a blocklist.
+- **Reader mode** runs only the app's own packaged extractor script
+  (`assets`-inlined JavaScript evaluated into the page) — no third-party
+  script is ever fetched or executed, keeping the "no JS from remote data"
+  invariant intact.
+- **Per-site settings** (JavaScript off, forced dark, …) apply only inside
+  this app's WebView and are stored locally.
 - **Downloads** are delegated to the system Download Manager. On Android
   10+ files land in the shared Downloads directory via DownloadManager's
   own permissions; on older versions they go to the app's private
   downloads directory. The app does not request storage permissions.
 - **Browsing data controls** (clear cookies/cache, clear history) act only
   on this app's own WebView profile and local storage.
+- **Settings backup/restore** goes through the system file picker (SAF) —
+  no storage permission. Imports are size-capped and re-validated (schema
+  version, HTTPS-only pinned instances) before anything is applied, and a
+  summary dialog confirms the replacement first.
 - A custom search engine is only accepted if its template starts with
   `http(s)://` and contains the `%s` placeholder.
 
