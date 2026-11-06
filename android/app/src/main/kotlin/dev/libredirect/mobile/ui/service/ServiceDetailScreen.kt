@@ -3,25 +3,32 @@
 package dev.libredirect.mobile.ui.service
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddToHomeScreen
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +55,8 @@ fun ServiceDetailScreen(
     onBack: () -> Unit,
     onFrontendSelected: (String) -> Unit,
     onInstanceSelectionChange: (frontendId: String, selection: InstanceSelection) -> Unit,
+    redirectCount: Int = 0,
+    onPinShortcut: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -74,6 +83,12 @@ fun ServiceDetailScreen(
                     .padding(padding),
         ) {
             item {
+                ServiceSummaryRow(
+                    redirectCount = redirectCount,
+                    onPinShortcut = onPinShortcut,
+                )
+            }
+            item {
                 Text(
                     text = stringResource(R.string.service_detail_frontend_header),
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
@@ -92,6 +107,41 @@ fun ServiceDetailScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Local usage stats (A6) plus a pinned-shortcut action (C3) for this service. */
+@Composable
+private fun ServiceSummaryRow(
+    redirectCount: Int,
+    onPinShortcut: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        if (redirectCount > 0) {
+            Text(
+                text = stringResource(R.string.service_detail_redirect_count_fmt, redirectCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Spacer(Modifier.width(1.dp))
+        }
+        TextButton(onClick = onPinShortcut) {
+            Icon(
+                Icons.Default.AddToHomeScreen,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.service_detail_pin_shortcut))
         }
     }
 }

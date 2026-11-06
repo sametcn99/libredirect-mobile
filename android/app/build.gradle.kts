@@ -85,6 +85,7 @@ android {
 dependencies {
     implementation(project(":core"))
 
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)

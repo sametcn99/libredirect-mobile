@@ -1,22 +1,32 @@
 package dev.libredirect.mobile
 
+import android.app.role.RoleManager
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.browser.ShortcutActions
 import dev.libredirect.mobile.ui.AppNavHost
 import dev.libredirect.mobile.ui.MainViewModel
 import dev.libredirect.mobile.ui.ROUTE_SERVICES
 import dev.libredirect.mobile.ui.browser.BrowserViewModel
+import dev.libredirect.mobile.ui.lock.AppLockGate
+import dev.libredirect.mobile.ui.settings.BrowserRoleHost
 import dev.libredirect.mobile.ui.theme.LibRedirectMobileTheme
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), BrowserRoleHost {
     private val browserViewModel: BrowserViewModel by viewModels()
     private val mainViewModel: MainViewModel by viewModels()
+
+    private val roleRequestLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,7 +42,13 @@ class MainActivity : AppCompatActivity() {
         }
         setContent {
             LibRedirectMobileTheme {
-                AppNavHost(browserViewModel = browserViewModel, mainViewModel = mainViewModel)
+                val isAppLocked by mainViewModel.isAppLocked.collectAsState()
+                AppLockGate(
+                    isLocked = isAppLocked,
+                    onUnlocked = mainViewModel::unlockApp,
+                ) {
+                    AppNavHost(browserViewModel = browserViewModel, mainViewModel = mainViewModel)
+                }
             }
         }
     }
@@ -41,6 +57,28 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent, isColdStart = false)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Re-arm the app lock once the activity is fully hidden (not on
+        // transient overlays like share sheets); the gate itself no-ops when
+        // the feature is off.
+        mainViewModel.lockApp()
+    }
+
+    override fun requestBrowserRole() {
+        // RoleManager exists from API 29; below that the VIEW intent filter
+        // still makes the app selectable as a link handler.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val roleManager = getSystemService(RoleManager::class.java)
+        val canRequest =
+            roleManager != null &&
+                roleManager.isRoleAvailable(RoleManager.ROLE_BROWSER) &&
+                !roleManager.isRoleHeld(RoleManager.ROLE_BROWSER)
+        if (canRequest) {
+            roleRequestLauncher.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_BROWSER))
+        }
     }
 
     private fun handleIntent(
@@ -55,6 +93,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             ShortcutActions.SHOW_SERVICES -> mainViewModel.onShortcutRoute(ROUTE_SERVICES)
+
+            ShortcutActions.OPEN_SERVICE ->
+                browserViewModel.openServiceShortcut(intent.getStringExtra(ShortcutActions.EXTRA_ROUTE_ID))
 
             // Only the app's own in-app-browser action is honored. This
             // activity is exported (it is the launcher), so honoring raw

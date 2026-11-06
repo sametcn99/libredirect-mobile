@@ -2,9 +2,11 @@
 
 package dev.libredirect.mobile.ui.settings
 
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,13 +20,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Autorenew
@@ -33,8 +38,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
@@ -57,6 +65,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,6 +85,9 @@ import dev.libredirect.mobile.ui.browser.SearchEngineDialog
 
 private const val GITHUB_REPO_URL = "https://github.com/sametcn99/libredirect-mobile"
 
+@Suppress("MagicNumber")
+private val TEXT_ZOOM_OPTIONS = listOf(100, 125, 150, 175, 200)
+
 data class SettingsActions(
     val onBrowserClick: () -> Unit,
     val onExceptionsClick: () -> Unit,
@@ -86,8 +98,11 @@ data class SettingsActions(
     val onCheckForUpdates: () -> Unit = {},
     val onClipboardOfferChange: (Boolean) -> Unit = {},
     val onAutoInstanceRefreshChange: (Boolean) -> Unit = {},
+    val onTextZoomChange: (Int) -> Unit = {},
+    val onAppLockChange: (Boolean) -> Unit = {},
 )
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun SettingsScreen(
     state: MainUiState,
@@ -97,6 +112,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     var isSearchEngineDialogVisible by rememberSaveable { mutableStateOf(false) }
     var isLanguageDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var isTextZoomDialogVisible by rememberSaveable { mutableStateOf(false) }
     val currentLanguageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
 
     Scaffold(
@@ -130,6 +146,29 @@ fun SettingsScreen(
                     badge = badge,
                     onClick = actions.onBrowserClick,
                 )
+            }
+
+            item {
+                // C1: system "default browser" role (API 29+). Only offered
+                // where the role exists; the request itself is launched by
+                // the host activity's result launcher (see BrowserRoleHost).
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val roleManager = remember { context.getSystemService(RoleManager::class.java) }
+                    if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_BROWSER)) {
+                        val isRoleHeld = roleManager.isRoleHeld(RoleManager.ROLE_BROWSER)
+                        SettingsCardItem(
+                            icon = Icons.Default.Public,
+                            title = stringResource(R.string.settings_set_default_browser),
+                            subtitle =
+                                if (isRoleHeld) {
+                                    stringResource(R.string.settings_default_browser_held)
+                                } else {
+                                    stringResource(R.string.settings_default_browser_desc)
+                                },
+                            onClick = { (context as? BrowserRoleHost)?.requestBrowserRole() },
+                        )
+                    }
+                }
             }
 
             item {
@@ -179,6 +218,36 @@ fun SettingsScreen(
             }
 
             item {
+                SettingsCardItem(
+                    icon = Icons.Default.FormatSize,
+                    title = stringResource(R.string.settings_text_zoom),
+                    subtitle = stringResource(R.string.settings_text_zoom_subtitle_fmt, state.browserTextZoom),
+                    onClick = { isTextZoomDialogVisible = true },
+                )
+            }
+
+            item {
+                val isAppLockAvailable =
+                    remember {
+                        androidx.biometric.BiometricManager
+                            .from(context)
+                            .canAuthenticate(
+                                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                                    androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+                            ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+                    }
+                if (isAppLockAvailable) {
+                    SettingsToggleItem(
+                        icon = Icons.Default.Lock,
+                        title = stringResource(R.string.settings_app_lock),
+                        subtitle = stringResource(R.string.settings_app_lock_desc),
+                        checked = state.appLockEnabled,
+                        onCheckedChange = actions.onAppLockChange,
+                    )
+                }
+            }
+
+            item {
                 SettingsToggleItem(
                     icon = Icons.Default.ContentPaste,
                     title = stringResource(R.string.settings_clipboard_offer),
@@ -198,6 +267,7 @@ fun SettingsScreen(
                     isRefreshing = state.refreshInProgress,
                     refreshMessage = state.lastRefreshMessage,
                     errorMessage = state.manifestErrorMessage,
+                    generationNotes = state.generationNotes,
                     onRefresh = actions.onRefreshManifest,
                 )
             }
@@ -278,6 +348,72 @@ fun SettingsScreen(
             onDismiss = { isSearchEngineDialogVisible = false },
         )
     }
+
+    if (isTextZoomDialogVisible) {
+        TextZoomDialog(
+            currentZoom = state.browserTextZoom,
+            onSelect = { percent ->
+                actions.onTextZoomChange(percent)
+                isTextZoomDialogVisible = false
+            },
+            onDismiss = { isTextZoomDialogVisible = false },
+        )
+    }
+}
+
+@Composable
+private fun TextZoomDialog(
+    currentZoom: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = TEXT_ZOOM_OPTIONS
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.settings_text_zoom),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                options.forEach { percent ->
+                    val isSelected = percent == currentZoom
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(percent) }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { onSelect(percent) },
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_text_zoom_subtitle_fmt, percent),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_close))
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+    )
 }
 
 @Composable
@@ -496,8 +632,10 @@ private fun ManifestDatabaseCard(
     isRefreshing: Boolean,
     refreshMessage: String?,
     errorMessage: String?,
+    generationNotes: List<String>,
     onRefresh: () -> Unit,
 ) {
+    var areNotesExpanded by rememberSaveable { mutableStateOf(false) }
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
@@ -562,6 +700,47 @@ private fun ManifestDatabaseCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            // A1: what the generator dropped from live upstream data (unsupported
+            // target regexes, instanceless frontends), so a service the user
+            // expects to be redirectable explains itself instead of vanishing.
+            if (generationNotes.isNotEmpty()) {
+                TextButton(
+                    onClick = { areNotesExpanded = !areNotesExpanded },
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                ) {
+                    Text(
+                        text =
+                            stringResource(
+                                if (areNotesExpanded) {
+                                    R.string.settings_db_notes_hide
+                                } else {
+                                    R.string.settings_db_notes_show_fmt
+                                },
+                                generationNotes.size,
+                            ),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                if (areNotesExpanded) {
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        generationNotes.forEach { note ->
+                            Text(
+                                text = note,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
 
             Button(

@@ -253,6 +253,8 @@ fun AppNavHost(
                                 onCheckForUpdates = mainViewModel::checkForUpdates,
                                 onClipboardOfferChange = mainViewModel::setClipboardOfferEnabled,
                                 onAutoInstanceRefreshChange = mainViewModel::setAutoInstanceRefreshEnabled,
+                                onTextZoomChange = mainViewModel::setBrowserTextZoom,
+                                onAppLockChange = mainViewModel::setAppLockEnabled,
                             ),
                     )
                 }
@@ -300,6 +302,8 @@ fun AppNavHost(
                             onInstanceSelectionChange = { frontendId, selection ->
                                 mainViewModel.setInstanceSelection(service.routeId, frontendId, selection)
                             },
+                            redirectCount = currentState.redirectStats[service.routeId] ?: 0,
+                            onPinShortcut = { mainViewModel.pinServiceShortcut(service.routeId) },
                         )
                     } else {
                         // The route vanished from the manifest (e.g. after a
