@@ -248,4 +248,34 @@
     <string name="refresh_updated_fmt">Revizyon %1$d olarak güncellendi</string>
     <string name="refresh_up_to_date">Zaten güncel</string>
     <string name="refresh_failed_fmt">Güncelleme başarısız: %1$s</string>
+    <string name="browser_page_error_title">Sayfa yüklenemedi</string>
+    <string name="browser_page_error_retry">Yeniden dene</string>
+    <string name="browser_link_context_title">Bağlantı</string>
+    <string name="browser_link_context_open_new_tab">Yeni sekmede aç</string>
+    <string name="browser_link_context_copy">Bağlantıyı kopyala</string>
+    <string name="browser_link_context_share">Paylaş</string>
+    <string name="browser_link_copied">Bağlantı kopyalandı</string>
+    <string name="browser_menu_new_incognito_tab">Yeni gizli sekme</string>
+    <string name="tab_switcher_new_incognito_tab">Yeni gizli sekme</string>
+    <string name="tab_switcher_incognito_badge">Gizli sekme</string>
+    <string name="tab_switcher_close_all_confirm">Tüm sekmeler kapatılacak. Bu işlem geri alınamaz.</string>
+    <string name="browser_history_search_hint">Geçmişte ara</string>
+    <string name="settings_text_zoom">Metin boyutu</string>
+    <string name="settings_text_zoom_subtitle_fmt">%%%1$d</string>
+    <string name="settings_app_lock">Uygulama kilidi</string>
+    <string name="settings_app_lock_desc">Uygulama açılırken biyometrik veya ekran kilidi doğrulaması istenir</string>
+    <string name="settings_set_default_browser">Varsayılan tarayıcı yap</string>
+    <string name="settings_default_browser_desc">Bağlantılar otomatik olarak LibRedirect\'te açılır</string>
+    <string name="settings_default_browser_held">LibRedirect varsayılan tarayıcınız</string>
+    <string name="settings_db_notes_show_fmt">%1$d desteklenmeyen veri girişi</string>
+    <string name="settings_db_notes_hide">Notları gizle</string>
+    <string name="service_detail_redirect_count_fmt">%1$d kez yönlendirildi</string>
+    <string name="service_detail_pin_shortcut">Ana ekrana ekle</string>
+    <string name="app_lock_locked_title">Uygulama kilitli</string>
+    <string name="app_lock_unlock">Kilidi aç</string>
+    <string name="app_lock_unlock_title">LibRedirect kilidini aç</string>
+    <string name="app_lock_host_unavailable">Doğrulama kullanılamıyor</string>
+    <string name="shortcut_pin_unsupported">Ana ekran kısayolları desteklenmiyor</string>
+    <string name="process_text_label">LibRedirect ile aç</string>
+
 </resources>

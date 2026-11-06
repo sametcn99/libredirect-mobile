@@ -248,4 +248,34 @@
     <string name="refresh_updated_fmt">Updated to revision %1$d</string>
     <string name="refresh_up_to_date">Already up to date</string>
     <string name="refresh_failed_fmt">Update failed: %1$s</string>
+    <string name="browser_page_error_title">Page failed to load</string>
+    <string name="browser_page_error_retry">Retry</string>
+    <string name="browser_link_context_title">Link</string>
+    <string name="browser_link_context_open_new_tab">Open in new tab</string>
+    <string name="browser_link_context_copy">Copy link</string>
+    <string name="browser_link_context_share">Share</string>
+    <string name="browser_link_copied">Link copied</string>
+    <string name="browser_menu_new_incognito_tab">New incognito tab</string>
+    <string name="tab_switcher_new_incognito_tab">New incognito tab</string>
+    <string name="tab_switcher_incognito_badge">Incognito tab</string>
+    <string name="tab_switcher_close_all_confirm">All tabs will be closed. This cannot be undone.</string>
+    <string name="browser_history_search_hint">Search history</string>
+    <string name="settings_text_zoom">Text size</string>
+    <string name="settings_text_zoom_subtitle_fmt">%1$d%%</string>
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_desc">Require biometric or screen-lock authentication when opening the app</string>
+    <string name="settings_set_default_browser">Set as default browser</string>
+    <string name="settings_default_browser_desc">Links will open in LibRedirect automatically</string>
+    <string name="settings_default_browser_held">LibRedirect is your default browser</string>
+    <string name="settings_db_notes_show_fmt">%1$d unsupported data entries</string>
+    <string name="settings_db_notes_hide">Hide notes</string>
+    <string name="service_detail_redirect_count_fmt">Redirected %1$d times</string>
+    <string name="service_detail_pin_shortcut">Add to Home screen</string>
+    <string name="app_lock_locked_title">App locked</string>
+    <string name="app_lock_unlock">Unlock</string>
+    <string name="app_lock_unlock_title">Unlock LibRedirect</string>
+    <string name="app_lock_host_unavailable">Authentication unavailable</string>
+    <string name="shortcut_pin_unsupported">Home screen shortcuts are not supported</string>
+    <string name="process_text_label">Open with LibRedirect</string>
+
 </resources>
