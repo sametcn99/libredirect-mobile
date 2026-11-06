@@ -2,7 +2,9 @@ package dev.libredirect.mobile.ui.lock
 
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,8 +35,11 @@ import androidx.fragment.app.FragmentActivity
 import dev.libredirect.mobile.R
 
 /**
- * Gate in front of the whole app while the app lock (C4) is engaged: nothing
- * renders until a biometric or device-credential authentication succeeds.
+ * Gate over the whole app while the app lock (C4) is engaged. It renders as
+ * an opaque overlay ON TOP of the content instead of replacing it: the
+ * content (and its navigation) must stay alive and reactive while locked,
+ * so a link that arrives from another app can still switch to the browser
+ * tab behind the gate and be visible the moment the user unlocks.
  * MainActivity re-locks on every backgrounding, so this is shown again each
  * time the user returns.
  */
@@ -44,10 +49,16 @@ fun AppLockGate(
     onUnlocked: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    if (!isLocked) {
+    Box(modifier = Modifier.fillMaxSize()) {
         content()
-        return
+        if (isLocked) {
+            LockOverlay(onUnlocked = onUnlocked)
+        }
     }
+}
+
+@Composable
+private fun LockOverlay(onUnlocked: () -> Unit) {
     val activity = LocalContext.current as? FragmentActivity
     var attempt by remember { mutableIntStateOf(0) }
     val onUnlockedState = rememberUpdatedState(onUnlocked)
@@ -60,6 +71,7 @@ fun AppLockGate(
         modifier =
             Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
