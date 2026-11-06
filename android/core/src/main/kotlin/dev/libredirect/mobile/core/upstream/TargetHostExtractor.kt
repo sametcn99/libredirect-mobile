@@ -10,11 +10,14 @@ package dev.libredirect.mobile.core.upstream
  * arbitrary regex — so these helpers recognize a conservative, hand-verified
  * subset of that regex grammar (optional/alternation prefix groups,
  * alternation in the base domain, escaped dots) and return `null` for
- * anything outside it, rather than guess. Verified empirically against every
- * target actually published in config.json as of this writing: 77 of 102
- * targets extract cleanly; the 25 that don't are all genuine
- * wildcard-subdomain or lookahead patterns with no finite host-list
- * equivalent (they surface as "unsupported target" generation notes).
+ * anything outside it, rather than guess. Verified empirically (Nov 2026)
+ * against every target actually published in config.json: 97 of 102 targets
+ * convert — 78 to finite host lists, 19 to bounded hostname-only patterns
+ * (wildcard subdomains and lookahead-guarded hosts included). The remaining
+ * 8 are all `*.libredirect.invalid` pseudo-domains, the browser extension's
+ * own internal redirect markers: they use the reserved `invalid` TLD and
+ * must never be routed, so their rejection is by design (they surface as
+ * "unsupported target" generation notes, see Settings → routing database).
  */
 internal object TargetHostExtractor {
     private val TARGET_PREFIXES = listOf("^https?:\\/{2}", "^https?:\\/\\/", "^https:\\/{2}", "^https:\\/\\/")
