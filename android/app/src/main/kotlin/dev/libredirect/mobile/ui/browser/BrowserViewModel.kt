@@ -874,10 +874,22 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
      * its cookies and site storage die with the session (no-op when the
      * WebView Profile API is unavailable or a WebView still uses the profile).
      */
-    private fun deleteIncognitoProfileIfUnused() {
+    private fun deleteIncognitoProfileIfUnused(retryAllowed: Boolean = true) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
-        if (_uiState.value.tabs.none { it.isIncognito }) {
+        if (_uiState.value.tabs.any { it.isIncognito }) return
+        try {
             ProfileStore.getInstance().deleteProfile(INCOGNITO_PROFILE_NAME)
+        } catch (_: IllegalStateException) {
+            // WebView.destroy() is asynchronous: right after the last incognito
+            // tab closes the profile can still be reported as in use, and
+            // deleteProfile throws instead of returning false. Retry once
+            // shortly after the renderer has released it.
+            if (retryAllowed) {
+                viewModelScope.launch {
+                    delay(PROFILE_DELETE_RETRY_MILLIS)
+                    deleteIncognitoProfileIfUnused(retryAllowed = false)
+                }
+            }
         }
     }
 
@@ -1962,5 +1974,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
         /** Name of the ephemeral WebView profile backing incognito tabs. */
         const val INCOGNITO_PROFILE_NAME = "incognito"
+
+        /** Delay before retrying an in-use incognito profile deletion. */
+        const val PROFILE_DELETE_RETRY_MILLIS = 1_000L
     }
 }
