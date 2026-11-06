@@ -313,11 +313,15 @@ private fun StatusHeroCard(
     exceptionsCount: Int,
     onRoutingToggle: (Boolean) -> Unit,
 ) {
+    // Opaque on purpose: a 50%-alpha container over the elevated card's own
+    // shadowed backdrop composited into a darker edge ring + lighter inner
+    // area, reading as a second card nested inside this one (worst in light
+    // mode). An opaque color renders as one flat surface.
     val containerColor =
         if (routingEnabled) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            MaterialTheme.colorScheme.primaryContainer
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            MaterialTheme.colorScheme.surfaceVariant
         }
 
     ElevatedCard(
