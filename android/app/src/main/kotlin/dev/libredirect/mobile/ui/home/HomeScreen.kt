@@ -44,6 +44,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -402,32 +403,27 @@ private fun StatusHeroCard(
                 )
             }
 
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+            )
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    StatusStatItem(
-                        label = stringResource(R.string.home_stat_active_services),
-                        value = "$activeServicesCount",
-                    )
-                    StatusStatItem(
-                        label = stringResource(R.string.home_stat_exceptions),
-                        value = "$exceptionsCount",
-                    )
-                    StatusStatItem(
-                        label = stringResource(R.string.home_stat_browser),
-                        value = stringResource(R.string.home_stat_browser_value),
-                    )
-                }
+                StatusStatItem(
+                    label = stringResource(R.string.home_stat_active_services),
+                    value = "$activeServicesCount",
+                )
+                StatusStatItem(
+                    label = stringResource(R.string.home_stat_exceptions),
+                    value = "$exceptionsCount",
+                )
+                StatusStatItem(
+                    label = stringResource(R.string.home_stat_browser),
+                    value = stringResource(R.string.home_stat_browser_value),
+                )
             }
         }
     }
