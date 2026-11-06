@@ -454,15 +454,7 @@ private fun HistoryTabContent(
 ) {
     var isClearHistoryConfirmVisible by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    val filteredHistory =
-        if (searchQuery.isBlank()) {
-            history
-        } else {
-            history.filter {
-                it.title.contains(searchQuery, ignoreCase = true) ||
-                    it.url.contains(searchQuery, ignoreCase = true)
-            }
-        }
+    val filteredHistory = filterBrowserHistory(history, searchQuery)
 
     if (isClearHistoryConfirmVisible) {
         AlertDialog(

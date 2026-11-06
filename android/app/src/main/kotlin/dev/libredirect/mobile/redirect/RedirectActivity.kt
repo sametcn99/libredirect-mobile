@@ -87,13 +87,15 @@ class RedirectActivity : ComponentActivity() {
         // Process-text input that is not a URL becomes a search in the user's
         // engine instead of being rejected as an unopenable string.
         val effectiveUrl =
-            url.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
-                ?: SearchEngine
-                    .resolve(
+            ProcessTextResolver.resolve(
+                text = url,
+                engine =
+                    SearchEngine.resolve(
                         selectedId = settings.searchEngine,
                         customName = settings.customSearchEngineName,
                         customUrl = settings.customSearchEngineUrl,
-                    ).buildSearchUrl(url)
+                    ),
+            )
 
         val result =
             if (!settings.routingEnabled) {

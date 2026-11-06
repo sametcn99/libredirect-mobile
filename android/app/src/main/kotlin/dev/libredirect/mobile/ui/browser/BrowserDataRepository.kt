@@ -20,6 +20,26 @@ private val Context.browserDataStore by preferencesDataStore(
 
 private const val MAX_HISTORY_ENTRIES = 200
 
+/** Case-insensitive title/url filter behind the history search field (B5). */
+fun filterBrowserHistory(
+    history: List<BrowserHistoryItem>,
+    query: String,
+): List<BrowserHistoryItem> =
+    if (query.isBlank()) {
+        history
+    } else {
+        history.filter {
+            it.title.contains(query, ignoreCase = true) ||
+                it.url.contains(query, ignoreCase = true)
+        }
+    }
+
+/** Latency entries relevant to the picker's instances, seeding it from a previous session (A3). */
+fun filterLatencies(
+    cached: Map<String, Long>,
+    instances: List<String>,
+): Map<String, Long> = if (cached.isEmpty()) emptyMap() else cached.filterKeys { it in instances.toSet() }
+
 @Suppress("TooManyFunctions")
 class BrowserDataRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }

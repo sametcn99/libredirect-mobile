@@ -271,7 +271,7 @@ fun InAppBrowserScreen(
  * movement while the page sits at its top. Past the threshold the tab reloads
  * — the normal loading bar becomes the visual confirmation.
  */
-@Suppress("CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
+@Suppress("LoopWithTooManyJumpStatements")
 @Composable
 private fun PullToRefreshHandle(
     viewModel: BrowserViewModel,
@@ -280,9 +280,9 @@ private fun PullToRefreshHandle(
     modifier: Modifier = Modifier,
 ) {
     var pullProgress by remember { mutableFloatStateOf(0f) }
-    var isArmed by remember { mutableStateOf(true) }
     val density = LocalDensity.current
     val thresholdPx = with(density) { PULL_REFRESH_THRESHOLD_DP.dp.toPx() }
+    val accumulator = remember(thresholdPx) { PullToRefreshAccumulator(thresholdPx) }
     val isLoading by rememberUpdatedState(isPageLoading)
     val atTop by rememberUpdatedState(isWebViewAtTop)
 
@@ -292,33 +292,16 @@ private fun PullToRefreshHandle(
                 awaitPointerEventScope {
                     while (true) {
                         awaitFirstDown(requireUnconsumed = false)
-                        var distance = 0f
-                        var triggered = false
-                        isArmed = true
+                        accumulator.reset()
                         up@ while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Final)
                             val change = event.changes.firstOrNull() ?: break
                             if (event.changes.all { !it.pressed }) break@up
-                            if (isLoading) {
-                                // A load started mid-gesture (the trigger or a
-                                // link tap): ignore the rest of this drag.
-                                distance = 0f
-                                pullProgress = 0f
-                                triggered = true
-                                continue
-                            }
                             val dy = change.positionChange().y
-                            distance =
-                                when {
-                                    dy > 0f -> if (isArmed && atTop) distance + dy else distance
-                                    else -> (distance + dy).coerceAtLeast(0f)
-                                }
-                            if (distance > 0f) isArmed = true
-                            pullProgress = (distance / thresholdPx).coerceIn(0f, 1f)
-                            if (!triggered && distance >= thresholdPx) {
-                                triggered = true
+                            if (accumulator.onDrag(dy, atTop, isLoading)) {
                                 viewModel.reloadActiveTab()
                             }
+                            pullProgress = accumulator.progress
                         }
                         pullProgress = 0f
                     }

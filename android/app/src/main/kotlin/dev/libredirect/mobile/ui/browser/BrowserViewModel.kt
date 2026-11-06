@@ -36,9 +36,9 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.browser.ServiceShortcutResolver
 import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Strategy
-import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.routing.RouteMatcher
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
@@ -516,12 +516,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
      * evicted first; the active tab is never a victim.
      */
     private fun trimWebViewPool() {
-        val activeTabId = _uiState.value.activeTabId
         while (webViewPool.size > MAX_ALIVE_WEB_VIEWS) {
             val victim =
-                webViewPool.keys
-                    .filterNot { it == activeTabId }
-                    .minByOrNull { webViewTouchedAt[it] ?: 0L } ?: break
+                WebViewPoolPolicy.evictionCandidate(
+                    pooledTabIds = webViewPool.keys,
+                    touchedAt = webViewTouchedAt,
+                    activeTabId = _uiState.value.activeTabId,
+                    maxAliveWebViews = MAX_ALIVE_WEB_VIEWS,
+                ) ?: break
             destroyWebView(victim, keepHistoryForReuse = true)
         }
         webViewTouchedAt.keys.toList().forEach { tabId ->
@@ -651,11 +653,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private fun preloadCachedLatencies() {
         val instances = _uiState.value.instanceAlternatives?.instances ?: return
         viewModelScope.launch {
-            val cached = browserDataRepository.cachedLatencies()
-            if (cached.isEmpty()) return@launch
+            val relevant = filterLatencies(browserDataRepository.cachedLatencies(), instances)
+            if (relevant.isEmpty()) return@launch
             _uiState.update { current ->
-                val relevant = current.instanceAlternatives?.instances?.toSet() ?: return@update current
-                current.copy(instanceLatencies = cached.filterKeys { it in relevant })
+                current.copy(instanceLatencies = relevant)
             }
         }
     }
@@ -859,14 +860,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private fun resolveServiceShortcut(routeId: String?) {
         if (routeId.isNullOrBlank()) return
         val route = cachedManifest?.routes?.find { it.id == routeId } ?: return
-        val frontendId = cachedSettings.selectedFrontends[routeId] ?: route.frontends.first().id
-        val frontend = route.frontends.find { it.id == frontendId } ?: route.frontends.first()
         val instance =
-            when (val selection = cachedSettings.instanceSelections["$routeId/${frontend.id}"]) {
-                is InstanceSelection.Pinned -> selection.instance
-                is InstanceSelection.Custom -> selection.instance
-                InstanceSelection.Automatic, null -> frontend.instances.firstOrNull()
-            } ?: return
+            ServiceShortcutResolver.resolveInstanceUrl(
+                route = route,
+                selectedFrontends = cachedSettings.selectedFrontends,
+                instanceSelections = cachedSettings.instanceSelections,
+            ) ?: return
         openNewTab(instance)
     }
 
