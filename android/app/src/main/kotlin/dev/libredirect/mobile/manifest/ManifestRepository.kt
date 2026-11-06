@@ -59,6 +59,16 @@ class ManifestRepository(
      */
     val activeManifestUpdates: StateFlow<Manifest?> = _activeManifestUpdates.asStateFlow()
 
+    private val _generationNotes = MutableStateFlow<List<String>>(emptyList())
+
+    /**
+     * Notes from the last manifest generation attempt: targets/frontends the
+     * upstream data contains that the converter dropped (unsupported regex
+     * shapes, no usable instances). Surfaced in Settings so a service the user
+     * expects to be redirectable explains itself instead of silently missing.
+     */
+    val generationNotes: StateFlow<List<String>> = _generationNotes.asStateFlow()
+
     /** Never null in practice — the bundled asset is a build-time guarantee — but
      * callers must still treat a null result as "route nothing, pass everything through"
      * (fail-open) rather than crash, in case that guarantee is ever violated. */
@@ -127,6 +137,7 @@ class ManifestRepository(
             val base = store.loadBase()
             val generation = ManifestGenerator.generate(config, instanceData, base?.revision ?: 0)
             generation.notes.forEach { note -> Log.i(TAG, note) }
+            _generationNotes.value = generation.notes
             val unchanged =
                 base != null &&
                     base.copy(revision = generation.manifest.revision, generatedAt = generation.manifest.generatedAt) ==
