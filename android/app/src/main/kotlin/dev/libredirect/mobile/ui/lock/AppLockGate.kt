@@ -127,6 +127,12 @@ private fun authenticate(
                 .setTitle(title)
                 .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
                 .build()
-        prompt.authenticate(biometricOnly)
+        try {
+            prompt.authenticate(biometricOnly)
+        } catch (_: IllegalArgumentException) {
+            // No usable authenticator at all (the screen lock was removed
+            // after the feature was enabled): the gate stays up with its
+            // Unlock button rather than crashing.
+        }
     }
 }

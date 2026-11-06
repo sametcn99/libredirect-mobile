@@ -60,6 +60,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isAppLocked = MutableStateFlow(false)
     val isAppLocked: StateFlow<Boolean> = _isAppLocked.asStateFlow()
 
+    init {
+        // A cold start (fresh process: icon tap after task removal, process
+        // death in the background) never runs onStop, so the backgrounding
+        // hook in MainActivity can't arm the lock — arm it here, before any
+        // content is shown, whenever the feature is on.
+        launchSafely {
+            if (settingsRepository.settings.first().appLockEnabled) {
+                _isAppLocked.value = true
+            }
+        }
+    }
+
     fun lockApp() {
         if (latestSettings.appLockEnabled) _isAppLocked.value = true
     }
