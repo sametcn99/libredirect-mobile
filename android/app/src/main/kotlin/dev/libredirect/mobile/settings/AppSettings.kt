@@ -27,6 +27,10 @@ data class AppSettings(
     val clipboardOfferEnabled: Boolean = false,
     /** Daily background refresh of frontend instance lists via WorkManager. Opt-in, off by default. */
     val autoInstanceRefreshEnabled: Boolean = false,
+    /** Page text scaling in percent (100 = default). Applied to every WebView. */
+    val browserTextZoom: Int = 100,
+    /** Require biometric/device-credential unlock when the app comes to the foreground. */
+    val appLockEnabled: Boolean = false,
 ) {
     fun isRouteEnabled(routeId: String): Boolean = routeId !in disabledRoutes
 

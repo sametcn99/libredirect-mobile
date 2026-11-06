@@ -27,6 +27,14 @@ data class BrowserTab(
     /** The link this tab is really "about": the URL before any LibRedirect redirection. */
     val originalUrl: String? = null,
     val isDesktopMode: Boolean = false,
+    /**
+     * Private tab: never written to history, session persistence or bookmarks,
+     * and — when the WebView Profile API is available — isolated in its own
+     * ephemeral cookie/storage profile that is deleted with the last tab.
+     */
+    val isIncognito: Boolean = false,
+    /** True while the tab shows the in-app error page instead of rendered content. */
+    val pageError: Boolean = false,
     val favicon: Bitmap? = null,
     /**
      * Scaled screenshot of the page as it last looked on screen, captured in

@@ -37,6 +37,14 @@ data class MainUiState(
     val clipboardLinkOffer: String? = null,
     val clipboardOfferEnabled: Boolean = false,
     val autoInstanceRefreshEnabled: Boolean = false,
+    /** Page text scaling in percent (100 = default). */
+    val browserTextZoom: Int = 100,
+    /** Require biometric/device-credential unlock in the foreground. */
+    val appLockEnabled: Boolean = false,
+    /** Notes from the last manifest generation: targets/frontends the converter dropped. */
+    val generationNotes: List<String> = emptyList(),
+    /** Local redirect counters per routeId (never leaves the device). */
+    val redirectStats: Map<String, Int> = emptyMap(),
 )
 
 data class ServiceUiState(

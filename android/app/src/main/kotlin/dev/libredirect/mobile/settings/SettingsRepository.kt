@@ -95,6 +95,14 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.AUTO_INSTANCE_REFRESH_ENABLED] = enabled }
     }
 
+    suspend fun setBrowserTextZoom(percent: Int) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.BROWSER_TEXT_ZOOM] = percent }
+    }
+
+    suspend fun setAppLockEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.APP_LOCK_ENABLED] = enabled }
+    }
+
     suspend fun setRouteEnabled(
         routeId: String,
         enabled: Boolean,
@@ -206,6 +214,8 @@ class SettingsRepository(private val context: Context) {
             browserAutoDarken = prefs[Keys.BROWSER_AUTO_DARKEN] ?: true,
             clipboardOfferEnabled = prefs[Keys.CLIPBOARD_OFFER_ENABLED] ?: false,
             autoInstanceRefreshEnabled = prefs[Keys.AUTO_INSTANCE_REFRESH_ENABLED] ?: false,
+            browserTextZoom = prefs[Keys.BROWSER_TEXT_ZOOM] ?: 100,
+            appLockEnabled = prefs[Keys.APP_LOCK_ENABLED] ?: false,
         )
 
     private fun decodeSet(raw: String?): Set<String> = decodeOrDefault(raw, emptySet())
@@ -243,6 +253,8 @@ class SettingsRepository(private val context: Context) {
         val BROWSER_AUTO_DARKEN = booleanPreferencesKey("browser_auto_darken")
         val CLIPBOARD_OFFER_ENABLED = booleanPreferencesKey("clipboard_offer_enabled")
         val AUTO_INSTANCE_REFRESH_ENABLED = booleanPreferencesKey("auto_instance_refresh_enabled")
+        val BROWSER_TEXT_ZOOM = intPreferencesKey("browser_text_zoom")
+        val APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
         val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
         val MANIFEST_LAST_GENERATION_AT = longPreferencesKey("manifest_last_generation_at")
         val UPDATE_FAILED_CHECKS = intPreferencesKey("update_failed_checks")

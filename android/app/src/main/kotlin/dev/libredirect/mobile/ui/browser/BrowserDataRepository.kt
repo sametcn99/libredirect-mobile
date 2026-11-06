@@ -20,6 +20,7 @@ private val Context.browserDataStore by preferencesDataStore(
 
 private const val MAX_HISTORY_ENTRIES = 200
 
+@Suppress("TooManyFunctions")
 class BrowserDataRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -32,6 +33,33 @@ class BrowserDataRepository(private val context: Context) {
         context.browserDataStore.data.map { prefs ->
             decodeList(prefs[Keys.HISTORY])
         }
+
+    /** Local redirect counters, routeId -> total redirects. Never leaves the device. */
+    val redirectStats: Flow<Map<String, Int>> =
+        context.browserDataStore.data.map { prefs ->
+            decodeOrDefault(prefs[Keys.REDIRECT_STATS], emptyMap())
+        }
+
+    /** Last measured instance latencies (instance origin -> TTFB ms, [LATENCY_FAILED_MILLIS] = unreachable). */
+    suspend fun cachedLatencies(): Map<String, Long> =
+        context.browserDataStore.data.first()[Keys.INSTANCE_LATENCIES]?.let { raw ->
+            decodeOrDefault(raw, emptyMap<String, Long>())
+        } ?: emptyMap()
+
+    suspend fun saveLatencies(latencies: Map<String, Long>) {
+        if (latencies.isEmpty()) return
+        context.browserDataStore.edit { prefs ->
+            prefs[Keys.INSTANCE_LATENCIES] = json.encodeToString(latencies)
+        }
+    }
+
+    suspend fun recordRedirect(routeId: String) {
+        if (routeId.isBlank()) return
+        context.browserDataStore.edit { prefs ->
+            val current = decodeOrDefault(prefs[Keys.REDIRECT_STATS], emptyMap<String, Int>())
+            prefs[Keys.REDIRECT_STATS] = json.encodeToString(current + (routeId to (current[routeId] ?: 0) + 1))
+        }
+    }
 
     suspend fun addBookmark(
         title: String,
@@ -147,9 +175,28 @@ class BrowserDataRepository(private val context: Context) {
             }
         }
 
+    private inline fun <reified T> decodeOrDefault(
+        raw: String?,
+        default: T,
+    ): T =
+        try {
+            raw?.let { json.decodeFromString<T>(it) } ?: default
+        } catch (_: SerializationException) {
+            default
+        } catch (_: IllegalArgumentException) {
+            default
+        }
+
     private object Keys {
         val BOOKMARKS = stringPreferencesKey("bookmarks_json")
         val HISTORY = stringPreferencesKey("history_json")
         val SESSION = stringPreferencesKey("session_json")
+        val REDIRECT_STATS = stringPreferencesKey("redirect_stats_json")
+        val INSTANCE_LATENCIES = stringPreferencesKey("instance_latencies_json")
+    }
+
+    companion object {
+        /** Marks an instance that failed to answer the latency probe. */
+        const val LATENCY_FAILED_MILLIS = -1L
     }
 }
