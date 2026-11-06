@@ -472,7 +472,9 @@ private fun BrowserSheets(
             searchEngine = state.searchEngine,
             pageTheme = state.pageTheme,
             autoDarken = state.autoDarken,
+            textZoom = state.textZoom,
             instanceAlternatives = state.instanceAlternatives,
+            onTextZoomChange = viewModel::setBrowserTextZoom,
             actions =
                 BrowserMenuActions(
                     onNewTab = { viewModel.openNewTab() },

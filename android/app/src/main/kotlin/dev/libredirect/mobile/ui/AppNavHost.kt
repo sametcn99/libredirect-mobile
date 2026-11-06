@@ -253,7 +253,6 @@ fun AppNavHost(
                                 onCheckForUpdates = mainViewModel::checkForUpdates,
                                 onClipboardOfferChange = mainViewModel::setClipboardOfferEnabled,
                                 onAutoInstanceRefreshChange = mainViewModel::setAutoInstanceRefreshEnabled,
-                                onTextZoomChange = mainViewModel::setBrowserTextZoom,
                                 onAppLockChange = mainViewModel::setAppLockEnabled,
                             ),
                     )

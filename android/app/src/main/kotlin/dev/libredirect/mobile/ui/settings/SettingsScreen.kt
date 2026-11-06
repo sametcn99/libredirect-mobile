@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -85,9 +84,6 @@ import dev.libredirect.mobile.ui.browser.SearchEngineDialog
 
 private const val GITHUB_REPO_URL = "https://github.com/sametcn99/libredirect-mobile"
 
-@Suppress("MagicNumber")
-private val TEXT_ZOOM_OPTIONS = listOf(100, 125, 150, 175, 200)
-
 data class SettingsActions(
     val onBrowserClick: () -> Unit,
     val onExceptionsClick: () -> Unit,
@@ -98,7 +94,6 @@ data class SettingsActions(
     val onCheckForUpdates: () -> Unit = {},
     val onClipboardOfferChange: (Boolean) -> Unit = {},
     val onAutoInstanceRefreshChange: (Boolean) -> Unit = {},
-    val onTextZoomChange: (Int) -> Unit = {},
     val onAppLockChange: (Boolean) -> Unit = {},
 )
 
@@ -112,7 +107,6 @@ fun SettingsScreen(
     val context = LocalContext.current
     var isSearchEngineDialogVisible by rememberSaveable { mutableStateOf(false) }
     var isLanguageDialogVisible by rememberSaveable { mutableStateOf(false) }
-    var isTextZoomDialogVisible by rememberSaveable { mutableStateOf(false) }
     val currentLanguageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
 
     Scaffold(
@@ -214,15 +208,6 @@ fun SettingsScreen(
                     title = stringResource(R.string.settings_custom_services),
                     subtitle = stringResource(R.string.settings_custom_services_subtitle_fmt, state.customRoutes.size),
                     onClick = actions.onCustomServicesClick,
-                )
-            }
-
-            item {
-                SettingsCardItem(
-                    icon = Icons.Default.FormatSize,
-                    title = stringResource(R.string.settings_text_zoom),
-                    subtitle = stringResource(R.string.settings_text_zoom_subtitle_fmt, state.browserTextZoom),
-                    onClick = { isTextZoomDialogVisible = true },
                 )
             }
 
@@ -348,72 +333,6 @@ fun SettingsScreen(
             onDismiss = { isSearchEngineDialogVisible = false },
         )
     }
-
-    if (isTextZoomDialogVisible) {
-        TextZoomDialog(
-            currentZoom = state.browserTextZoom,
-            onSelect = { percent ->
-                actions.onTextZoomChange(percent)
-                isTextZoomDialogVisible = false
-            },
-            onDismiss = { isTextZoomDialogVisible = false },
-        )
-    }
-}
-
-@Composable
-private fun TextZoomDialog(
-    currentZoom: Int,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val options = TEXT_ZOOM_OPTIONS
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = stringResource(R.string.settings_text_zoom),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                options.forEach { percent ->
-                    val isSelected = percent == currentZoom
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelect(percent) }
-                                .padding(vertical = 8.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = { onSelect(percent) },
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_text_zoom_subtitle_fmt, percent),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_close))
-            }
-        },
-        shape = RoundedCornerShape(20.dp),
-    )
 }
 
 @Composable

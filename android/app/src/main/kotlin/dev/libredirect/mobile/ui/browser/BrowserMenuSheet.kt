@@ -35,19 +35,26 @@ import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -85,7 +92,9 @@ fun BrowserMenuSheet(
     searchEngine: SearchEngine,
     pageTheme: PageTheme,
     autoDarken: Boolean,
+    textZoom: Int,
     instanceAlternatives: InstanceAlternatives?,
+    onTextZoomChange: (Int) -> Unit,
     actions: BrowserMenuActions,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -152,8 +161,10 @@ fun BrowserMenuSheet(
             PageAppearanceCard(
                 pageTheme = pageTheme,
                 autoDarken = autoDarken,
+                textZoom = textZoom,
                 onPageThemeChange = actions.onPageThemeChange,
                 onAutoDarkenChange = actions.onAutoDarkenChange,
+                onTextZoomChange = onTextZoomChange,
             )
 
             Spacer(Modifier.height(8.dp))
@@ -324,9 +335,12 @@ private fun QuickAction(
 private fun PageAppearanceCard(
     pageTheme: PageTheme,
     autoDarken: Boolean,
+    textZoom: Int,
     onPageThemeChange: (PageTheme) -> Unit,
     onAutoDarkenChange: (Boolean) -> Unit,
+    onTextZoomChange: (Int) -> Unit,
 ) {
+    var isTextZoomDialogVisible by remember { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -389,9 +403,106 @@ private fun PageAppearanceCard(
                 }
                 Switch(checked = autoDarken, onCheckedChange = onAutoDarkenChange)
             }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { isTextZoomDialogVisible = true }
+                        .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = stringResource(R.string.browser_menu_text_size),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.browser_text_zoom_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.browser_text_zoom_percent_fmt, textZoom),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
+
+    if (isTextZoomDialogVisible) {
+        TextZoomDialog(
+            currentZoom = textZoom,
+            onSelect = {
+                onTextZoomChange(it)
+                isTextZoomDialogVisible = false
+            },
+            onDismiss = { isTextZoomDialogVisible = false },
+        )
+    }
 }
+
+@Composable
+private fun TextZoomDialog(
+    currentZoom: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = TEXT_ZOOM_OPTIONS
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.browser_menu_text_size),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                options.forEach { percent ->
+                    val isSelected = percent == currentZoom
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(percent) }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { onSelect(percent) },
+                        )
+                        Text(
+                            text = stringResource(R.string.browser_text_zoom_percent_fmt, percent),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_close))
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+    )
+}
+
+@Suppress("MagicNumber")
+private val TEXT_ZOOM_OPTIONS = listOf(100, 125, 150, 175, 200)
 
 @Composable
 private fun MenuRow(

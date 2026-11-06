@@ -255,13 +255,14 @@
     <string name="browser_link_context_copy">Bağlantıyı kopyala</string>
     <string name="browser_link_context_share">Paylaş</string>
     <string name="browser_link_copied">Bağlantı kopyalandı</string>
+    <string name="browser_menu_text_size">Metin boyutu</string>
+    <string name="browser_text_zoom_desc">Sayfa metninin büyüklüğü</string>
     <string name="browser_menu_new_incognito_tab">Yeni gizli sekme</string>
     <string name="tab_switcher_new_incognito_tab">Yeni gizli sekme</string>
     <string name="tab_switcher_incognito_badge">Gizli sekme</string>
     <string name="tab_switcher_close_all_confirm">Tüm sekmeler kapatılacak. Bu işlem geri alınamaz.</string>
     <string name="browser_history_search_hint">Geçmişte ara</string>
-    <string name="settings_text_zoom">Metin boyutu</string>
-    <string name="settings_text_zoom_subtitle_fmt">%%%1$d</string>
+    <string name="browser_text_zoom_percent_fmt">%%%1$d</string>
     <string name="settings_app_lock">Uygulama kilidi</string>
     <string name="settings_app_lock_desc">Uygulama açılırken biyometrik veya ekran kilidi doğrulaması istenir</string>
     <string name="settings_set_default_browser">Varsayılan tarayıcı yap</string>

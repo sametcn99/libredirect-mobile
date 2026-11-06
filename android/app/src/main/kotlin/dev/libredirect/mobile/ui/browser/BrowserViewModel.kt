@@ -115,6 +115,8 @@ data class BrowserUiState(
     val isMeasuringInstances: Boolean = false,
     val pageTheme: PageTheme = PageTheme.DEFAULT,
     val autoDarken: Boolean = true,
+    /** Page text scaling in percent (100 = default), editable from the browser menu. */
+    val textZoom: Int = 100,
     /** A page's `<video>`/fullscreen element is rendering its own view; the browser UI is hidden. */
     val isFullscreenVideo: Boolean = false,
     val fullscreenView: View? = null,
@@ -252,6 +254,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         customSearchEngineUrl = settings.customSearchEngineUrl,
                         pageTheme = PageTheme.fromId(settings.browserPageTheme),
                         autoDarken = settings.browserAutoDarken,
+                        textZoom = settings.browserTextZoom,
                     )
                 }
                 applyAutoDarkenToAll(settings.browserAutoDarken)
@@ -722,6 +725,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(pageTheme = theme) }
         viewModelScope.launch {
             settingsRepository.setBrowserPageTheme(theme.id)
+        }
+    }
+
+    fun setBrowserTextZoom(percent: Int) {
+        viewModelScope.launch {
+            settingsRepository.setBrowserTextZoom(percent)
         }
     }
 

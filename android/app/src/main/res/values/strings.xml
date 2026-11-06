@@ -255,13 +255,14 @@
     <string name="browser_link_context_copy">Copy link</string>
     <string name="browser_link_context_share">Share</string>
     <string name="browser_link_copied">Link copied</string>
+    <string name="browser_menu_text_size">Text size</string>
+    <string name="browser_text_zoom_desc">Scaling for page text</string>
     <string name="browser_menu_new_incognito_tab">New incognito tab</string>
     <string name="tab_switcher_new_incognito_tab">New incognito tab</string>
     <string name="tab_switcher_incognito_badge">Incognito tab</string>
     <string name="tab_switcher_close_all_confirm">All tabs will be closed. This cannot be undone.</string>
     <string name="browser_history_search_hint">Search history</string>
-    <string name="settings_text_zoom">Text size</string>
-    <string name="settings_text_zoom_subtitle_fmt">%1$d%%</string>
+    <string name="browser_text_zoom_percent_fmt">%1$d%%</string>
     <string name="settings_app_lock">App lock</string>
     <string name="settings_app_lock_desc">Require biometric or screen-lock authentication when opening the app</string>
     <string name="settings_set_default_browser">Set as default browser</string>
