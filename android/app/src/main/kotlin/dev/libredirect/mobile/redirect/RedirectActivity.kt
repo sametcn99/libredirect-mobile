@@ -15,6 +15,8 @@ import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.core.url.UrlCandidate
 import dev.libredirect.mobile.settings.SettingsRepository
+import dev.libredirect.mobile.ui.browser.BrowserDataRepository
+import dev.libredirect.mobile.ui.browser.SearchEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -56,6 +58,12 @@ class RedirectActivity : ComponentActivity() {
         when (intent.action) {
             Intent.ACTION_VIEW -> intent.dataString
             Intent.ACTION_SEND -> extractFromSharedText(intent)
+            // C2: "LibRedirect ile aç" in other apps' text-selection menu. A
+            // selection that is a URL gets routed; anything else becomes a
+            // search in the user's search engine (see [route]).
+            Intent.ACTION_PROCESS_TEXT ->
+                intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.trim()
+                    ?.takeIf { it.isNotEmpty() }
             else -> null
         }
 
@@ -76,19 +84,35 @@ class RedirectActivity : ComponentActivity() {
         val manifest = withContext(Dispatchers.IO) { app.manifestRepository.activeManifest() }
         val settings = SettingsRepository(app).settings.first()
 
+        // Process-text input that is not a URL becomes a search in the user's
+        // engine instead of being rejected as an unopenable string.
+        val effectiveUrl =
+            url.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+                ?: SearchEngine
+                    .resolve(
+                        selectedId = settings.searchEngine,
+                        customName = settings.customSearchEngineName,
+                        customUrl = settings.customSearchEngineUrl,
+                    ).buildSearchUrl(url)
+
         val result =
             if (!settings.routingEnabled) {
-                RoutingResult.Passthrough(url)
+                RoutingResult.Passthrough(effectiveUrl)
             } else if (manifest != null) {
-                UrlRouter(manifest).resolve(url, settings.routingContext())
+                UrlRouter(manifest).resolve(effectiveUrl, settings.routingContext())
             } else {
-                RoutingResult.Passthrough(url)
+                RoutingResult.Passthrough(effectiveUrl)
             }
 
         val destination = destinationFor(result) ?: return showMessage(app, R.string.redirect_cannot_open)
 
+        val redirect =
+            (result as? RoutingResult.Redirect)?.also {
+                // Local per-route usage counter (A6), same as in-app redirects.
+                BrowserDataRepository(app).recordRedirect(it.routeId)
+            }
         val redirectInfo =
-            (result as? RoutingResult.Redirect)?.let {
+            redirect?.let {
                 InAppRedirectInfo(
                     originalUrl = it.originalUrl,
                     routeId = it.routeId,
