@@ -53,7 +53,7 @@ fun AppLockGate(
     val onUnlockedState = rememberUpdatedState(onUnlocked)
 
     LaunchedEffect(attempt) {
-        activity?.let { target -> authenticate(target) { onUnlockedState.value } }
+        activity?.let { target -> authenticate(target) { onUnlockedState.value() } }
     }
 
     Column(
@@ -107,13 +107,26 @@ private fun authenticate(
                 }
             },
         )
-    val promptInfo =
+    val title = activity.getString(R.string.app_lock_unlock_title)
+    val combined =
         BiometricPrompt.PromptInfo
             .Builder()
-            .setTitle(activity.getString(R.string.app_lock_unlock_title))
+            .setTitle(title)
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_WEAK or
                     BiometricManager.Authenticators.DEVICE_CREDENTIAL,
             ).build()
-    prompt.authenticate(promptInfo)
+    try {
+        prompt.authenticate(combined)
+    } catch (_: IllegalArgumentException) {
+        // A few API levels reject the combined authenticator set outright;
+        // fall back to biometrics-only so enrolled devices can still unlock.
+        val biometricOnly =
+            BiometricPrompt.PromptInfo
+                .Builder()
+                .setTitle(title)
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                .build()
+        prompt.authenticate(biometricOnly)
+    }
 }
