@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.AlertDialog
@@ -39,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -451,6 +453,16 @@ private fun HistoryTabContent(
     onClearAll: () -> Unit,
 ) {
     var isClearHistoryConfirmVisible by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val filteredHistory =
+        if (searchQuery.isBlank()) {
+            history
+        } else {
+            history.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                    it.url.contains(searchQuery, ignoreCase = true)
+            }
+        }
 
     if (isClearHistoryConfirmVisible) {
         AlertDialog(
@@ -495,6 +507,35 @@ private fun HistoryTabContent(
         )
     } else {
         Column(modifier = Modifier.fillMaxWidth().height(380.dp)) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.browser_history_search_hint)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.action_clear),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(14.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+            )
             Row(
                 modifier =
                     Modifier
@@ -504,7 +545,7 @@ private fun HistoryTabContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(R.string.browser_history_count_fmt, history.size),
+                    text = stringResource(R.string.browser_history_count_fmt, filteredHistory.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -524,7 +565,7 @@ private fun HistoryTabContent(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                items(history, key = BrowserHistoryItem::id) { item ->
+                items(filteredHistory, key = BrowserHistoryItem::id) { item ->
                     Row(
                         modifier =
                             Modifier

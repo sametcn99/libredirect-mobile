@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -60,6 +61,7 @@ import dev.libredirect.mobile.R
 
 data class BrowserMenuActions(
     val onNewTab: () -> Unit,
+    val onNewIncognitoTab: () -> Unit,
     val onToggleBookmark: () -> Unit,
     val onShare: () -> Unit,
     val onFindInPage: () -> Unit,
@@ -156,6 +158,11 @@ fun BrowserMenuSheet(
 
             Spacer(Modifier.height(8.dp))
 
+            MenuRow(
+                icon = Icons.Default.PrivacyTip,
+                label = stringResource(R.string.browser_menu_new_incognito_tab),
+                onClick = dismissThen(actions.onNewIncognitoTab),
+            )
             MenuRow(
                 icon = Icons.Outlined.Bookmarks,
                 label = stringResource(R.string.browser_bookmarks_title),

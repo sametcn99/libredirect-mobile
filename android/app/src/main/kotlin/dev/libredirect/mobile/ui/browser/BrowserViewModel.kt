@@ -3,18 +3,26 @@ package dev.libredirect.mobile.ui.browser
 import android.annotation.SuppressLint
 import android.app.Application
 import android.app.DownloadManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
+import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Message
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebStorage
@@ -23,10 +31,14 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.webkit.ProfileStore
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Strategy
+import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.routing.RouteMatcher
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
@@ -66,6 +78,16 @@ data class InstanceAlternatives(
     val currentIndex: Int,
 )
 
+/**
+ * A WebView file-chooser request (file upload fields). [intent] is what the
+ * Chrome client's [WebChromeClient.FileChooserParams.createIntent] built; the
+ * id lets the UI distinguish a new request from a stale one.
+ */
+data class FileChooserRequest(
+    val id: Long,
+    val intent: Intent,
+)
+
 data class BrowserUiState(
     val tabs: List<BrowserTab> = emptyList(),
     val activeTabId: String = "",
@@ -93,6 +115,13 @@ data class BrowserUiState(
     val isMeasuringInstances: Boolean = false,
     val pageTheme: PageTheme = PageTheme.DEFAULT,
     val autoDarken: Boolean = true,
+    /** A page's `<video>`/fullscreen element is rendering its own view; the browser UI is hidden. */
+    val isFullscreenVideo: Boolean = false,
+    val fullscreenView: View? = null,
+    /** Long-pressed link/image target offered to the context menu; null hides the dialog. */
+    val linkContextUrl: String? = null,
+    /** Pending `onShowFileChooser` request; null when none. */
+    val fileChooserRequest: FileChooserRequest? = null,
 ) {
     val activeTab: BrowserTab?
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
@@ -182,6 +211,24 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** Last auto-darken value pushed to the WebViews, so unrelated settings changes don't reload pages. */
     private var appliedAutoDarken: Boolean? = null
 
+    /** Last text-zoom value pushed to the WebViews, so unrelated settings changes don't touch them. */
+    private var appliedTextZoom: Int? = null
+
+    /** Monotonic "last used" marker per pooled WebView, driving pool trimming (see [trimWebViewPool]). */
+    private val webViewTouchedAt = mutableMapOf<String, Long>()
+
+    /**
+     * Back/forward history of WebViews evicted from the pool by trimming, so a
+     * trimmed tab keeps its navigation history when the user comes back to it.
+     */
+    private val webViewSavedStates = mutableMapOf<String, Bundle>()
+
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+
+    private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    private var fileChooserRequestId = 0L
+
     init {
         viewModelScope.launch {
             restoreSession()
@@ -208,6 +255,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
                 applyAutoDarkenToAll(settings.browserAutoDarken)
+                applyTextZoomToAll(settings.browserTextZoom)
             }
         }
         viewModelScope.launch {
@@ -252,6 +300,30 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
         requestBrowserFocus()
         scheduleSessionPersist()
+        trimWebViewPool()
+    }
+
+    /**
+     * Private tab: never written to history, session persistence or bookmarks;
+     * when the WebView Profile API is available its cookies and site storage
+     * live in an ephemeral profile deleted with the last incognito tab.
+     */
+    fun openIncognitoTab() {
+        val newTab =
+            BrowserTab(
+                id = UUID.randomUUID().toString(),
+                url = BrowserTab.DEFAULT_HOME_URL,
+                isIncognito = true,
+            )
+        _uiState.update { current ->
+            current
+                .copy(
+                    tabs = current.tabs + newTab,
+                    activeTabId = newTab.id,
+                ).withOverlaysClosed()
+        }
+        requestBrowserFocus()
+        trimWebViewPool()
     }
 
     /**
@@ -316,6 +388,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
         requestBrowserFocus()
         scheduleSessionPersist()
+        trimWebViewPool()
     }
 
     /**
@@ -350,10 +423,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
         requestBrowserFocus()
         scheduleSessionPersist()
+        trimWebViewPool()
     }
 
     fun closeTab(tabId: String) {
-        destroyWebView(tabId)
+        if (_uiState.value.isFullscreenVideo) exitFullscreenVideo()
+        destroyWebView(tabId, keepHistoryForReuse = false)
         pendingRedirectTargets.remove(tabId)
 
         _uiState.update { current ->
@@ -383,11 +458,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         }
+        deleteIncognitoProfileIfUnused()
         scheduleSessionPersist(immediate = true)
     }
 
     fun closeAllTabs() {
-        webViewPool.keys.toList().forEach(::destroyWebView)
+        if (_uiState.value.isFullscreenVideo) exitFullscreenVideo()
+        webViewPool.keys.toList().forEach { destroyWebView(it, keepHistoryForReuse = false) }
         pendingRedirectTargets.clear()
 
         val freshTab =
@@ -403,12 +480,29 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 isFindInPageVisible = false,
             )
         }
+        deleteIncognitoProfileIfUnused()
         scheduleSessionPersist(immediate = true)
     }
 
-    private fun destroyWebView(tabId: String) {
+    /**
+     * Destroys a tab's WebView. With [keepHistoryForReuse] (pool trimming) the
+     * back/forward history is stashed so the tab can restore it when its
+     * WebView is rebuilt; otherwise any stashed state for the tab is dropped
+     * too, since the tab itself is going away.
+     */
+    private fun destroyWebView(
+        tabId: String,
+        keepHistoryForReuse: Boolean,
+    ) {
         webViewDarkModes.remove(tabId)
-        webViewPool.remove(tabId)?.let { webView ->
+        webViewTouchedAt.remove(tabId)
+        val webView = webViewPool.remove(tabId)
+        if (webView != null && keepHistoryForReuse) {
+            webViewSavedStates[tabId] = Bundle().also { webView.saveState(it) }
+        } else {
+            webViewSavedStates.remove(tabId)
+        }
+        webView?.let { webView ->
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.stopLoading()
             webView.destroy()
@@ -416,12 +510,40 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
+     * Keeps at most [MAX_ALIVE_WEB_VIEWS] WebViews around: background tabs
+     * beyond that have their WebView destroyed (history stashed) and are
+     * rebuilt on demand when selected. Least-recently-used inactive tabs are
+     * evicted first; the active tab is never a victim.
+     */
+    private fun trimWebViewPool() {
+        val activeTabId = _uiState.value.activeTabId
+        while (webViewPool.size > MAX_ALIVE_WEB_VIEWS) {
+            val victim =
+                webViewPool.keys
+                    .filterNot { it == activeTabId }
+                    .minByOrNull { webViewTouchedAt[it] ?: 0L } ?: break
+            destroyWebView(victim, keepHistoryForReuse = true)
+        }
+        webViewTouchedAt.keys.toList().forEach { tabId ->
+            if (tabId !in webViewPool) webViewTouchedAt.remove(tabId)
+        }
+    }
+
+    private fun touchWebView(tabId: String) {
+        webViewTouchedAt[tabId] = System.currentTimeMillis()
+    }
+
+    /**
      * Captures a scaled screenshot of the given tab's WebView as its switcher
      * thumbnail. A WebView is attached and laid out only while its tab is
      * active, so this runs in the moments before the active tab changes.
      */
+    @Suppress("ReturnCount")
     private fun captureActiveTabThumbnail() {
         val tabId = _uiState.value.activeTabId
+        // An incognito tab's page never appears anywhere, not even as a
+        // memory-only thumbnail in the switcher.
+        if (_uiState.value.tabs.find { it.id == tabId }?.isIncognito == true) return
         val webView = webViewPool[tabId] ?: return
         val width = webView.width
         val height = webView.height
@@ -458,6 +580,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 findActiveMatchIndex = 0,
             )
         }
+        touchWebView(tabId)
+        trimWebViewPool()
         scheduleSessionPersist()
     }
 
@@ -509,11 +633,29 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     // "current instance" marker must reflect the latest
                     // redirect, not the menu-open snapshot.
                     instanceAlternatives = computeInstanceAlternatives(),
-                    instanceLatencies = emptyMap(),
                     isMeasuringInstances = false,
                 )
             } else {
                 it.copy(isInstancePickerVisible = false)
+            }
+        }
+        if (visible) preloadCachedLatencies()
+    }
+
+    /** Opens the instance picker only when the active tab actually has alternatives. */
+    fun openInstancePickerIfAvailable() {
+        if (computeInstanceAlternatives() != null) setInstancePickerVisible(true)
+    }
+
+    /** Seeds the picker with latencies measured in an earlier session, so the ranking survives restarts. */
+    private fun preloadCachedLatencies() {
+        val instances = _uiState.value.instanceAlternatives?.instances ?: return
+        viewModelScope.launch {
+            val cached = browserDataRepository.cachedLatencies()
+            if (cached.isEmpty()) return@launch
+            _uiState.update { current ->
+                val relevant = current.instanceAlternatives?.instances?.toSet() ?: return@update current
+                current.copy(instanceLatencies = cached.filterKeys { it in relevant })
             }
         }
     }
@@ -522,7 +664,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
      * User-initiated probe of the current frontend's instances: a bounded
      * concurrency pool of HEAD requests measures time-to-first-byte so the
      * picker can rank instances and suggest the fastest one to pin. Runs
-     * only on request — never in the background.
+     * only on request — never in the background. Results are cached so a
+     * later session opens the picker with the ranking already in place.
      */
     fun measureInstanceLatency() {
         val alternatives = _uiState.value.instanceAlternatives ?: return
@@ -534,6 +677,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     measureLatencies(alternatives.instances)
                 }
             _uiState.update { it.copy(instanceLatencies = results, isMeasuringInstances = false) }
+            browserDataRepository.saveLatencies(results)
         }
     }
 
@@ -600,6 +744,144 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Text scaling takes effect on live WebViews immediately; no reload needed. */
+    private fun applyTextZoomToAll(percent: Int) {
+        if (appliedTextZoom == percent) return
+        appliedTextZoom = percent
+        webViewPool.values.forEach { webView ->
+            webView.settings.textZoom = percent
+        }
+    }
+
+    /**
+     * Fullscreen video ([WebChromeClient.onShowCustomView]): the page's own
+     * view takes over the whole screen until the page or the user ends it.
+     */
+    private fun enterFullscreenVideo(
+        view: View,
+        callback: WebChromeClient.CustomViewCallback,
+    ) {
+        if (_uiState.value.isFullscreenVideo) {
+            callback.onCustomViewHidden()
+            return
+        }
+        customViewCallback = callback
+        _uiState.update { it.copy(isFullscreenVideo = true, fullscreenView = view) }
+    }
+
+    /** User-initiated exit (back gesture/button): ends the fullscreen view via its callback. */
+    fun exitFullscreenVideo() {
+        if (!_uiState.value.isFullscreenVideo) return
+        val callback = customViewCallback
+        customViewCallback = null
+        if (callback != null) {
+            // The page's chrome client answers with onHideCustomView, which clears the state.
+            callback.onCustomViewHidden()
+        }
+        if (_uiState.value.isFullscreenVideo) clearFullscreenVideoState()
+    }
+
+    /** Page/system-initiated exit: tear the custom view down and restore the browser UI. */
+    private fun clearFullscreenVideoState() {
+        val view = _uiState.value.fullscreenView
+        _uiState.update { it.copy(isFullscreenVideo = false, fullscreenView = null) }
+        (view?.parent as? ViewGroup)?.removeView(view)
+    }
+
+    /** Shows the long-press context menu for a link/image target picked from [WebView.hitTestResult]. */
+    private fun showLinkContextMenu(url: String) {
+        _uiState.update { it.copy(linkContextUrl = url) }
+    }
+
+    fun dismissLinkContextMenu() {
+        _uiState.update { it.copy(linkContextUrl = null) }
+    }
+
+    fun openLinkInNewTab(url: String) {
+        dismissLinkContextMenu()
+        openNewTab(url)
+    }
+
+    fun copyLinkToClipboard(url: String) {
+        val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("link", url))
+        dismissLinkContextMenu()
+        Toast.makeText(app, R.string.browser_link_copied, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun requestFileChooser(
+        callback: ValueCallback<Array<Uri>>,
+        params: WebChromeClient.FileChooserParams,
+    ): Boolean =
+        try {
+            pendingFileChooserCallback?.onReceiveValue(null)
+            pendingFileChooserCallback = callback
+            fileChooserRequestId += 1
+            _uiState.update {
+                it.copy(
+                    fileChooserRequest = FileChooserRequest(fileChooserRequestId, params.createIntent()),
+                )
+            }
+            true
+        } catch (_: Exception) {
+            callback.onReceiveValue(null)
+            false
+        }
+
+    /** The file picker returned (result may be a cancellation): the WebView callback must always fire exactly once. */
+    fun onFileChooserResult(
+        resultCode: Int,
+        data: Intent?,
+    ) {
+        val callback = pendingFileChooserCallback ?: return
+        pendingFileChooserCallback = null
+        _uiState.update { it.copy(fileChooserRequest = null) }
+        callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data))
+    }
+
+    /**
+     * Launcher-shortcut entry (C3): opens the service's chosen frontend
+     * instance in a new tab. Falls back to the first instance when the user
+     * never made an explicit selection; silently ignored when the route or an
+     * instance cannot be determined (the manifest may have changed).
+     */
+    fun openServiceShortcut(routeId: String?) {
+        if (routeId.isNullOrBlank()) return
+        // A home-screen shortcut can arrive on a cold start, before the
+        // manifest and settings have landed; resolve against them once ready.
+        viewModelScope.launch {
+            initialStateLoaded.await()
+            resolveServiceShortcut(routeId)
+        }
+    }
+
+    @Suppress("ReturnCount")
+    private fun resolveServiceShortcut(routeId: String?) {
+        if (routeId.isNullOrBlank()) return
+        val route = cachedManifest?.routes?.find { it.id == routeId } ?: return
+        val frontendId = cachedSettings.selectedFrontends[routeId] ?: route.frontends.first().id
+        val frontend = route.frontends.find { it.id == frontendId } ?: route.frontends.first()
+        val instance =
+            when (val selection = cachedSettings.instanceSelections["$routeId/${frontend.id}"]) {
+                is InstanceSelection.Pinned -> selection.instance
+                is InstanceSelection.Custom -> selection.instance
+                InstanceSelection.Automatic, null -> frontend.instances.firstOrNull()
+            } ?: return
+        openNewTab(instance)
+    }
+
+    /**
+     * Deletes the ephemeral incognito profile once no incognito tab exists, so
+     * its cookies and site storage die with the session (no-op when the
+     * WebView Profile API is unavailable or a WebView still uses the profile).
+     */
+    private fun deleteIncognitoProfileIfUnused() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
+        if (_uiState.value.tabs.none { it.isIncognito }) {
+            ProfileStore.getInstance().deleteProfile(INCOGNITO_PROFILE_NAME)
+        }
+    }
+
     fun setSearchEngine(engine: SearchEngine) {
         viewModelScope.launch {
             settingsRepository.setSearchEngine(engine.id)
@@ -649,6 +931,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         cookieManager.removeAllCookies(null)
         cookieManager.flush()
         WebStorage.getInstance().deleteAllData()
+        // The incognito profile owns separate storage; wipe it too while it exists.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+            ProfileStore
+                .getInstance()
+                .getProfile(INCOGNITO_PROFILE_NAME)
+                ?.cookieManager
+                ?.removeAllCookies(null)
+        }
         webViewPool.values.forEach { webView ->
             webView.clearCache(true)
         }
@@ -659,8 +949,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(isClearDataConfirmVisible = visible) }
     }
 
+    @Suppress("ReturnCount")
     fun toggleBookmarkActivePage() {
         val active = _uiState.value.activeTab ?: return
+        if (active.isIncognito) return
         val url = active.url
         if (url.isBlank() || url == BrowserTab.DEFAULT_HOME_URL) return
 
@@ -822,6 +1114,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
         val result = UrlRouter(manifest).resolve(url, settings.routingContext())
         if (result !is RoutingResult.Redirect) return null
+
+        // Local, per-route usage counter (A6): device-only, drives the
+        // service detail screen's "redirected N times" line.
+        viewModelScope.launch {
+            browserDataRepository.recordRedirect(result.routeId)
+        }
 
         val route = manifest.routes.find { it.id == result.routeId }
         val serviceName = route?.name ?: result.routeId
@@ -1048,7 +1346,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             buildList {
                 state.tabs.forEachIndexed { index, tab ->
                     val url = tab.url
-                    if (!url.startsWith("http", ignoreCase = true)) return@forEachIndexed
+                    // Incognito tabs die with the process by definition.
+                    if (tab.isIncognito || !url.startsWith("http", ignoreCase = true)) return@forEachIndexed
                     if (tab.id == state.activeTabId) activeIndex = size
                     add(
                         PersistedTab(
@@ -1093,6 +1392,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         context: Context,
         darkPages: Boolean,
     ): WebView {
+        touchWebView(tabId)
         val existing = webViewPool[tabId]
         if (existing != null && webViewDarkModes[tabId] == darkPages) {
             (existing.parent as? ViewGroup)?.removeView(existing)
@@ -1100,15 +1400,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
 
         // A WebView's page theme is fixed at creation; carry its back/forward
-        // history over to the replacement built with the new theme.
+        // history over to the replacement built with the new theme. A WebView
+        // evicted by pool trimming left its history stashed in
+        // [webViewSavedStates] for exactly this rebuild.
         val savedState =
             existing?.let { webView ->
                 Bundle().also { webView.saveState(it) }
-            }
-        if (existing != null) destroyWebView(tabId)
+            } ?: webViewSavedStates.remove(tabId)
+        if (existing != null) destroyWebView(tabId, keepHistoryForReuse = false)
 
         val tab = _uiState.value.tabs.find { it.id == tabId }
-        val newWebView = buildWebView(tabId, context, darkPages, tab?.isDesktopMode == true)
+        val newWebView = buildWebView(tabId, context, darkPages, tab)
 
         webViewPool[tabId] = newWebView
         webViewDarkModes[tabId] = darkPages
@@ -1117,6 +1419,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (!restored) {
             loadInitialPage(newWebView, tabId, tab, isReplacement = existing != null)
         }
+        trimWebViewPool()
         return newWebView
     }
 
@@ -1125,9 +1428,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         tabId: String,
         context: Context,
         darkPages: Boolean,
-        isDesktop: Boolean,
+        tab: BrowserTab?,
     ): WebView =
         WebView(WebViewTheming.themedContext(context, darkPages)).apply {
+            if (tab?.isIncognito == true && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                // Isolated cookie + site-storage profile; deleted again with the
+                // last incognito tab (see [deleteIncognitoProfileIfUnused]).
+                ProfileStore.getInstance().getOrCreateProfile(INCOGNITO_PROFILE_NAME)
+                WebViewCompat.setProfile(this, INCOGNITO_PROFILE_NAME)
+            }
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -1137,6 +1446,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 builtInZoomControls = true
                 displayZoomControls = false
                 mediaPlaybackRequiresUserGesture = false
+                textZoom = cachedSettings.browserTextZoom
                 // Pinned privacy posture: explicit rather than relying on
                 // WebView defaults that may vary across versions.
                 mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -1149,13 +1459,27 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             WebViewTheming.applyBackground(this, darkPages)
             WebViewTheming.applyAutoDarken(this, darkPages, _uiState.value.autoDarken)
-            applyDesktopMode(this, isDesktop)
+            applyDesktopMode(this, tab?.isDesktopMode == true)
             setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
                 _uiState.update {
                     it.copy(
                         findActiveMatchIndex = activeMatchOrdinal + 1,
                         findMatchCount = numberOfMatches,
                     )
+                }
+            }
+            setOnLongClickListener {
+                val hit = hitTestResult
+                val url = hit.extra
+                val isLinkTarget =
+                    hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
+                        hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ||
+                        hit.type == WebView.HitTestResult.IMAGE_TYPE
+                if (isLinkTarget && !url.isNullOrBlank() && url.startsWith("http", ignoreCase = true)) {
+                    showLinkContextMenu(url)
+                    true
+                } else {
+                    false
                 }
             }
             webViewClient = BrowserTabWebViewClient(tabId)
@@ -1350,14 +1674,38 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private fun setPageError(
+        tabId: String,
+        hasError: Boolean,
+    ) {
+        _uiState.update { current ->
+            current.copy(
+                tabs =
+                    current.tabs.map { tab ->
+                        if (tab.id == tabId && tab.pageError != hasError) {
+                            tab.copy(pageError = hasError)
+                        } else {
+                            tab
+                        }
+                    },
+            )
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        pendingFileChooserCallback?.onReceiveValue(null)
         webViewPool.values.forEach { webView ->
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.stopLoading()
             webView.destroy()
         }
         webViewPool.clear()
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) &&
+            _uiState.value.tabs.none { it.isIncognito }
+        ) {
+            ProfileStore.getInstance().deleteProfile(INCOGNITO_PROFILE_NAME)
+        }
     }
 
     private inner class BrowserTabWebViewClient(private val tabId: String) : WebViewClient() {
@@ -1401,6 +1749,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             favicon: Bitmap?,
         ) {
             super.onPageStarted(view, url, favicon)
+            // A new navigation attempt starts with a clean slate: the error
+            // page of the previous load must not linger over fresh content.
+            setPageError(tabId, false)
+            if (_uiState.value.isFullscreenVideo) clearFullscreenVideoState()
             if (url != null) {
                 if (pendingRedirectTargets[tabId]?.contains(url) == true) {
                     // This is the resolved destination of a redirect we already
@@ -1428,6 +1780,32 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
+        override fun onReceivedError(
+            view: WebView?,
+            request: WebResourceRequest?,
+            error: WebResourceError?,
+        ) {
+            super.onReceivedError(view, request, error)
+            // Subresource failures (favicon, analytics…) keep the page usable;
+            // only a main-frame failure gets the in-app error page.
+            if (request?.isForMainFrame == true) setPageError(tabId, true)
+        }
+
+        override fun onReceivedSslError(
+            view: WebView?,
+            handler: SslErrorHandler?,
+            error: SslError?,
+        ) {
+            super.onReceivedSslError(view, handler, error)
+            // Pinned privacy posture: never proceed past an invalid
+            // certificate. If the main frame is the one failing (nothing
+            // loaded yet), surface the error page instead of a blank screen.
+            handler?.cancel()
+            if (view?.url == null || view.url.equals("about:blank", ignoreCase = true)) {
+                setPageError(tabId, true)
+            }
+        }
+
         override fun onPageFinished(
             view: WebView?,
             url: String?,
@@ -1437,7 +1815,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 val pageTitle = view?.title ?: url
                 updateTabUrl(tabId, url)
                 updateTabTitle(tabId, pageTitle)
-                if (url != BrowserTab.DEFAULT_HOME_URL && !url.equals("about:blank", ignoreCase = true)) {
+                val isIncognito = _uiState.value.tabs.find { it.id == tabId }?.isIncognito == true
+                if (!isIncognito &&
+                    url != BrowserTab.DEFAULT_HOME_URL &&
+                    !url.equals("about:blank", ignoreCase = true)
+                ) {
                     viewModelScope.launch {
                         browserDataRepository.addHistory(pageTitle, url)
                     }
@@ -1457,6 +1839,79 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private inner class BrowserTabWebChromeClient(private val tabId: String) : WebChromeClient() {
+        override fun onShowCustomView(
+            view: View?,
+            callback: CustomViewCallback?,
+        ) {
+            super.onShowCustomView(view, callback)
+            if (view != null && callback != null) {
+                enterFullscreenVideo(view, callback)
+            }
+        }
+
+        override fun onHideCustomView() {
+            super.onHideCustomView()
+            if (!_uiState.value.isFullscreenVideo) return
+            customViewCallback = null
+            clearFullscreenVideoState()
+        }
+
+        @Suppress("ReturnCount")
+        override fun onCreateWindow(
+            view: WebView?,
+            isDialog: Boolean,
+            isUserGesture: Boolean,
+            resultMessage: Message?,
+        ): Boolean {
+            val transport = resultMessage?.obj as? WebView.WebViewTransport ?: return false
+            val source = view ?: return false
+            // target=_blank / window.open: a throwaway WebView receives the new
+            // window's first navigation, which we capture and turn into a
+            // regular tab. The throwaway is never attached, so it renders
+            // nothing and is destroyed right after the URL arrives (plus a
+            // safety cleanup for pages that never navigate it).
+            val popup = WebView(source.context)
+            popup.settings.javaScriptEnabled = true
+            val disposed = booleanArrayOf(false)
+
+            fun disposePopup() {
+                if (disposed[0]) return
+                disposed[0] = true
+                popup.webViewClient = WebViewClient()
+                popup.destroy()
+            }
+            popup.webViewClient =
+                object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        target: WebView,
+                        request: WebResourceRequest,
+                    ): Boolean {
+                        val url = request.url.toString()
+                        if (request.isForMainFrame && url.startsWith("http", ignoreCase = true)) {
+                            openNewTab(url)
+                            disposePopup()
+                        }
+                        return true
+                    }
+                }
+            transport.webView = popup
+            resultMessage.sendToTarget()
+            viewModelScope.launch {
+                delay(POPUP_CAPTURE_TIMEOUT_MILLIS)
+                disposePopup()
+            }
+            return true
+        }
+
+        override fun onShowFileChooser(
+            webView: WebView?,
+            filePathCallback: ValueCallback<Array<Uri>>?,
+            fileChooserParams: FileChooserParams?,
+        ): Boolean {
+            if (filePathCallback == null || fileChooserParams == null) return false
+            return requestFileChooser(filePathCallback, fileChooserParams)
+        }
+
         override fun onProgressChanged(
             view: WebView?,
             newProgress: Int,
@@ -1499,5 +1954,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         const val LATENCY_PROBE_CONCURRENCY = 16
         const val LATENCY_FAILED_MILLIS = -1L
         const val NANOS_PER_MILLI = 1_000_000L
+
+        /** WebViews kept alive across background tabs; beyond this, LRU eviction kicks in. */
+        const val MAX_ALIVE_WEB_VIEWS = 8
+
+        /** How long a target=_blank capture WebView may linger before being force-destroyed. */
+        const val POPUP_CAPTURE_TIMEOUT_MILLIS = 15_000L
+
+        /** Name of the ephemeral WebView profile backing incognito tabs. */
+        const val INCOGNITO_PROFILE_NAME = "incognito"
     }
 }

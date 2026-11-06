@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -16,6 +18,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,18 +41,25 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,8 +73,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,9 +84,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -92,6 +110,8 @@ import kotlinx.coroutines.delay
 private const val REDIRECT_NOTICE_DURATION_MS = 5_000L
 private const val PROGRESS_MAX = 100f
 private const val DISABLED_ALPHA = 0.38f
+private const val PULL_REFRESH_THRESHOLD_DP = 96f
+private const val PULL_INDICATOR_VISIBILITY = 0.02f
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -106,8 +126,21 @@ fun InAppBrowserScreen(
     val darkPages = state.pageTheme.isDark(isSystemInDarkTheme())
     var isAddressFocused by remember { mutableStateOf(false) }
 
+    // File upload fields (onShowFileChooser): the WebView client hands us a
+    // prepared intent; the system picker's result goes back to the callback.
+    val fileChooserLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            viewModel.onFileChooserResult(result.resultCode, result.data)
+        }
+    LaunchedEffect(state.fileChooserRequest) {
+        state.fileChooserRequest?.let { request ->
+            fileChooserLauncher.launch(request.intent)
+        }
+    }
+
     val canHandleBack =
-        isAddressFocused ||
+        state.isFullscreenVideo ||
+            isAddressFocused ||
             state.isMenuSheetVisible ||
             state.isTabsSheetVisible ||
             state.isBookmarksHistorySheetVisible ||
@@ -117,6 +150,7 @@ fun InAppBrowserScreen(
 
     BackHandler(enabled = canHandleBack) {
         when {
+            state.isFullscreenVideo -> viewModel.exitFullscreenVideo()
             isAddressFocused -> focusManager.clearFocus()
             state.isMenuSheetVisible -> viewModel.setMenuSheetVisible(false)
             state.isTabsSheetVisible -> viewModel.setTabsSheetVisible(false)
@@ -167,10 +201,30 @@ fun InAppBrowserScreen(
                         .weight(1f)
                         .fillMaxWidth(),
             ) {
+                var isWebViewAtTop by remember { mutableStateOf(true) }
                 BrowserWebView(
                     activeTab = activeTab,
                     darkPages = darkPages,
                     viewModel = viewModel,
+                    onAtTopChange = { isWebViewAtTop = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                if (activeTab?.pageError == true) {
+                    PageErrorOverlay(
+                        url = activeTab.url,
+                        canTryAnotherInstance = activeTab.originalUrl != null,
+                        onRetry = viewModel::reloadActiveTab,
+                        onTryAnotherInstance = viewModel::openInstancePickerIfAvailable,
+                        onOpenExternal = { context.openExternalUrl(activeTab.url) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                PullToRefreshHandle(
+                    viewModel = viewModel,
+                    isPageLoading = activeTab?.isLoading == true,
+                    isWebViewAtTop = isWebViewAtTop,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -196,6 +250,8 @@ fun InAppBrowserScreen(
             )
         }
 
+        FullscreenVideoOverlay(state = state)
+
         BrowserSheets(
             state = state,
             viewModel = viewModel,
@@ -210,6 +266,164 @@ fun InAppBrowserScreen(
 }
 
 /**
+ * Pull-to-refresh for the page area: observes drags in the final pass (the
+ * WebView consumes them for its own scrolling), accumulating only downward
+ * movement while the page sits at its top. Past the threshold the tab reloads
+ * — the normal loading bar becomes the visual confirmation.
+ */
+@Suppress("CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
+@Composable
+private fun PullToRefreshHandle(
+    viewModel: BrowserViewModel,
+    isPageLoading: Boolean,
+    isWebViewAtTop: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var pullProgress by remember { mutableFloatStateOf(0f) }
+    var isArmed by remember { mutableStateOf(true) }
+    val density = LocalDensity.current
+    val thresholdPx = with(density) { PULL_REFRESH_THRESHOLD_DP.dp.toPx() }
+    val isLoading by rememberUpdatedState(isPageLoading)
+    val atTop by rememberUpdatedState(isWebViewAtTop)
+
+    Box(
+        modifier =
+            modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var distance = 0f
+                        var triggered = false
+                        isArmed = true
+                        up@ while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val change = event.changes.firstOrNull() ?: break
+                            if (event.changes.all { !it.pressed }) break@up
+                            if (isLoading) {
+                                // A load started mid-gesture (the trigger or a
+                                // link tap): ignore the rest of this drag.
+                                distance = 0f
+                                pullProgress = 0f
+                                triggered = true
+                                continue
+                            }
+                            val dy = change.positionChange().y
+                            distance =
+                                when {
+                                    dy > 0f -> if (isArmed && atTop) distance + dy else distance
+                                    else -> (distance + dy).coerceAtLeast(0f)
+                                }
+                            if (distance > 0f) isArmed = true
+                            pullProgress = (distance / thresholdPx).coerceIn(0f, 1f)
+                            if (!triggered && distance >= thresholdPx) {
+                                triggered = true
+                                viewModel.reloadActiveTab()
+                            }
+                        }
+                        pullProgress = 0f
+                    }
+                }
+            },
+    ) {
+        if (pullProgress > PULL_INDICATOR_VISIBILITY) {
+            CircularProgressIndicator(
+                progress = { pullProgress },
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp)
+                        .size(30.dp),
+            )
+        }
+    }
+}
+
+/** In-app error page shown over a failed main-frame load (A2). */
+@Composable
+private fun PageErrorOverlay(
+    url: String,
+    canTryAnotherInstance: Boolean,
+    onRetry: () -> Unit,
+    onTryAnotherInstance: () -> Unit,
+    onOpenExternal: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                Icons.Default.ErrorOutline,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(48.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.browser_page_error_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = BrowserTab.hostOf(url),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onRetry, shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.browser_page_error_retry))
+            }
+            if (canTryAnotherInstance) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onTryAnotherInstance) {
+                    Text(stringResource(R.string.browser_menu_try_another_instance))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onOpenExternal) {
+                Icon(
+                    Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.browser_menu_open_external))
+            }
+        }
+    }
+}
+
+/** Covers the whole screen while a page renders its own fullscreen `<video>` view. */
+@Composable
+private fun FullscreenVideoOverlay(state: BrowserUiState) {
+    if (!state.isFullscreenVideo) return
+    val customView = state.fullscreenView ?: return
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+    ) {
+        key(customView) {
+            AndroidView(
+                factory = { customView },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
  * Keyed on the effective page theme as well as the tab: flipping between light
  * and dark recreates the AndroidView, and [BrowserViewModel.getOrCreateWebView]
  * swaps in a WebView themed to match.
@@ -219,13 +433,23 @@ private fun BrowserWebView(
     activeTab: BrowserTab?,
     darkPages: Boolean,
     viewModel: BrowserViewModel,
+    onAtTopChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
         if (activeTab != null) {
             key(activeTab.id, darkPages) {
+                val atTopCallback by rememberUpdatedState(onAtTopChange)
                 AndroidView(
-                    factory = { ctx -> viewModel.getOrCreateWebView(activeTab.id, ctx, darkPages) },
+                    factory = { ctx ->
+                        viewModel
+                            .getOrCreateWebView(activeTab.id, ctx, darkPages)
+                            .apply {
+                                setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                                    atTopCallback(scrollY <= 0)
+                                }
+                            }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -240,6 +464,24 @@ private fun BrowserSheets(
     onShare: () -> Unit,
     onOpenExternal: () -> Unit,
 ) {
+    val context = LocalContext.current
+    state.linkContextUrl?.let { url ->
+        LinkContextMenuDialog(
+            url = url,
+            onOpenInNewTab = { viewModel.openLinkInNewTab(url) },
+            onCopy = { viewModel.copyLinkToClipboard(url) },
+            onShare = {
+                viewModel.dismissLinkContextMenu()
+                context.shareUrl(url, context.getString(R.string.browser_share_link_title))
+            },
+            onOpenExternal = {
+                viewModel.dismissLinkContextMenu()
+                context.openExternalUrl(url)
+            },
+            onDismiss = viewModel::dismissLinkContextMenu,
+        )
+    }
+
     if (state.isMenuSheetVisible) {
         BrowserMenuSheet(
             tab = state.activeTab,
@@ -251,6 +493,7 @@ private fun BrowserSheets(
             actions =
                 BrowserMenuActions(
                     onNewTab = { viewModel.openNewTab() },
+                    onNewIncognitoTab = { viewModel.openIncognitoTab() },
                     onToggleBookmark = viewModel::toggleBookmarkActivePage,
                     onShare = onShare,
                     onFindInPage = { viewModel.setFindInPageVisible(true) },
@@ -310,6 +553,7 @@ private fun BrowserSheets(
                     onTabSelect = viewModel::selectTab,
                     onTabClose = viewModel::closeTab,
                     onNewTab = { viewModel.openNewTab() },
+                    onNewIncognitoTab = { viewModel.openIncognitoTab() },
                     onCloseAll = viewModel::closeAllTabs,
                     onDismiss = { viewModel.setTabsSheetVisible(false) },
                 ),
@@ -343,6 +587,96 @@ private fun BrowserSheets(
             onSelectEngine = viewModel::setSearchEngine,
             onSaveCustom = viewModel::saveCustomSearchEngine,
             onDismiss = { viewModel.setSearchEngineDialogVisible(false) },
+        )
+    }
+}
+
+@Composable
+private fun LinkContextMenuDialog(
+    url: String,
+    onOpenInNewTab: () -> Unit,
+    onCopy: () -> Unit,
+    onShare: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.browser_link_context_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(12.dp))
+                LinkActionRow(
+                    icon = Icons.Default.Add,
+                    label = stringResource(R.string.browser_link_context_open_new_tab),
+                    onClick = onOpenInNewTab,
+                )
+                LinkActionRow(
+                    icon = Icons.Default.ContentCopy,
+                    label = stringResource(R.string.browser_link_context_copy),
+                    onClick = onCopy,
+                )
+                LinkActionRow(
+                    icon = Icons.Default.Share,
+                    label = stringResource(R.string.browser_link_context_share),
+                    onClick = onShare,
+                )
+                LinkActionRow(
+                    icon = Icons.AutoMirrored.Filled.OpenInNew,
+                    label = stringResource(R.string.browser_menu_open_external),
+                    onClick = onOpenExternal,
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_close))
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+    )
+}
+
+@Composable
+private fun LinkActionRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onClick)
+                .padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
         )
     }
 }
