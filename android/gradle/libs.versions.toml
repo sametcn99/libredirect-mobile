@@ -18,8 +18,8 @@ work = "2.10.0"
 junit = "4.13.2"
 androidxTestExtJunit = "1.2.1"
 espressoCore = "3.6.1"
-ktlint = "12.1.1"
-detekt = "1.23.7"
+ktlint = "12.1.2"
+detekt = "1.23.8"
 
 [libraries]
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
