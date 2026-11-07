@@ -1627,6 +1627,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         tab: BrowserTab?,
     ): WebView =
         WebView(WebViewTheming.themedContext(context, darkPages)).apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
             if (tab?.isIncognito == true && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                 // Isolated cookie + site-storage profile; deleted again with the
                 // last incognito tab (see [deleteIncognitoProfileIfUnused]).
@@ -1714,8 +1716,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         lastScrollY[tabId] = scrollY
         _uiState.update { current ->
             val tab = current.tabs.find { it.id == tabId } ?: return@update current
+            if (!current.autoHideToolbar && !tab.toolbarHidden) return@update current
             val hidden =
                 when {
+                    !current.autoHideToolbar -> false
                     previous == null -> tab.toolbarHidden
                     scrollY - previous > SCROLL_DIRECTION_EPSILON && scrollY > TOOLBAR_HIDE_SCROLL_PX -> true
                     previous - scrollY > SCROLL_DIRECTION_EPSILON || scrollY <= TOOLBAR_SHOW_SCROLL_PX -> false

@@ -2,9 +2,12 @@
 
 package dev.libredirect.mobile.ui.browser
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.MotionEvent
+import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,7 +22,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,9 +89,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -212,15 +211,14 @@ fun InAppBrowserScreen(
                         .weight(1f)
                         .fillMaxWidth(),
             ) {
-                var isWebViewAtTop by remember { mutableStateOf(true) }
                 BrowserWebView(
-                    activeTab = activeTab,
+                    activeTabId = activeTab?.id,
+                    isPageLoading = activeTab?.isLoading == true,
                     darkPages = darkPages,
                     viewModel = viewModel,
-                    onAtTopChange = { isWebViewAtTop = it },
+                    onTouchDown = { if (isAddressFocused) focusManager.clearFocus() },
                     modifier = Modifier.fillMaxSize(),
                 )
-
 
                 if (activeTab?.pageError == true) {
                     PageErrorOverlay(
@@ -232,13 +230,6 @@ fun InAppBrowserScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-
-                PullToRefreshHandle(
-                    viewModel = viewModel,
-                    isPageLoading = activeTab?.isLoading == true,
-                    isWebViewAtTop = isWebViewAtTop,
-                    modifier = Modifier.fillMaxSize(),
-                )
 
                 RedirectNoticeOverlay(
                     notice = state.activeRedirectNotice,
@@ -291,62 +282,6 @@ fun InAppBrowserScreen(
     }
 }
 
-
-/**
- * Pull-to-refresh for the page area: observes drags in the final pass (the
- * WebView consumes them for its own scrolling), accumulating only downward
- * movement while the page sits at its top. Past the threshold the tab reloads
- * — the normal loading bar becomes the visual confirmation.
- */
-@Suppress("LoopWithTooManyJumpStatements")
-@Composable
-private fun PullToRefreshHandle(
-    viewModel: BrowserViewModel,
-    isPageLoading: Boolean,
-    isWebViewAtTop: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    var pullProgress by remember { mutableFloatStateOf(0f) }
-    val density = LocalDensity.current
-    val thresholdPx = with(density) { PULL_REFRESH_THRESHOLD_DP.dp.toPx() }
-    val accumulator = remember(thresholdPx) { PullToRefreshAccumulator(thresholdPx) }
-    val isLoading by rememberUpdatedState(isPageLoading)
-    val atTop by rememberUpdatedState(isWebViewAtTop)
-
-    Box(
-        modifier =
-            modifier.pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        awaitFirstDown(requireUnconsumed = false)
-                        accumulator.reset()
-                        up@ while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Final)
-                            val change = event.changes.firstOrNull() ?: break
-                            if (event.changes.all { !it.pressed }) break@up
-                            val dy = change.positionChange().y
-                            if (accumulator.onDrag(dy, atTop, isLoading)) {
-                                viewModel.reloadActiveTab()
-                            }
-                            pullProgress = accumulator.progress
-                        }
-                        pullProgress = 0f
-                    }
-                }
-            },
-    ) {
-        if (pullProgress > PULL_INDICATOR_VISIBILITY) {
-            CircularProgressIndicator(
-                progress = { pullProgress },
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 10.dp)
-                        .size(30.dp),
-            )
-        }
-    }
-}
 
 /** In-app error page shown over a failed main-frame load (A2). */
 @Composable
@@ -437,34 +372,108 @@ private fun FullscreenVideoOverlay(state: BrowserUiState) {
  * Keyed on the effective page theme as well as the tab: flipping between light
  * and dark recreates the AndroidView, and [BrowserViewModel.getOrCreateWebView]
  * swaps in a WebView themed to match.
+ *
+ * Pull-to-refresh is observed directly on the WebView's touch stream (never
+ * consuming events) rather than through a Compose pointerInput overlay, because
+ * a sibling Compose pointerInput node over an AndroidView intercepts hit-testing
+ * and blocks all touch events from reaching the WebView.
  */
 @Composable
 private fun BrowserWebView(
-    activeTab: BrowserTab?,
+    activeTabId: String?,
+    isPageLoading: Boolean,
     darkPages: Boolean,
     viewModel: BrowserViewModel,
-    onAtTopChange: (Boolean) -> Unit,
+    onTouchDown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var pullProgress by remember(activeTabId) { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val thresholdPx = with(density) { PULL_REFRESH_THRESHOLD_DP.dp.toPx() }
+    val accumulator = remember(activeTabId, thresholdPx) { PullToRefreshAccumulator(thresholdPx) }
+    val isLoading by rememberUpdatedState(isPageLoading)
+    val touchDownCallback by rememberUpdatedState(onTouchDown)
+
     Box(modifier = modifier) {
-        if (activeTab != null) {
-            key(activeTab.id, darkPages) {
-                val atTopCallback by rememberUpdatedState(onAtTopChange)
+        if (activeTabId != null) {
+            key(activeTabId, darkPages) {
                 AndroidView(
                     factory = { ctx ->
                         viewModel
-                            .getOrCreateWebView(activeTab.id, ctx, darkPages)
+                            .getOrCreateWebView(activeTabId, ctx, darkPages)
                             .apply {
                                 setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                                    atTopCallback(scrollY <= 0)
-                                    viewModel.onTabScroll(activeTab.id, scrollY)
+                                    viewModel.onTabScroll(activeTabId, scrollY)
                                 }
+                                bindPullToRefresh(
+                                    accumulator = accumulator,
+                                    isLoading = { isLoading },
+                                    onTouchDown = { touchDownCallback() },
+                                    onProgress = { progress ->
+                                        pullProgress =
+                                            if (progress > PULL_INDICATOR_VISIBILITY) progress else 0f
+                                    },
+                                    onRefresh = viewModel::reloadActiveTab,
+                                )
                             }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
         }
+        if (pullProgress > PULL_INDICATOR_VISIBILITY) {
+            CircularProgressIndicator(
+                progress = { pullProgress },
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp)
+                        .size(30.dp),
+            )
+        }
+    }
+}
+
+@SuppressLint("ClickableViewAccessibility")
+private fun WebView.bindPullToRefresh(
+    accumulator: PullToRefreshAccumulator,
+    isLoading: () -> Boolean,
+    onTouchDown: () -> Unit,
+    onProgress: (Float) -> Unit,
+    onRefresh: () -> Unit,
+) {
+    var lastY = 0f
+    var canPull = false
+    setOnTouchListener { view, event ->
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                onTouchDown()
+                lastY = event.rawY
+                canPull = view.scrollY <= 0 && !view.canScrollVertically(-1)
+                accumulator.reset()
+                onProgress(0f)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dy = event.rawY - lastY
+                lastY = event.rawY
+                if (event.pointerCount > 1 || view.scrollY > 0 || view.canScrollVertically(-1)) {
+                    canPull = false
+                }
+                if (accumulator.onDrag(dy, canPull, isLoading())) {
+                    onRefresh()
+                }
+                onProgress(accumulator.progress)
+            }
+            MotionEvent.ACTION_POINTER_DOWN,
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL,
+            -> {
+                canPull = false
+                accumulator.reset()
+                onProgress(0f)
+            }
+        }
+        false
     }
 }
 
