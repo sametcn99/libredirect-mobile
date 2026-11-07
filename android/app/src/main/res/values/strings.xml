@@ -330,34 +330,6 @@
     <string name="browser_original_unavailable">Original link could not be determined</string>
 
     <!-- 2.8: routing explainer -->
-    <string name="home_why_button">Why?</string>
-    <string name="home_why_title">Routing details</string>
-    <string name="home_why_hide">Hide details</string>
-    <string name="trace_route_fmt">Service: %1$s</string>
-    <string name="trace_frontend_fmt">Frontend: %1$s</string>
-    <string name="trace_instance_fmt">Instance: %1$s</string>
-    <string name="trace_selection_fmt">Selection: %1$s</string>
-    <string name="trace_stripped_fmt">%1$d tracking parameter(s) removed</string>
-    <string name="trace_unwrapped_fmt">Unwrapped %1$d redirect wrapper(s)</string>
-    <string name="trace_exception_fmt">Exception matched: %1$s</string>
-    <string name="trace_selection_automatic">Automatic (latency-weighted)</string>
-    <string name="trace_selection_fastest">Fastest</string>
-    <string name="trace_selection_pinned">Pinned</string>
-    <string name="trace_selection_custom">Custom</string>
-    <string name="trace_selection_override">One-off override</string>
-    <string name="trace_reason_no_route">No redirect rule matches this site</string>
-    <string name="trace_reason_route_disabled">This service is turned off</string>
-    <string name="trace_reason_exception_matched">A routing exception covers this link</string>
-    <string name="trace_reason_ask_mode">This service is set to ask every time</string>
-    <string name="trace_reason_paused">Routing is paused</string>
-    <string name="trace_reason_routing_disabled">Routing is switched off</string>
-    <string name="trace_reason_strategy_passthrough">The chosen frontend keeps the original site</string>
-    <string name="trace_reason_no_instance">No instance could be selected</string>
-    <string name="trace_reason_target_unchanged">The redirect target equals the original link</string>
-    <string name="trace_reason_not_eligible">This input is not a routable web link</string>
-    <string name="trace_reason_instance_cooldown">All instances are cooling down</string>
-    <string name="trace_redirected_fmt">Redirected to %1$s</string>
-    <string name="trace_passthrough_fmt">Opened unchanged</string>
 
     <!-- 3.1/3.3/3.4: privacy -->
     <string name="settings_section_privacy">Privacy &amp; Link Cleaning</string>
@@ -416,9 +388,6 @@
     <string name="downloads_status_done">Completed</string>
     <string name="downloads_status_failed">Failed</string>
     <string name="downloads_status_paused">Paused</string>
-    <string name="browser_start_page_top_sites">Frequently visited</string>
-    <string name="browser_start_page_bookmarks">Bookmarks</string>
-    <string name="browser_start_page_empty">Your bookmarks and frequent sites will appear here</string>
     <string name="tab_switcher_close_others">Close other tabs</string>
     <string name="tab_switcher_sort">Sort tabs</string>
     <string name="tab_switcher_sort_recent">Recently used</string>
@@ -468,22 +437,6 @@
     <string name="backup_reason_invalid_custom_instance">a pinned instance is not a valid HTTPS origin</string>
 
     <!-- 5.2: onboarding -->
-    <string name="onboarding_step_fmt">Step %1$d of 4</string>
-    <string name="onboarding_welcome_title">Welcome to LibRedirect</string>
-    <string name="onboarding_welcome_desc">This app redirects links from big platforms (YouTube, Reddit, X…) to privacy-friendly frontends, in your browser or the built-in one. Everything happens on your device.</string>
-    <string name="onboarding_default_browser_title">Make it your browser</string>
-    <string name="onboarding_default_browser_desc">Set LibRedirect as the default browser so links are routed automatically when you tap them.</string>
-    <string name="onboarding_default_browser_btn">Set as default browser</string>
-    <string name="onboarding_app_links_title">Let apps open links here</string>
-    <string name="onboarding_app_links_desc">Apps like YouTube may capture their own web links. For each installed service app below, disable “Open by default” so links reach LibRedirect instead.</string>
-    <string name="onboarding_app_links_btn_fmt">Open “%1$s” settings</string>
-    <string name="onboarding_app_links_none">No known service apps detected on this device.</string>
-    <string name="onboarding_share_title">Share and select text</string>
-    <string name="onboarding_share_desc">Any link can also be shared to LibRedirect, or selected in another app and opened with “Open with LibRedirect” in the text menu.</string>
-    <string name="onboarding_skip">Skip</string>
-    <string name="onboarding_next">Next</string>
-    <string name="onboarding_get_started">Get started</string>
-    <string name="settings_onboarding">Show intro again</string>
 
     <!-- 5.3: widget -->
     <string name="widget_routing_on">Routing on</string>

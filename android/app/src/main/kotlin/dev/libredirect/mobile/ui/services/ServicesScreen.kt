@@ -65,7 +65,7 @@ private const val DETAIL_PANE_WEIGHT = 1.5f
 private const val TWO_PANE_MIN_WIDTH_DP = 600
 
 private enum class ServiceFilter(
-    @StringRes val labelRes: Int,
+    @field:StringRes val labelRes: Int,
 ) {
     ALL(R.string.services_filter_all),
     ENABLED(R.string.services_filter_enabled),

@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -51,10 +50,8 @@ import dev.libredirect.mobile.ui.custom.CustomServicesScreen
 import dev.libredirect.mobile.ui.exceptions.ExceptionsScreen
 import dev.libredirect.mobile.ui.home.HomeActions
 import dev.libredirect.mobile.ui.home.HomeScreen
-import dev.libredirect.mobile.ui.onboarding.OnboardingScreen
 import dev.libredirect.mobile.ui.service.ServiceDetailScreen
 import dev.libredirect.mobile.ui.services.ServicesScreen
-import dev.libredirect.mobile.ui.settings.BrowserRoleHost
 import dev.libredirect.mobile.ui.settings.DiagnosticsScreen
 import dev.libredirect.mobile.ui.settings.SettingsActions
 import dev.libredirect.mobile.ui.settings.SettingsScreen
@@ -74,7 +71,7 @@ private const val ROUTE_DIAGNOSTICS = "diagnostics"
 
 private data class NavItem(
     val route: String,
-    @StringRes val labelRes: Int,
+    @field:StringRes val labelRes: Int,
     val icon: ImageVector,
 )
 
@@ -210,16 +207,6 @@ fun AppNavHost(
                     .fillMaxSize()
                     .padding(bottom = padding.calculateBottomPadding()),
         ) {
-            // 5.2: first-launch guide shown over everything until completed/skipped.
-            if (!state.onboardingCompleted && !state.loading) {
-                OnboardingScreen(
-                    installedServiceApps = mainViewModel.installedServiceApps(),
-                    onRequestBrowserRole = { (context as? BrowserRoleHost)?.requestBrowserRole() },
-                    onOpenAppByDefault = mainViewModel::openAppOpenByDefaultSettings,
-                    onDone = mainViewModel::completeOnboarding,
-                    modifier = Modifier.fillMaxSize().zIndex(2f),
-                )
-            }
             NavHost(
                 navController = navController,
                 startDestination = ROUTE_HOME,
@@ -266,8 +253,6 @@ fun AppNavHost(
                                 onDismissClipboardOffer = mainViewModel::dismissClipboardOffer,
                                 onPauseRouting = mainViewModel::pauseRouting,
                                 onResumeRouting = mainViewModel::resumeRouting,
-                                onExplainRouting = mainViewModel::explainRouting,
-                                onHideTrace = mainViewModel::hideTrace,
                                 onResetPrivacyStats = mainViewModel::resetPrivacyStats,
                             ),
                     )
@@ -322,7 +307,6 @@ fun AppNavHost(
                                 onDismissImport = mainViewModel::dismissPendingImport,
                                 onOpenRelease = { url -> context.openReleaseUrl(url) },
                                 onOpenDiagnostics = { navController.navigate(ROUTE_DIAGNOSTICS) },
-                                onOpenOnboarding = mainViewModel::reopenOnboarding,
                             ),
                     )
                 }

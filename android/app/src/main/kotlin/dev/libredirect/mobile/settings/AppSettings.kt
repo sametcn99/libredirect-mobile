@@ -120,8 +120,6 @@ data class AppSettings(
     val backgroundAudioEnabled: Boolean = false,
     /** Host -> per-site browser overrides (4.3). */
     val siteSettings: Map<String, SiteSetting> = emptyMap(),
-    /** First-run onboarding (5.2) has been finished (or skipped). */
-    val onboardingCompleted: Boolean = false,
     /** Epoch millis until which routing is paused (2.6); 0 means not paused. */
     val pausedUntilEpochMillis: Long = 0L,
 ) {

@@ -50,7 +50,6 @@ class SettingsBackupCodecTest {
                 mapOf(
                     "example.org" to SiteSetting(javaScriptEnabled = false, forceDark = true, textZoom = 130),
                 ),
-            onboardingCompleted = true,
             pausedUntilEpochMillis = 1234567890L,
         )
 

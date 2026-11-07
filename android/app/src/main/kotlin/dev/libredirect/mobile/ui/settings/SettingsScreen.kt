@@ -115,7 +115,6 @@ data class SettingsActions(
     val onDismissImport: () -> Unit = {},
     val onOpenRelease: (String) -> Unit = {},
     val onOpenDiagnostics: () -> Unit = {},
-    val onOpenOnboarding: () -> Unit = {},
 )
 
 @Suppress("CyclomaticComplexMethod")
@@ -316,15 +315,6 @@ fun SettingsScreen(
                 )
             }
 
-            // 5.2: re-run the first-launch guide on demand.
-            item {
-                SettingsCardItem(
-                    icon = Icons.Default.Language,
-                    title = stringResource(R.string.settings_onboarding),
-                    subtitle = stringResource(R.string.onboarding_welcome_desc),
-                    onClick = actions.onOpenOnboarding,
-                )
-            }
 
             item {
                 Spacer(Modifier.height(24.dp))

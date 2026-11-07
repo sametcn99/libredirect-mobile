@@ -9,7 +9,7 @@ import dev.libredirect.mobile.R
  * everything else lands in OTHER — never guessed per-service at runtime.
  */
 enum class ServiceCategory(
-    @StringRes val labelRes: Int,
+    @field:StringRes val labelRes: Int,
 ) {
     ALL(R.string.service_category_all),
     VIDEO(R.string.service_category_video),

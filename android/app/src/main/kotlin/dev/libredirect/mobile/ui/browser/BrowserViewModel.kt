@@ -243,6 +243,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private val webViewPool = mutableMapOf<String, WebView>()
 
+    /** Last raw scroll offset per tab, kept outside the state flow (see onTabScroll). */
+    private val lastScrollY = mutableMapOf<String, Int>()
+
     /** Whether each pooled WebView was created with a dark theme; see [WebViewTheming]. */
     private val webViewDarkModes = mutableMapOf<String, Boolean>()
 
@@ -561,6 +564,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         tabId: String,
         keepHistoryForReuse: Boolean,
     ) {
+        lastScrollY.remove(tabId)
         webViewDarkModes.remove(tabId)
         webViewTouchedAt.remove(tabId)
         val webView = webViewPool.remove(tabId)
@@ -1696,18 +1700,32 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** Current override for a host, for the site-settings sheet. */
     fun currentSiteSetting(host: String): SiteSetting? = cachedSettings.siteSettingFor(host)
 
-    /** Scroll position of a tab's WebView, for toolbar auto-hide (4.5). */
+    /**
+     * Toolbar auto-hide with direction hysteresis (4.5). Scroll deltas are
+     * tracked outside the state flow — writing state on every scroll frame
+     * recomposes the whole browser screen and starves touch handling. The
+     * state only updates when the hidden/showing decision actually flips.
+     */
     fun onTabScroll(
         tabId: String,
         scrollY: Int,
     ) {
+        val previous = lastScrollY[tabId]
+        lastScrollY[tabId] = scrollY
         _uiState.update { current ->
-            current.copy(
-                tabs =
-                    current.tabs.map {
-                        if (it.id == tabId && it.scrollY != scrollY) it.copy(scrollY = scrollY) else it
-                    },
-            )
+            val tab = current.tabs.find { it.id == tabId } ?: return@update current
+            val hidden =
+                when {
+                    previous == null -> tab.toolbarHidden
+                    scrollY - previous > SCROLL_DIRECTION_EPSILON && scrollY > TOOLBAR_HIDE_SCROLL_PX -> true
+                    previous - scrollY > SCROLL_DIRECTION_EPSILON || scrollY <= TOOLBAR_SHOW_SCROLL_PX -> false
+                    else -> tab.toolbarHidden
+                }
+            if (hidden == tab.toolbarHidden) {
+                current
+            } else {
+                current.copy(tabs = current.tabs.map { if (it.id == tabId) it.copy(toolbarHidden = hidden) else it })
+            }
         }
     }
 
@@ -2610,6 +2628,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         const val ONE_DAY_MILLIS = 24L * 60 * 60 * 1000
         const val ONE_WEEK_MILLIS = 7L * ONE_DAY_MILLIS
         const val ONE_MONTH_MILLIS = 30L * ONE_DAY_MILLIS
+
+        const val SCROLL_DIRECTION_EPSILON = 8
+        const val TOOLBAR_SHOW_SCROLL_PX = 64
+        const val TOOLBAR_HIDE_SCROLL_PX = 300
 
         /** Rows shown in the in-app downloads dialog (4.5). */
         const val MAX_DOWNLOAD_ENTRIES = 50

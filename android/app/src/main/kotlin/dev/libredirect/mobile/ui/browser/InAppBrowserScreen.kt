@@ -171,8 +171,7 @@ fun InAppBrowserScreen(
                 .background(MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            val scrolledPast = (activeTab?.scrollY ?: 0) > TOOLBAR_HIDE_SCROLL_PX
-            val toolbarsHidden = state.autoHideToolbar && scrolledPast && !isAddressFocused
+            val toolbarsHidden = state.autoHideToolbar && (activeTab?.toolbarHidden == true) && !isAddressFocused
             AnimatedVisibility(
                 visible = !toolbarsHidden,
                 enter = fadeIn() + expandVertically(),
@@ -222,15 +221,6 @@ fun InAppBrowserScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                // 4.5: new-tab start page over a fresh home tab.
-                if (activeTab?.isFreshHomeTab() == true) {
-                    StartPageOverlay(
-                        bookmarks = state.bookmarks,
-                        history = state.history,
-                        onOpen = { url -> viewModel.openUrlInNewOrActiveTab(url) },
-                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-                    )
-                }
 
                 if (activeTab?.pageError == true) {
                     PageErrorOverlay(
@@ -301,8 +291,6 @@ fun InAppBrowserScreen(
     }
 }
 
-/** Scroll offset (px) past which the toolbars hide themselves (4.5). */
-private const val TOOLBAR_HIDE_SCROLL_PX = 300
 
 /**
  * Pull-to-refresh for the page area: observes drags in the final pass (the
@@ -1331,6 +1319,3 @@ private fun TransientBrowserDialogs(
         DownloadsDialog(entries = entries, onDismiss = onDismissDownloads)
     }
 }
-
-/** A fresh, untouched tab on the engine home page hosts the start-page overlay (4.5). */
-private fun BrowserTab.isFreshHomeTab(): Boolean = url == BrowserTab.DEFAULT_HOME_URL && !canGoBack && !isLoading

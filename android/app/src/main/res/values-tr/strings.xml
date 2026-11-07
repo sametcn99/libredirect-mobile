@@ -330,34 +330,6 @@
     <string name="browser_original_unavailable">Orijinal link belirlenemedi</string>
 
     <!-- 2.8: routing explainer -->
-    <string name="home_why_button">Neden?</string>
-    <string name="home_why_title">Yönlendirme ayrıntıları</string>
-    <string name="home_why_hide">Ayrıntıları gizle</string>
-    <string name="trace_route_fmt">Servis: %1$s</string>
-    <string name="trace_frontend_fmt">Frontend: %1$s</string>
-    <string name="trace_instance_fmt">Instance: %1$s</string>
-    <string name="trace_selection_fmt">Seçim: %1$s</string>
-    <string name="trace_stripped_fmt">%1$d takip parametresi temizlendi</string>
-    <string name="trace_unwrapped_fmt">%1$d yönlendirme sarmalayıcısı açıldı</string>
-    <string name="trace_exception_fmt">Eşleşen istisna: %1$s</string>
-    <string name="trace_selection_automatic">Otomatik (gecikme ağırlıklı)</string>
-    <string name="trace_selection_fastest">En hızlı</string>
-    <string name="trace_selection_pinned">Sabitlenmiş</string>
-    <string name="trace_selection_custom">Özel</string>
-    <string name="trace_selection_override">Tek seferlik seçim</string>
-    <string name="trace_reason_no_route">Bu siteye uygun bir yönlendirme kuralı yok</string>
-    <string name="trace_reason_route_disabled">Bu servis kapalı</string>
-    <string name="trace_reason_exception_matched">Bir yönlendirme istisnası bu bağlantıyı kapsıyor</string>
-    <string name="trace_reason_ask_mode">Bu servis her seferinde sormak üzere ayarlı</string>
-    <string name="trace_reason_paused">Yönlendirme duraklatıldı</string>
-    <string name="trace_reason_routing_disabled">Yönlendirme kapalı</string>
-    <string name="trace_reason_strategy_passthrough">Seçilen frontend orijinal siteyi koruyor</string>
-    <string name="trace_reason_no_instance">Instance seçilemedi</string>
-    <string name="trace_reason_target_unchanged">Yönlendirme hedefi orijinal bağlantıyla aynı</string>
-    <string name="trace_reason_not_eligible">Bu giriş yönlendirilebilir bir web bağlantısı değil</string>
-    <string name="trace_reason_instance_cooldown">Tüm instance\'lar beklemede</string>
-    <string name="trace_redirected_fmt">%1$s adresine yönlendirildi</string>
-    <string name="trace_passthrough_fmt">Değişmeden açıldı</string>
 
     <!-- 3.1/3.3/3.4: privacy -->
     <string name="settings_section_privacy">Gizlilik ve Bağlantı Temizliği</string>
@@ -416,9 +388,6 @@
     <string name="downloads_status_done">Tamamlandı</string>
     <string name="downloads_status_failed">Başarısız</string>
     <string name="downloads_status_paused">Duraklatıldı</string>
-    <string name="browser_start_page_top_sites">Sık ziyaret edilenler</string>
-    <string name="browser_start_page_bookmarks">Yer imleri</string>
-    <string name="browser_start_page_empty">Yer imleriniz ve sık ziyaret ettiğiniz siteler burada görünecek</string>
     <string name="tab_switcher_close_others">Diğer sekmeleri kapat</string>
     <string name="tab_switcher_sort">Sekmeleri sırala</string>
     <string name="tab_switcher_sort_recent">Son kullanılan</string>
@@ -468,22 +437,6 @@
     <string name="backup_reason_invalid_custom_instance">sabitlenmiş bir instance geçerli bir HTTPS kökeni değil</string>
 
     <!-- 5.2: onboarding -->
-    <string name="onboarding_step_fmt">Adım %1$d/4</string>
-    <string name="onboarding_welcome_title">LibRedirect\'e hoş geldiniz</string>
-    <string name="onboarding_welcome_desc">Bu uygulama büyük platformların (YouTube, Reddit, X…) bağlantılarını gizlilik dostu frontend\'lere yönlendirir; kendi tarayıcınızda veya dahili tarayıcıda. Her şey cihazınızda kalır.</string>
-    <string name="onboarding_default_browser_title">Varsayılan tarayıcınız yapın</string>
-    <string name="onboarding_default_browser_desc">LibRedirect\'i varsayılan tarayıcı yapın; böylece dokunduğunuz bağlantılar otomatik yönlendirilir.</string>
-    <string name="onboarding_default_browser_btn">Varsayılan tarayıcı yap</string>
-    <string name="onboarding_app_links_title">Uygulamalar bağlantıları buraya açsın</string>
-    <string name="onboarding_app_links_desc">YouTube gibi uygulamalar kendi web bağlantılarını kendileri açabilir. Aşağıdaki yüklü servis uygulamalarının her biri için \"Varsayılan olarak aç\" seçeneğini kapatın; böylece bağlantılar LibRedirect\'e ulaşır.</string>
-    <string name="onboarding_app_links_btn_fmt">\"%1$s\" ayarlarını aç</string>
-    <string name="onboarding_app_links_none">Bu cihazda bilinen servis uygulaması bulunamadı.</string>
-    <string name="onboarding_share_title">Paylaşın ve metin seçin</string>
-    <string name="onboarding_share_desc">Herhangi bir bağlantı LibRedirect\'e paylaşılabilir; ya da başka bir uygulamada metni seçip menüden \"LibRedirect ile aç\" ile açabilirsiniz.</string>
-    <string name="onboarding_skip">Atla</string>
-    <string name="onboarding_next">İleri</string>
-    <string name="onboarding_get_started">Başlayalım</string>
-    <string name="settings_onboarding">Tanıtımı tekrar göster</string>
 
     <!-- 5.3: widget -->
     <string name="widget_routing_on">Yönlendirme açık</string>

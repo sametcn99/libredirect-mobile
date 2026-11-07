@@ -212,10 +212,6 @@ class SettingsRepository(private val context: Context) {
 
     // --- 5.x app settings ---
 
-    suspend fun setOnboardingCompleted(done: Boolean) {
-        context.settingsDataStore.edit { prefs -> prefs[Keys.ONBOARDING_COMPLETED] = done }
-    }
-
     suspend fun setRouteEnabled(
         routeId: String,
         enabled: Boolean,
@@ -284,7 +280,6 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.AUTO_HIDE_TOOLBAR] = settings.autoHideToolbar
             prefs[Keys.BACKGROUND_AUDIO_ENABLED] = settings.backgroundAudioEnabled
             prefs[Keys.SITE_SETTINGS] = json.encodeToString(settings.siteSettings)
-            prefs[Keys.ONBOARDING_COMPLETED] = true
             prefs[Keys.PAUSED_UNTIL] = 0L
         }
     }
@@ -384,7 +379,6 @@ class SettingsRepository(private val context: Context) {
             autoHideToolbar = prefs[Keys.AUTO_HIDE_TOOLBAR] ?: false,
             backgroundAudioEnabled = prefs[Keys.BACKGROUND_AUDIO_ENABLED] ?: false,
             siteSettings = decodeOrDefault(prefs[Keys.SITE_SETTINGS], emptyMap()),
-            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             pausedUntilEpochMillis = prefs[Keys.PAUSED_UNTIL] ?: 0L,
         )
 
@@ -439,7 +433,6 @@ class SettingsRepository(private val context: Context) {
         val AUTO_HIDE_TOOLBAR = booleanPreferencesKey("auto_hide_toolbar")
         val BACKGROUND_AUDIO_ENABLED = booleanPreferencesKey("background_audio_enabled")
         val SITE_SETTINGS = stringPreferencesKey("site_settings_json")
-        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
         val MANIFEST_LAST_GENERATION_AT = longPreferencesKey("manifest_last_generation_at")
         val UPDATE_FAILED_CHECKS = intPreferencesKey("update_failed_checks")

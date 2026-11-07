@@ -6,7 +6,6 @@ import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceHealth
 import dev.libredirect.mobile.core.routing.InstanceSelection
-import dev.libredirect.mobile.core.routing.RoutingTrace
 import dev.libredirect.mobile.settings.CustomTrackingParam
 import dev.libredirect.mobile.settings.RouteMode
 import dev.libredirect.mobile.settings.SettingsBackupCodec
@@ -56,9 +55,6 @@ data class MainUiState(
     val askModeRoutes: Set<String> = emptySet(),
     // Epoch millis routing is paused until (2.6); 0 = running.
     val pausedUntilEpochMillis: Long = 0L,
-    // The trace for the quick-link tester's "Why?" card (2.8); null hides it.
-    val routingTrace: RoutingTrace? = null,
-    val isTraceVisible: Boolean = false,
     // Local privacy counters shown on Home (3.4).
     val privacyStats: PrivacyStats = PrivacyStats(),
     val unwrapWrappersEnabled: Boolean = true,
@@ -74,8 +70,6 @@ data class MainUiState(
     val autoHideToolbar: Boolean = false,
     val autoFailoverEnabled: Boolean = true,
     val backgroundLatencyMeasureEnabled: Boolean = false,
-    // First-run onboarding (5.2) finished (or skipped).
-    val onboardingCompleted: Boolean = false,
     // A validated backup awaiting the confirm dialog (5.1); null hides it.
     val pendingSettingsImport: SettingsBackupCodec.Backup? = null,
     // Latency + cooldown data for the service-detail health panel (2.3).

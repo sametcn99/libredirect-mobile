@@ -55,8 +55,8 @@ data class BrowserTab(
     val isReaderMode: Boolean = false,
     /** Automatic failover attempts already spent on the current routed load (2.2). */
     val failoverAttempts: Int = 0,
-    /** Last vertical scroll offset in px; drives toolbar auto-hide (4.5). */
-    val scrollY: Int = 0,
+    /** Auto-hide toolbar state with hysteresis; flips only on scroll-direction change (4.5). */
+    val toolbarHidden: Boolean = false,
 ) {
     /** Host shown when the address bar isn't being edited, e.g. "example.com". */
     val displayHost: String

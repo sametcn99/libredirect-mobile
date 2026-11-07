@@ -77,9 +77,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
-import dev.libredirect.mobile.core.routing.RoutingOutcome
-import dev.libredirect.mobile.core.routing.RoutingTrace
-import dev.libredirect.mobile.core.routing.TraceReason
 import dev.libredirect.mobile.redirect.RedirectActivity
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.ServiceUiState
@@ -226,21 +223,7 @@ fun HomeScreen(
                     },
                     onOpenInApp = ::openInAppBrowser,
                     onOpenExternal = ::openInSystemBrowser,
-                    onExplain = {
-                        val normalized = normalizeLink(linkText.trim())
-                        if (normalized.isNotEmpty()) actions.onExplainRouting(normalized)
-                    },
                 )
-            }
-
-            // 2.8: routing explainer for the quick-link tester.
-            if (state.isTraceVisible && state.routingTrace != null) {
-                item {
-                    RoutingTraceCard(
-                        trace = state.routingTrace!!,
-                        onHide = actions.onHideTrace,
-                    )
-                }
             }
 
             // 3.4: local privacy counters.
@@ -537,7 +520,6 @@ private fun QuickLinkCard(
     onLinkTextChange: (String) -> Unit,
     onOpenInApp: () -> Unit,
     onOpenExternal: () -> Unit,
-    onExplain: () -> Unit,
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(18.dp),
@@ -624,145 +606,9 @@ private fun QuickLinkCard(
                 }
             }
 
-            // 2.8: "why did it (not) redirect?" trace for the input above.
-            TextButton(onClick = onExplain, contentPadding = PaddingValues(0.dp)) {
-                Text(stringResource(R.string.home_why_button))
-            }
         }
     }
 }
-
-/** The routing explainer card (2.8): what happened to the tested link, and why. */
-@Composable
-private fun RoutingTraceCard(
-    trace: RoutingTrace,
-    onHide: () -> Unit,
-) {
-    ElevatedCard(
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = stringResource(R.string.home_why_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                IconButton(onClick = onHide) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = stringResource(R.string.home_why_hide),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-
-            Text(
-                text =
-                    when (trace.outcome) {
-                        RoutingOutcome.REDIRECT ->
-                            stringResource(R.string.trace_redirected_fmt, trace.resultUrl.orEmpty())
-                        RoutingOutcome.PASSTHROUGH -> stringResource(R.string.trace_passthrough_fmt)
-                        RoutingOutcome.FAILURE ->
-                            stringResource(traceReasonRes(trace.reason))
-                    },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            val reasonText = stringResource(traceReasonRes(trace.reason))
-            Text(
-                text = reasonText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            trace.detail?.let {
-                Text(
-                    text = stringResource(R.string.trace_exception_fmt, it),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            trace.routeId?.let { routeId ->
-                Text(
-                    text = stringResource(R.string.trace_route_fmt, routeId),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            trace.frontendId?.let { frontendId ->
-                Text(
-                    text = stringResource(R.string.trace_frontend_fmt, frontendId),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            trace.selectionMode?.let { mode ->
-                Text(
-                    text = stringResource(R.string.trace_selection_fmt, selectionLabel(mode)),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            trace.instance?.let { instance ->
-                Text(
-                    text = stringResource(R.string.trace_instance_fmt, instance),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            if (trace.strippedParams > 0) {
-                Text(
-                    text = stringResource(R.string.trace_stripped_fmt, trace.strippedParams),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            if (trace.unwrappedLayers > 0) {
-                Text(
-                    text = stringResource(R.string.trace_unwrapped_fmt, trace.unwrappedLayers),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun selectionLabel(mode: String): String =
-    when (mode) {
-        "fastest" -> stringResource(R.string.trace_selection_fastest)
-        "pinned" -> stringResource(R.string.trace_selection_pinned)
-        "custom" -> stringResource(R.string.trace_selection_custom)
-        "override" -> stringResource(R.string.trace_selection_override)
-        else -> stringResource(R.string.trace_selection_automatic)
-    }
-
-@Composable
-private fun traceReasonRes(reason: TraceReason): Int =
-    when (reason) {
-        TraceReason.NO_ROUTE -> R.string.trace_reason_no_route
-        TraceReason.ROUTE_DISABLED -> R.string.trace_reason_route_disabled
-        TraceReason.EXCEPTION_MATCHED -> R.string.trace_reason_exception_matched
-        TraceReason.ASK_MODE -> R.string.trace_reason_ask_mode
-        TraceReason.PAUSED -> R.string.trace_reason_paused
-        TraceReason.ROUTING_DISABLED -> R.string.trace_reason_routing_disabled
-        TraceReason.STRATEGY_PASSTHROUGH -> R.string.trace_reason_strategy_passthrough
-        TraceReason.NO_INSTANCE -> R.string.trace_reason_no_instance
-        TraceReason.TARGET_UNCHANGED -> R.string.trace_reason_target_unchanged
-        TraceReason.NOT_ELIGIBLE -> R.string.trace_reason_not_eligible
-        TraceReason.INSTANCE_COOLDOWN -> R.string.trace_reason_instance_cooldown
-        TraceReason.NONE -> R.string.trace_passthrough_fmt
-    }
 
 /** Local privacy counters (3.4): what routing did on this device, resettable. */
 @Composable

@@ -11,9 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -46,10 +43,6 @@ private const val ZOOM_DEFAULT = 100
 private const val ZOOM_STEP = 25
 private const val ZOOM_MIN = 50
 private const val ZOOM_MAX = 300
-private const val TILE_GRID_COLUMNS = 4
-private const val TILE_ICON_SIZE = 48
-private const val MAX_START_TILES = 12
-private const val MAX_PER_SOURCE = 8
 
 /**
  * Per-site browser overrides (4.3), opened from the address bar's security
@@ -265,95 +258,3 @@ private fun statusLabel(status: Int): String =
         android.app.DownloadManager.STATUS_PAUSED -> stringResource(R.string.downloads_status_paused)
         else -> stringResource(R.string.downloads_status_running)
     }
-
-/**
- * The new-tab start page (4.5): bookmarks and the most-visited hosts from
- * history, shown as a grid while a fresh tab sits on the engine home page.
- */
-@Composable
-fun StartPageOverlay(
-    bookmarks: List<BrowserBookmark>,
-    history: List<BrowserHistoryItem>,
-    onOpen: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    data class Tile(
-        val title: String,
-        val url: String,
-    )
-
-    val tiles =
-        remember(bookmarks, history) {
-            val bookmarkTiles =
-                bookmarks
-                    .distinctBy { it.url }
-                    .take(MAX_PER_SOURCE)
-                    .map { Tile(it.title, it.url) }
-            val topHosts =
-                history
-                    .groupingBy { BrowserTab.hostOf(it.url) }
-                    .eachCount()
-                    .entries
-                    .sortedByDescending { it.value }
-                    .take(MAX_PER_SOURCE)
-                    .mapNotNull { (host, _) ->
-                        val url = history.firstOrNull { BrowserTab.hostOf(it.url) == host }?.url
-                        if (url == null) return@mapNotNull null
-                        Tile(host, url)
-                    }
-            (bookmarkTiles + topHosts).distinctBy { it.url }.take(MAX_START_TILES)
-        }
-
-    if (tiles.isEmpty()) {
-        Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
-            Text(
-                text = stringResource(R.string.browser_start_page_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(32.dp),
-            )
-        }
-        return
-    }
-
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(TILE_GRID_COLUMNS),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier,
-    ) {
-        items(tiles) { tile ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpen(tile.url) }
-                        .padding(4.dp),
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(TILE_ICON_SIZE.dp),
-                ) {
-                    androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = tile.title.firstOrNull()?.uppercase() ?: "?",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = tile.title,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}

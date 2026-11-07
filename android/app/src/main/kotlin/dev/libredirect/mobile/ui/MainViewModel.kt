@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -281,43 +280,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun resumeRouting() = launchSafely { settingsRepository.setPausedUntil(0L) }
 
-    // --- 2.8 routing explainer ---
-
-    fun toggleTraceVisible() {
-        _uiState.value = _uiState.value.copy(isTraceVisible = !_uiState.value.isTraceVisible)
-    }
-
-    fun hideTrace() {
-        _uiState.value = _uiState.value.copy(isTraceVisible = false, routingTrace = null)
-    }
-
-    /** Runs the explainer (2.8) for the quick-link tester's current input. */
-    fun explainRouting(url: String) {
-        launchSafely {
-            val manifest = manifest ?: loadManifest()
-            val settings = settingsRepository.current()
-            if (manifest == null) return@launchSafely
-            val sourceApp: String? = null
-            val pipeline = LinkPipeline(settings, sourceApp)
-            val prepared = pipeline.prepare(url)
-            val health = pipeline.healthSnapshot(browserDataRepository)
-            val context = pipeline.routingContext(health, System.currentTimeMillis())
-            val routingActive = settings.routingEnabled && !settings.isRoutingPaused()
-            val trace =
-                if (!routingActive) {
-                    RoutingTrace(
-                        input = prepared.url,
-                        outcome = RoutingOutcome.PASSTHROUGH,
-                        resultUrl = prepared.url,
-                        reason = if (settings.isRoutingPaused()) TraceReason.PAUSED else TraceReason.ROUTING_DISABLED,
-                    )
-                } else {
-                    dev.libredirect.mobile.core.routing.UrlRouter(manifest).explain(prepared.url, context)
-                }
-            _uiState.value = _uiState.value.copy(routingTrace = trace, isTraceVisible = true)
-        }
-    }
-
     // --- 3.x privacy toggles ---
 
     fun setUnwrapWrappersEnabled(enabled: Boolean) =
@@ -501,35 +463,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissPendingImport() {
         _uiState.value = _uiState.value.copy(pendingSettingsImport = null)
-    }
-
-    // --- 5.2 onboarding ---
-
-    fun completeOnboarding() = launchSafely { settingsRepository.setOnboardingCompleted(true) }
-
-    fun reopenOnboarding() {
-        launchSafely { settingsRepository.setOnboardingCompleted(false) }
-    }
-
-    /** Popular service apps installed on this device, for onboarding step 3 (5.2). */
-    fun installedServiceApps(): List<Pair<String, String>> =
-        ONBOARDING_SERVICE_APPS.mapNotNull { (packageName, label) ->
-            app.packageManager.getLaunchIntentForPackage(packageName) ?: return@mapNotNull null
-            packageName to label
-        }
-
-    /** Opens the system "open by default" page for a service app (API 31+; no-op below). */
-    fun openAppOpenByDefaultSettings(packageName: String) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        try {
-            app.startActivity(
-                Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .setData(Uri.parse("package:$packageName")),
-            )
-        } catch (_: Exception) {
-            // Some OEM builds lack the screen; ignore.
-        }
     }
 
     // --- 6 diagnostics ---
@@ -788,8 +721,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appLockEnabled = settings.appLockEnabled,
             askModeRoutes = settings.askModeRoutes,
             pausedUntilEpochMillis = settings.pausedUntilEpochMillis,
-            routingTrace = _uiState.value.routingTrace,
-            isTraceVisible = _uiState.value.isTraceVisible,
             privacyStats = _uiState.value.privacyStats,
             unwrapWrappersEnabled = settings.unwrapRedirectWrappersEnabled,
             shortLinkResolveEnabled = settings.shortLinkResolveEnabled,
@@ -803,7 +734,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             autoHideToolbar = settings.autoHideToolbar,
             autoFailoverEnabled = settings.autoFailoverEnabled,
             backgroundLatencyMeasureEnabled = settings.backgroundLatencyMeasureEnabled,
-            onboardingCompleted = settings.onboardingCompleted,
         )
     }
 
@@ -872,18 +802,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val PAUSE_INDEFINITE = Long.MAX_VALUE / 4
 
         /** Well-known service apps probed during onboarding step 3 (5.2). */
-        val ONBOARDING_SERVICE_APPS =
-            listOf(
-                "com.google.android.youtube" to "YouTube",
-                "com.reddit.frontpage" to "Reddit",
-                "com.twitter.android" to "X",
-                "com.instagram.android" to "Instagram",
-                "com.zhiliaoapp.musically" to "TikTok",
-                "com.medium.reader" to "Medium",
-                "tv.twitch.android.app" to "Twitch",
-                "com.spotify.music" to "Spotify",
-                "com.google.android.maps" to "Maps",
-                "com.google.android.googlequicksearchbox" to "Google",
-            )
     }
 }

@@ -16,7 +16,5 @@ data class HomeActions(
     // 2.6 pause / 2.8 why / 3.4 stats
     val onPauseRouting: (Int?) -> Unit = {},
     val onResumeRouting: () -> Unit = {},
-    val onExplainRouting: (String) -> Unit = {},
-    val onHideTrace: () -> Unit = {},
     val onResetPrivacyStats: () -> Unit = {},
 )
