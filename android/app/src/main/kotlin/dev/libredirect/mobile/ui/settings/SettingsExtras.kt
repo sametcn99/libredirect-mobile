@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShortText
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.GraphicEq
@@ -23,7 +24,6 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.ShortText
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
@@ -69,7 +69,7 @@ fun SettingsExtrasSection(
         )
 
         SettingsToggleItem(
-            icon = Icons.Default.ShortText,
+            icon = Icons.AutoMirrored.Filled.ShortText,
             title = stringResource(R.string.settings_short_links),
             subtitle = stringResource(R.string.settings_short_links_desc),
             checked = state.shortLinkResolveEnabled,

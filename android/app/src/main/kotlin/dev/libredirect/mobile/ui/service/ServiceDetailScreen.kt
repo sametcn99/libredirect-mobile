@@ -18,8 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.AddToHomeScreen
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AddToHomeScreen
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -166,7 +166,7 @@ private fun ServiceSummaryRow(
         }
         TextButton(onClick = onPinShortcut) {
             Icon(
-                Icons.Default.AddToHomeScreen,
+                Icons.AutoMirrored.Filled.AddToHomeScreen,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
             )

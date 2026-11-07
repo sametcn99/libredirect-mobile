@@ -45,7 +45,7 @@ class SearchEngineTest {
     }
 
     @Test
-    fun `isValidTemplate accepts only http(s) templates containing %s placeholder`() {
+    fun `isValidTemplate accepts only http templates containing the placeholder`() {
         assertTrue(SearchEngine.isValidTemplate("https://example.com/search?q=%s"))
         assertTrue(SearchEngine.isValidTemplate("http://example.com/?query=%s"))
         assertTrue(SearchEngine.isValidTemplate("HTTPS://EXAMPLE.COM/search?q=%s"))
