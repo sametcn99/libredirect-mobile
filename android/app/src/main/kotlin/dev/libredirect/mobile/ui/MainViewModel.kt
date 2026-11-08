@@ -170,6 +170,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             cachedBlocklistHostCount = withContext(Dispatchers.IO) { blocklistStore.activeBlocklist().size }
             _uiState.value = _uiState.value.copy(blocklistHostCount = cachedBlocklistHostCount)
         }
+        launchSafely {
+            val lastAt = browserDataRepository.lastLatencyMeasureAt()
+            val count = browserDataRepository.lastLatencyMeasureCount()
+            _uiState.value =
+                _uiState.value.copy(
+                    lastLatencyMeasureAt = lastAt,
+                    lastLatencyMeasureCount = count,
+                )
+        }
     }
 
     /**
@@ -369,6 +378,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             _uiState.value = _uiState.value.copy(instanceHealth = health, isMeasuringHealth = false)
+        }
+    }
+
+    /** On-demand probe of all services' instances in the background with remembered results. */
+    fun measureAllServicesNow() {
+        if (_uiState.value.isMeasuringAllServices) return
+        _uiState.value = _uiState.value.copy(isMeasuringAllServices = true, latencyMeasureMessage = null)
+        launchSafely {
+            val currentManifest = loadManifest() ?: run {
+                _uiState.value = _uiState.value.copy(isMeasuringAllServices = false)
+                return@launchSafely
+            }
+            val instances =
+                withContext(Dispatchers.IO) {
+                    currentManifest.routes
+                        .flatMap { route -> route.frontends.flatMap { it.instances } }
+                        .distinct()
+                }
+            if (instances.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isMeasuringAllServices = false)
+                return@launchSafely
+            }
+            val probe = dev.libredirect.mobile.browser.InstanceProbe()
+            val results = probe.measure(instances)
+            browserDataRepository.saveLatencies(results)
+            val now = System.currentTimeMillis()
+            browserDataRepository.setLastLatencyMeasureResult(now, results.size)
+            loadInstanceHealth()
+            _uiState.value =
+                _uiState.value.copy(
+                    isMeasuringAllServices = false,
+                    lastLatencyMeasureAt = now,
+                    lastLatencyMeasureCount = results.size,
+                    latencyMeasureMessage = app.getString(R.string.settings_latency_measured_fmt, results.size),
+                )
+        }
+    }
+
+    fun clearLatencyMeasurements() {
+        launchSafely {
+            browserDataRepository.clearLatencies()
+            _uiState.value =
+                _uiState.value.copy(
+                    lastLatencyMeasureAt = 0L,
+                    lastLatencyMeasureCount = 0,
+                    instanceHealth = emptyMap(),
+                    latencyMeasureMessage = app.getString(R.string.settings_latency_cleared),
+                )
         }
     }
 
@@ -734,6 +791,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             autoHideToolbar = settings.autoHideToolbar,
             autoFailoverEnabled = settings.autoFailoverEnabled,
             backgroundLatencyMeasureEnabled = settings.backgroundLatencyMeasureEnabled,
+            isMeasuringAllServices = _uiState.value.isMeasuringAllServices,
+            lastLatencyMeasureAt = _uiState.value.lastLatencyMeasureAt,
+            lastLatencyMeasureCount = _uiState.value.lastLatencyMeasureCount,
+            latencyMeasureMessage = _uiState.value.latencyMeasureMessage,
         )
     }
 

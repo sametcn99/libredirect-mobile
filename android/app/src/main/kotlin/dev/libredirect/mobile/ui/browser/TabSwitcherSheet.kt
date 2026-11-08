@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
@@ -101,11 +102,13 @@ fun TabSwitcherSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = stringResource(R.string.tab_switcher_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = stringResource(R.string.tab_switcher_count_fmt, tabs.size),
@@ -114,34 +117,64 @@ fun TabSwitcherSheet(
                     )
                 }
 
-                val incognitoDescription = stringResource(R.string.tab_switcher_new_incognito_tab)
-                IconButton(onClick = actions.onNewIncognitoTab) {
-                    Icon(
-                        Icons.Default.PrivacyTip,
-                        contentDescription = incognitoDescription,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    val incognitoDescription = stringResource(R.string.tab_switcher_new_incognito_tab)
+                    IconButton(onClick = actions.onNewIncognitoTab) {
+                        Icon(
+                            Icons.Default.PrivacyTip,
+                            contentDescription = incognitoDescription,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Spacer(Modifier.width(2.dp))
+                    FilledTonalButton(
+                        onClick = actions.onNewTab,
+                        contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.tab_switcher_new_tab))
+                    }
                 }
-                if (tabs.size > 1) {
-                    TextButton(onClick = { sortRecent = !sortRecent }) {
+            }
+
+            if (tabs.size > 1) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 12.dp, top = 2.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = { sortRecent = !sortRecent },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Sort,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             stringResource(
                                 if (sortRecent) R.string.tab_switcher_sort_recent else R.string.tab_switcher_sort_order,
                             ),
                         )
                     }
-                    TextButton(onClick = { isCloseAllConfirmVisible = true }) {
-                        Text(stringResource(R.string.tab_switcher_close_all))
+                    TextButton(
+                        onClick = { isCloseAllConfirmVisible = true },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.tab_switcher_close_all),
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
-                }
-                Spacer(Modifier.width(4.dp))
-                FilledTonalButton(
-                    onClick = actions.onNewTab,
-                    contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.tab_switcher_new_tab))
                 }
             }
 

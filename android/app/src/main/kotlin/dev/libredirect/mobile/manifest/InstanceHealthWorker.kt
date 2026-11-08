@@ -17,10 +17,9 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Optional daily background latency measurement (2.3, opt-in, off by
- * default). Measures only the *selected* frontend of every enabled route
- * that needs instances, capped per frontend, with the same bounded probe
- * the UI uses — results feed the latency-weighted instance selection and
- * the service health panel.
+ * default). Measures frontends of enabled routes that need instances,
+ * capped per frontend, with the same bounded probe the UI uses — results
+ * feed the latency-weighted instance selection and the service health panel.
  */
 class InstanceHealthWorker(
     context: Context,
@@ -39,13 +38,17 @@ class InstanceHealthWorker(
 
         val probe = InstanceProbe()
         val dataRepository = BrowserDataRepository(app)
+        var totalMeasured = 0
         targets.values.forEach { instances ->
-            dataRepository.saveLatencies(probe.measure(instances))
+            val results = probe.measure(instances)
+            dataRepository.saveLatencies(results)
+            totalMeasured += results.size
         }
+        dataRepository.setLastLatencyMeasureResult(System.currentTimeMillis(), totalMeasured)
         return Result.success()
     }
 
-    /** Selected frontend of every enabled route that needs instances, capped. */
+    /** Frontends of enabled routes that need instances, capped. */
     private suspend fun measureTargets(
         app: LibRedirectApplication,
         settings: AppSettings,
@@ -54,9 +57,8 @@ class InstanceHealthWorker(
         val frontends =
             manifest.routes
                 .filter { settings.isRouteEnabled(it.id) }
-                .mapNotNull { route ->
-                    val frontendId = settings.selectedFrontends[route.id] ?: route.frontends.first().id
-                    route.frontends.find { it.id == frontendId }?.takeIf { it.instances.isNotEmpty() }
+                .flatMap { route ->
+                    route.frontends.filter { it.instances.isNotEmpty() }
                 }
         return frontends.associate { it.id to it.instances.take(MAX_INSTANCES_PER_FRONTEND) }
     }

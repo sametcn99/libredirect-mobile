@@ -42,7 +42,7 @@ object ContentBlocker {
         var candidate = line.trim()
         if (candidate.isEmpty() || candidate.startsWith("#")) return null
         // Hosts-file form: "<ip> <host>" (optionally followed by a comment).
-        if (candidate.contains(' ')) {
+        if (candidate.any { it.isWhitespace() }) {
             candidate = candidate.substringBefore('#').trim()
             val columns = candidate.split(Regex("\\s+"))
             if (columns.size != 2 || !isIpLiteral(columns[0])) return null

@@ -295,6 +295,14 @@
     <string name="health_status_cooldown">Cooling down</string>
     <string name="settings_background_latency">Measure instances in background</string>
     <string name="settings_background_latency_desc">Measure the latency of your services\' chosen frontends once a day, so automatic selection starts informed. Off by default.</string>
+    <string name="settings_latency_measure_now">Measure all services now</string>
+    <string name="settings_latency_measuring">Measuring instance latencies in background…</string>
+    <string name="settings_latency_measuring_btn">Measuring…</string>
+    <string name="settings_latency_last_measured_fmt">Last measured at %1$s (%2$d instances recorded)</string>
+    <string name="settings_latency_never_measured">No background measurements recorded yet.</string>
+    <string name="settings_latency_measured_fmt">Measured %1$d instances across all services.</string>
+    <string name="settings_latency_cleared">Instance latency measurements cleared.</string>
+    <string name="settings_latency_clear">Clear</string>
     <string name="settings_auto_failover">Automatic instance switching (failover)</string>
     <string name="settings_auto_failover_desc">When a routed page fails to load, retry automatically on the next healthy instance (up to twice), then offer the original site.</string>
 

@@ -297,6 +297,8 @@ fun AppNavHost(
                                 onUpdateBlocklist = mainViewModel::updateBlocklistNow,
                                 onAutoFailoverChange = mainViewModel::setAutoFailoverEnabled,
                                 onBackgroundLatencyChange = mainViewModel::setBackgroundLatencyMeasureEnabled,
+                                onMeasureAllServices = mainViewModel::measureAllServicesNow,
+                                onClearLatencyMeasurements = mainViewModel::clearLatencyMeasurements,
                                 onBackgroundAudioChange = mainViewModel::setBackgroundAudioEnabled,
                                 onCloseIncognitoChange = mainViewModel::setCloseIncognitoOnExit,
                                 onAutoCloseTabsChange = mainViewModel::setAutoCloseTabs,

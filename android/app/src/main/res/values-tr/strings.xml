@@ -295,6 +295,14 @@
     <string name="health_status_cooldown">Beklemede</string>
     <string name="settings_background_latency">Instance\'ları arka planda ölç</string>
     <string name="settings_background_latency_desc">Seçili frontend\'lerin gecikmesini günde bir kez ölçer; böylece otomatik seçim bilinçli başlar. Varsayılan olarak kapalıdır.</string>
+    <string name="settings_latency_measure_now">Tüm servisleri şimdi ölç</string>
+    <string name="settings_latency_measuring">Sunucu gecikmeleri arka planda ölçülüyor…</string>
+    <string name="settings_latency_measuring_btn">Ölçülüyor…</string>
+    <string name="settings_latency_last_measured_fmt">Son ölçüm: %1$s (%2$d sunucu kayıtlı)</string>
+    <string name="settings_latency_never_measured">Henüz bir gecikme ölçümü kaydedilmedi.</string>
+    <string name="settings_latency_measured_fmt">Tüm servislerde toplam %1$d sunucu ölçüldü.</string>
+    <string name="settings_latency_cleared">Sunucu gecikme ölçümleri temizlendi.</string>
+    <string name="settings_latency_clear">Temizle</string>
     <string name="settings_auto_failover">Otomatik instance geçişi (failover)</string>
     <string name="settings_auto_failover_desc">Yönlendirilmiş bir sayfa açılmazsa bir sonraki sağlıklı instance ile otomatik yeniden denenir (en fazla iki kez), ardından orijinal site önerilir.</string>
 

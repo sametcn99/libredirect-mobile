@@ -13,14 +13,9 @@ import java.util.concurrent.TimeUnit
  * or oversized download never reaches disk.
  */
 class BlocklistFetcher(
-    timeoutSeconds: Long = DEFAULT_TIMEOUT_SECONDS,
+    private val client: OkHttpClient = defaultClient(DEFAULT_TIMEOUT_SECONDS),
 ) {
-    private val client =
-        OkHttpClient
-            .Builder()
-            .connectTimeout(timeoutSeconds, TimeUnit.SECONDS)
-            .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
-            .build()
+    constructor(timeoutSeconds: Long) : this(defaultClient(timeoutSeconds))
 
     @Suppress("TooGenericExceptionCaught")
     suspend fun fetch(url: String = BlocklistEndpoints.REMOTE_URL): String? =
@@ -32,8 +27,9 @@ class BlocklistFetcher(
                     .use { response ->
                         if (!response.isSuccessful) return@use null
                         val source = response.body?.source() ?: return@use null
-                        source.request(ContentBlocker.MAX_BYTES + 1)
-                        val text = source.readUtf8(ContentBlocker.MAX_BYTES + 1)
+                        // If request() returns true for MAX_BYTES + 1, the stream exceeds the cap.
+                        if (source.request(ContentBlocker.MAX_BYTES + 1)) return@use null
+                        val text = source.readUtf8()
                         if (text.toByteArray(Charsets.UTF_8).size > ContentBlocker.MAX_BYTES) return@use null
                         if (ContentBlocker.parseHosts(text).isEmpty()) return@use null
                         text
@@ -44,7 +40,14 @@ class BlocklistFetcher(
         }
 
     companion object {
-        const val DEFAULT_TIMEOUT_SECONDS = 15L
+        const val DEFAULT_TIMEOUT_SECONDS = 30L
+
+        fun defaultClient(timeoutSeconds: Long = DEFAULT_TIMEOUT_SECONDS): OkHttpClient =
+            OkHttpClient
+                .Builder()
+                .connectTimeout(timeoutSeconds, TimeUnit.SECONDS)
+                .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
+                .build()
     }
 }
 

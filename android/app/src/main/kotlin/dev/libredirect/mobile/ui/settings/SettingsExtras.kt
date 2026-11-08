@@ -11,6 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Switch
+import androidx.compose.ui.text.font.FontWeight
+import java.text.DateFormat
+import java.util.Date
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -97,13 +104,7 @@ fun SettingsExtrasSection(
             onCheckedChange = actions.onAutoFailoverChange,
         )
 
-        SettingsToggleItem(
-            icon = Icons.Default.GraphicEq,
-            title = stringResource(R.string.settings_background_latency),
-            subtitle = stringResource(R.string.settings_background_latency_desc),
-            checked = state.backgroundLatencyMeasureEnabled,
-            onCheckedChange = actions.onBackgroundLatencyChange,
-        )
+        LatencyMeasureCard(state = state, actions = actions)
 
         BrowserExtrasCards(state = state, actions = actions)
         BackupCard(state = state, actions = actions)
@@ -152,6 +153,109 @@ private fun BlocklistCard(
         onClick = { if (!state.refreshInProgress) actions.onUpdateBlocklist() },
     )
 }
+
+/** 2.3: manual and automatic instance latency measurement card. */
+@Composable
+private fun LatencyMeasureCard(
+    state: MainUiState,
+    actions: SettingsActions,
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_background_latency),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_background_latency_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = state.backgroundLatencyMeasureEnabled,
+                    onCheckedChange = actions.onBackgroundLatencyChange,
+                )
+            }
+
+            val statusText =
+                when {
+                    state.isMeasuringAllServices -> stringResource(R.string.settings_latency_measuring)
+                    state.latencyMeasureMessage != null -> state.latencyMeasureMessage
+                    state.lastLatencyMeasureAt > 0L -> {
+                        val formatted =
+                            DateFormat.getDateTimeInstance(
+                                DateFormat.SHORT,
+                                DateFormat.SHORT,
+                            ).format(Date(state.lastLatencyMeasureAt))
+                        stringResource(
+                            R.string.settings_latency_last_measured_fmt,
+                            formatted,
+                            state.lastLatencyMeasureCount,
+                        )
+                    }
+                    else -> stringResource(R.string.settings_latency_never_measured)
+                }
+
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (state.lastLatencyMeasureAt > 0L && !state.isMeasuringAllServices) {
+                    TextButton(onClick = actions.onClearLatencyMeasurements) {
+                        Text(stringResource(R.string.settings_latency_clear))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
+                Button(
+                    onClick = actions.onMeasureAllServices,
+                    enabled = !state.isMeasuringAllServices,
+                ) {
+                    if (state.isMeasuringAllServices) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings_latency_measuring_btn))
+                    } else {
+                        Text(stringResource(R.string.settings_latency_measure_now))
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 /** 4.5/4.6 browser behavior cards: history limit, tab auto-close, toolbars, audio, incognito. */
 @Composable

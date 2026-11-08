@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -95,6 +97,27 @@ class BrowserDataRepository(private val context: Context) {
         context.browserDataStore.edit { prefs ->
             val current = decodeOrDefault(prefs[Keys.INSTANCE_LATENCIES], emptyMap<String, Long>())
             prefs[Keys.INSTANCE_LATENCIES] = json.encodeToString(current + latencies)
+        }
+    }
+
+    suspend fun lastLatencyMeasureAt(): Long =
+        context.browserDataStore.data.first()[Keys.LAST_LATENCY_MEASURE_AT] ?: 0L
+
+    suspend fun lastLatencyMeasureCount(): Int =
+        context.browserDataStore.data.first()[Keys.LAST_LATENCY_MEASURE_COUNT] ?: 0
+
+    suspend fun setLastLatencyMeasureResult(atMillis: Long, count: Int) {
+        context.browserDataStore.edit { prefs ->
+            prefs[Keys.LAST_LATENCY_MEASURE_AT] = atMillis
+            prefs[Keys.LAST_LATENCY_MEASURE_COUNT] = count
+        }
+    }
+
+    suspend fun clearLatencies() {
+        context.browserDataStore.edit { prefs ->
+            prefs.remove(Keys.INSTANCE_LATENCIES)
+            prefs.remove(Keys.LAST_LATENCY_MEASURE_AT)
+            prefs.remove(Keys.LAST_LATENCY_MEASURE_COUNT)
         }
     }
 
@@ -282,6 +305,8 @@ class BrowserDataRepository(private val context: Context) {
         val INSTANCE_LATENCIES = stringPreferencesKey("instance_latencies_json")
         val INSTANCE_FAILURES = stringPreferencesKey("instance_failures_json")
         val PRIVACY_STATS = stringPreferencesKey("privacy_stats_json")
+        val LAST_LATENCY_MEASURE_AT = longPreferencesKey("last_latency_measure_at")
+        val LAST_LATENCY_MEASURE_COUNT = intPreferencesKey("last_latency_measure_count")
     }
 
     companion object {

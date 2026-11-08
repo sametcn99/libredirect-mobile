@@ -16,6 +16,7 @@ class ContentBlockerTest {
                 0.0.0.0 ads.example.org
                 127.0.0.1 analytics.example.net
                 ::1 ipv6.example
+                0.0.0.0	tab-tracker.example
                 not a hostname with three words
                 https://not.a.host.example
                 valid-sub.example.io
@@ -27,6 +28,7 @@ class ContentBlockerTest {
                 "ads.example.org",
                 "analytics.example.net",
                 "ipv6.example",
+                "tab-tracker.example",
                 "valid-sub.example.io",
             ),
             hosts,

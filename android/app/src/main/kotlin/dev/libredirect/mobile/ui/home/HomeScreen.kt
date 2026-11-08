@@ -45,7 +45,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,8 +53,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -74,6 +71,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
@@ -89,8 +87,6 @@ private const val TOP_SERVICES_LIMIT = 5
 // Mirrors MainViewModel.PAUSE_INDEFINITE: any pause stamp this far in the
 // future means "until I turn it back on".
 private const val PAUSE_INDEFINITE_SENTINEL = Long.MAX_VALUE / 4
-private const val PAUSE_MINUTES_SHORT = 15
-private const val PAUSE_MINUTES_HOUR = 60
 
 // Screen-level composition root: its branches only route to extracted
 // section composables, so the raw branch count stays here by design.
@@ -202,18 +198,6 @@ fun HomeScreen(
             )
 
             item {
-                StatusHeroCard(
-                    routingEnabled = state.routingEnabled,
-                    pausedUntilEpochMillis = state.pausedUntilEpochMillis,
-                    activeServicesCount = state.services.count { it.enabled },
-                    exceptionsCount = state.exceptions.size,
-                    onRoutingToggle = actions.onRoutingEnabledChange,
-                    onPauseRouting = actions.onPauseRouting,
-                    onResumeRouting = actions.onResumeRouting,
-                )
-            }
-
-            item {
                 QuickLinkCard(
                     linkText = linkText,
                     linkError = linkError,
@@ -298,6 +282,14 @@ private fun LazyListScope.homeStatusCards(
     actions: HomeActions,
     openUrl: (String) -> Unit,
 ) {
+    if (state.pausedUntilEpochMillis > System.currentTimeMillis()) {
+        item {
+            PausedBannerCard(
+                pausedUntilEpochMillis = state.pausedUntilEpochMillis,
+                onResume = actions.onResumeRouting,
+            )
+        }
+    }
     if (state.updateAvailable != null) {
         val release = state.updateAvailable
         item {
@@ -330,186 +322,50 @@ private fun LazyListScope.homeStatusCards(
 }
 
 @Composable
-private fun StatusHeroCard(
-    routingEnabled: Boolean,
+private fun PausedBannerCard(
     pausedUntilEpochMillis: Long,
-    activeServicesCount: Int,
-    exceptionsCount: Int,
-    onRoutingToggle: (Boolean) -> Unit,
-    onPauseRouting: (Int?) -> Unit,
-    onResumeRouting: () -> Unit,
+    onResume: () -> Unit,
 ) {
-    // Opaque on purpose: a 50%-alpha container over the elevated card's own
-    // shadowed backdrop composited into a darker edge ring + lighter inner
-    // area, reading as a second card nested inside this one (worst in light
-    // mode). An opaque color renders as one flat surface.
-    val isPaused = pausedUntilEpochMillis > System.currentTimeMillis()
-    val containerColor =
-        when {
-            isPaused -> MaterialTheme.colorScheme.tertiaryContainer
-            routingEnabled -> MaterialTheme.colorScheme.primaryContainer
-            else -> MaterialTheme.colorScheme.surfaceVariant
+    val until =
+        if (pausedUntilEpochMillis >= PAUSE_INDEFINITE_SENTINEL) {
+            stringResource(R.string.home_pause_until_resume)
+        } else {
+            android.text.format.DateFormat
+                .getTimeFormat(LocalContext.current)
+                .format(java.util.Date(pausedUntilEpochMillis))
         }
-
     ElevatedCard(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
+        shape = RoundedCornerShape(16.dp),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(
+        Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                    .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier =
-                            Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when {
-                                        isPaused -> MaterialTheme.colorScheme.tertiary
-                                        routingEnabled -> MaterialTheme.colorScheme.primary
-                                        else -> MaterialTheme.colorScheme.outline
-                                    },
-                                ),
-                    ) {
-                        Icon(
-                            Icons.Default.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-
-                    Column {
-                        val (statusRes, descText) =
-                            when {
-                                isPaused -> {
-                                    val until =
-                                        if (pausedUntilEpochMillis >= PAUSE_INDEFINITE_SENTINEL) {
-                                            stringResource(R.string.home_pause_until_resume)
-                                        } else {
-                                            android.text.format.DateFormat
-                                                .getTimeFormat(LocalContext.current)
-                                                .format(java.util.Date(pausedUntilEpochMillis))
-                                        }
-                                    R.string.home_routing_paused to
-                                        stringResource(R.string.home_routing_paused_desc_fmt, until)
-                                }
-                                routingEnabled ->
-                                    R.string.home_routing_active to
-                                        stringResource(R.string.home_routing_active_desc)
-                                else ->
-                                    R.string.home_routing_disabled to
-                                        stringResource(R.string.home_routing_disabled_desc)
-                            }
-                        Text(
-                            text = stringResource(statusRes),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = descText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                Switch(
-                    checked = routingEnabled,
-                    onCheckedChange = onRoutingToggle,
-                    colors =
-                        SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        ),
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_routing_paused),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stringResource(R.string.home_routing_paused_desc_fmt, until),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-
-            // 2.6: temporary pause row — visible while routing is on.
-            if (routingEnabled) {
-                if (isPaused) {
-                    TextButton(onClick = onResumeRouting) {
-                        Text(stringResource(R.string.home_resume_routing))
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(onClick = { onPauseRouting(PAUSE_MINUTES_SHORT) }) {
-                            Text(stringResource(R.string.home_pause_15m), style = MaterialTheme.typography.labelMedium)
-                        }
-                        TextButton(onClick = { onPauseRouting(PAUSE_MINUTES_HOUR) }) {
-                            Text(stringResource(R.string.home_pause_1h), style = MaterialTheme.typography.labelMedium)
-                        }
-                        TextButton(onClick = { onPauseRouting(null) }) {
-                            Text(
-                                stringResource(R.string.home_pause_until_resume),
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StatusStatItem(
-                    label = stringResource(R.string.home_stat_active_services),
-                    value = "$activeServicesCount",
-                )
-                StatusStatItem(
-                    label = stringResource(R.string.home_stat_exceptions),
-                    value = "$exceptionsCount",
-                )
-                StatusStatItem(
-                    label = stringResource(R.string.home_stat_browser),
-                    value = stringResource(R.string.home_stat_browser_value),
-                )
+            TextButton(onClick = onResume) {
+                Text(stringResource(R.string.home_resume_routing))
             }
         }
-    }
-}
-
-@Composable
-private fun StatusStatItem(
-    label: String,
-    value: String,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -626,44 +482,73 @@ private fun PrivacyStatsCard(
                 Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = stringResource(R.string.home_privacy_stats_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Security,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.home_privacy_stats_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 TextButton(onClick = { confirmReset = true }) {
                     Text(stringResource(R.string.home_privacy_stats_reset))
                 }
             }
+
+            // Balanced 2-column grid layout for stats
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                StatusStatItem(stringResource(R.string.home_privacy_stat_redirects), stats.totalRedirects.toString())
-                StatusStatItem(
-                    stringResource(R.string.home_privacy_stat_stripped),
-                    stats.strippedTrackingParams.toString(),
+                PrivacyStatGridItem(
+                    label = stringResource(R.string.home_privacy_stat_redirects),
+                    value = stats.totalRedirects.toString(),
+                    modifier = Modifier.weight(1f),
                 )
-                StatusStatItem(stringResource(R.string.home_privacy_stat_unwrapped), stats.unwrappedWrappers.toString())
+                PrivacyStatGridItem(
+                    label = stringResource(R.string.home_privacy_stat_stripped),
+                    value = stats.strippedTrackingParams.toString(),
+                    modifier = Modifier.weight(1f),
+                )
             }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                StatusStatItem(
-                    stringResource(R.string.home_privacy_stat_short_links),
-                    stats.resolvedShortLinks.toString(),
+                PrivacyStatGridItem(
+                    label = stringResource(R.string.home_privacy_stat_unwrapped),
+                    value = stats.unwrappedWrappers.toString(),
+                    modifier = Modifier.weight(1f),
                 )
-                StatusStatItem(stringResource(R.string.home_privacy_stat_blocked), stats.blockedRequests.toString())
-                Spacer(Modifier.weight(1f))
+                PrivacyStatGridItem(
+                    label = stringResource(R.string.home_privacy_stat_short_links),
+                    value = stats.resolvedShortLinks.toString(),
+                    modifier = Modifier.weight(1f),
+                )
             }
+
+            PrivacyStatGridItem(
+                label = stringResource(R.string.home_privacy_stat_blocked),
+                value = stats.blockedRequests.toString(),
+                modifier = Modifier.fillMaxWidth(),
+                isHighlight = true,
+            )
         }
     }
 
@@ -688,6 +573,79 @@ private fun PrivacyStatsCard(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun PrivacyStatGridItem(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    isHighlight: Boolean = false,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color =
+            if (isHighlight) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            },
+        modifier = modifier,
+    ) {
+        if (isHighlight) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Block,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 

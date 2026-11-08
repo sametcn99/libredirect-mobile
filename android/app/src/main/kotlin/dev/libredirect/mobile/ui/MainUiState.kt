@@ -75,6 +75,11 @@ data class MainUiState(
     // Latency + cooldown data for the service-detail health panel (2.3).
     val instanceHealth: Map<String, InstanceHealth> = emptyMap(),
     val isMeasuringHealth: Boolean = false,
+    // Background and manual instance latency measurement state
+    val isMeasuringAllServices: Boolean = false,
+    val lastLatencyMeasureAt: Long = 0L,
+    val lastLatencyMeasureCount: Int = 0,
+    val latencyMeasureMessage: String? = null,
 )
 
 data class ServiceUiState(

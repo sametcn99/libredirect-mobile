@@ -105,6 +105,8 @@ data class SettingsActions(
     val onUpdateBlocklist: () -> Unit = {},
     val onAutoFailoverChange: (Boolean) -> Unit = {},
     val onBackgroundLatencyChange: (Boolean) -> Unit = {},
+    val onMeasureAllServices: () -> Unit = {},
+    val onClearLatencyMeasurements: () -> Unit = {},
     val onBackgroundAudioChange: (Boolean) -> Unit = {},
     val onCloseIncognitoChange: (Boolean) -> Unit = {},
     val onAutoCloseTabsChange: (TabAutoClose) -> Unit = {},
