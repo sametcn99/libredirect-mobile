@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.view.MotionEvent
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -60,6 +62,8 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -67,6 +71,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -103,8 +111,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.libredirect.mobile.MainActivity
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.downloads.DownloadEvent
+import dev.libredirect.mobile.downloads.OpenFileResult
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val REDIRECT_NOTICE_DURATION_MS = 5_000L
 private const val PROGRESS_MAX = 100f
@@ -124,9 +136,89 @@ fun InAppBrowserScreen(
     val focusManager = LocalFocusManager.current
     val darkPages = state.pageTheme.isDark(isSystemInDarkTheme())
     var isAddressFocused by remember { mutableStateOf(false) }
-    // 4.3/4.5: ephemeral UI overlays — per-site settings and the downloads list.
+    // 4.3: ephemeral per-site settings sheet.
     var showSiteSettings by remember { mutableStateOf(false) }
-    var showDownloads by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var askedNotifPermission by remember { mutableStateOf(false) }
+
+    LaunchedEffect(viewModel, context) {
+        viewModel.downloadEvents.collect { event ->
+            if (event is DownloadEvent.Started && !askedNotifPermission) {
+                askedNotifPermission = true
+                (context as? MainActivity)?.requestNotificationPermission()
+            }
+            snackbarHostState.currentSnackbarData?.dismiss()
+            when (event) {
+                is DownloadEvent.Started -> {
+                    if (!viewModel.uiState.value.isDownloadsSheetVisible) {
+                        launch {
+                            val result =
+                                snackbarHostState.showSnackbar(
+                                    message =
+                                        context.getString(
+                                            R.string.downloads_snackbar_started_fmt,
+                                            event.item.fileName,
+                                        ),
+                                    actionLabel = context.getString(R.string.downloads_snackbar_view),
+                                    duration = SnackbarDuration.Short,
+                                )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                viewModel.setDownloadsSheetVisible(true)
+                            }
+                        }
+                    }
+                }
+                is DownloadEvent.Completed -> {
+                    launch {
+                        val result =
+                            snackbarHostState.showSnackbar(
+                                message =
+                                    context.getString(
+                                        R.string.downloads_snackbar_completed_fmt,
+                                        event.item.fileName,
+                                    ),
+                                actionLabel = context.getString(R.string.downloads_snackbar_open),
+                                duration = SnackbarDuration.Short,
+                            )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            when (viewModel.openDownloadedFile(context, event.item)) {
+                                OpenFileResult.OPENED -> Unit
+                                OpenFileResult.FILE_MISSING ->
+                                    Toast.makeText(
+                                        context,
+                                        R.string.downloads_open_missing,
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                OpenFileResult.NO_APP_FOUND ->
+                                    Toast.makeText(
+                                        context,
+                                        R.string.downloads_open_no_app,
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                            }
+                        }
+                    }
+                }
+                is DownloadEvent.Failed -> {
+                    launch {
+                        val result =
+                            snackbarHostState.showSnackbar(
+                                message =
+                                    context.getString(
+                                        R.string.downloads_snackbar_failed_fmt,
+                                        event.item.fileName,
+                                    ),
+                                actionLabel = context.getString(R.string.downloads_snackbar_view),
+                                duration = SnackbarDuration.Short,
+                            )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            viewModel.setDownloadsSheetVisible(true)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // File upload fields (onShowFileChooser): the WebView client hands us a
     // prepared intent; the system picker's result goes back to the callback.
@@ -143,6 +235,8 @@ fun InAppBrowserScreen(
     val canHandleBack =
         state.isFullscreenVideo ||
             isAddressFocused ||
+            state.pendingDownloadRequest != null ||
+            state.isDownloadsSheetVisible ||
             state.isMenuSheetVisible ||
             state.isTabsSheetVisible ||
             state.isBookmarksHistorySheetVisible ||
@@ -154,6 +248,8 @@ fun InAppBrowserScreen(
         when {
             state.isFullscreenVideo -> viewModel.exitFullscreenVideo()
             isAddressFocused -> focusManager.clearFocus()
+            state.pendingDownloadRequest != null -> viewModel.dismissPendingDownload()
+            state.isDownloadsSheetVisible -> viewModel.setDownloadsSheetVisible(false)
             state.isMenuSheetVisible -> viewModel.setMenuSheetVisible(false)
             state.isTabsSheetVisible -> viewModel.setTabsSheetVisible(false)
             state.isBookmarksHistorySheetVisible -> viewModel.setBookmarksHistorySheetVisible(false)
@@ -236,6 +332,14 @@ fun InAppBrowserScreen(
                     onDismiss = viewModel::dismissRedirectNotice,
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
+
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
             }
 
             AnimatedVisibility(
@@ -247,6 +351,7 @@ fun InAppBrowserScreen(
                     canGoBack = activeTab?.canGoBack == true,
                     canGoForward = activeTab?.canGoForward == true,
                     tabCount = state.tabs.size,
+                    activeDownloadCount = state.activeDownloadCount,
                     onBack = { viewModel.goBackActiveTab() },
                     onForward = { viewModel.goForwardActiveTab() },
                     onHome = { viewModel.navigateActiveTab(state.searchEngine.homeUrl) },
@@ -266,11 +371,9 @@ fun InAppBrowserScreen(
             viewModel = viewModel,
             showSiteSettings = showSiteSettings,
             onDismissSiteSettings = { showSiteSettings = false },
-            showDownloads = showDownloads,
-            onDismissDownloads = { showDownloads = false },
             onOpenDownloads = {
                 viewModel.setMenuSheetVisible(false)
-                showDownloads = true
+                viewModel.setDownloadsSheetVisible(true)
             },
             onShare = {
                 activeTab?.url?.let {
@@ -483,24 +586,22 @@ private fun BrowserSheets(
     viewModel: BrowserViewModel,
     showSiteSettings: Boolean,
     onDismissSiteSettings: () -> Unit,
-    showDownloads: Boolean,
-    onDismissDownloads: () -> Unit,
     onOpenDownloads: () -> Unit,
     onShare: () -> Unit,
     onOpenExternal: () -> Unit,
 ) {
     val context = LocalContext.current
     TransientBrowserDialogs(
-        state,
-        viewModel,
-        showSiteSettings,
-        onDismissSiteSettings,
-        showDownloads,
-        onDismissDownloads,
+        state = state,
+        viewModel = viewModel,
+        showSiteSettings = showSiteSettings,
+        onDismissSiteSettings = onDismissSiteSettings,
     )
     state.linkContextUrl?.let { url ->
         LinkContextMenuDialog(
             url = url,
+            isImage = state.linkContextIsImage,
+            onDownload = { viewModel.downloadFromLinkContext(url) },
             onOpenInNewTab = { viewModel.openLinkInNewTab(url) },
             onCopy = { viewModel.copyLinkToClipboard(url) },
             onShare = {
@@ -525,6 +626,7 @@ private fun BrowserSheets(
             textZoom = state.textZoom,
             instanceAlternatives = state.instanceAlternatives,
             blockedCount = state.activeTab?.blockedCount ?: 0,
+            activeDownloadCount = state.activeDownloadCount,
             onTextZoomChange = viewModel::setBrowserTextZoom,
             actions =
                 BrowserMenuActions(
@@ -637,12 +739,15 @@ private fun BrowserSheets(
 @Composable
 private fun LinkContextMenuDialog(
     url: String,
+    isImage: Boolean,
+    onDownload: () -> Unit,
     onOpenInNewTab: () -> Unit,
     onCopy: () -> Unit,
     onShare: () -> Unit,
     onOpenExternal: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val isDataUri = url.startsWith("data:", ignoreCase = true)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -663,25 +768,39 @@ private fun LinkContextMenuDialog(
                 )
                 Spacer(Modifier.height(12.dp))
                 LinkActionRow(
-                    icon = Icons.Default.Add,
-                    label = stringResource(R.string.browser_link_context_open_new_tab),
-                    onClick = onOpenInNewTab,
+                    icon = Icons.Default.Download,
+                    label =
+                        stringResource(
+                            if (isImage) {
+                                R.string.browser_link_context_save_image
+                            } else {
+                                R.string.browser_link_context_download
+                            },
+                        ),
+                    onClick = onDownload,
                 )
-                LinkActionRow(
-                    icon = Icons.Default.ContentCopy,
-                    label = stringResource(R.string.browser_link_context_copy),
-                    onClick = onCopy,
-                )
-                LinkActionRow(
-                    icon = Icons.Default.Share,
-                    label = stringResource(R.string.browser_link_context_share),
-                    onClick = onShare,
-                )
-                LinkActionRow(
-                    icon = Icons.AutoMirrored.Filled.OpenInNew,
-                    label = stringResource(R.string.browser_menu_open_external),
-                    onClick = onOpenExternal,
-                )
+                if (!isDataUri) {
+                    LinkActionRow(
+                        icon = Icons.Default.Add,
+                        label = stringResource(R.string.browser_link_context_open_new_tab),
+                        onClick = onOpenInNewTab,
+                    )
+                    LinkActionRow(
+                        icon = Icons.Default.ContentCopy,
+                        label = stringResource(R.string.browser_link_context_copy),
+                        onClick = onCopy,
+                    )
+                    LinkActionRow(
+                        icon = Icons.Default.Share,
+                        label = stringResource(R.string.browser_link_context_share),
+                        onClick = onShare,
+                    )
+                    LinkActionRow(
+                        icon = Icons.AutoMirrored.Filled.OpenInNew,
+                        label = stringResource(R.string.browser_menu_open_external),
+                        onClick = onOpenExternal,
+                    )
+                }
             }
         },
         confirmButton = {},
@@ -1196,6 +1315,7 @@ private fun BrowserBottomBar(
     canGoBack: Boolean,
     canGoForward: Boolean,
     tabCount: Int,
+    activeDownloadCount: Int,
     onBack: () -> Unit,
     onForward: () -> Unit,
     onHome: () -> Unit,
@@ -1245,11 +1365,21 @@ private fun BrowserBottomBar(
                 ) {
                     TabCountBadge(count = tabCount)
                 }
-                ToolbarButton(
-                    icon = Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.action_menu),
-                    onClick = onMenu,
-                )
+                IconButton(onClick = onMenu) {
+                    BadgedBox(
+                        badge = {
+                            if (activeDownloadCount > 0) {
+                                Badge { Text(activeDownloadCount.toString()) }
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.action_menu),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
             }
         }
     }
@@ -1298,16 +1428,15 @@ private fun Context.openExternalUrl(url: String) {
     }
 }
 
-/** The site-settings sheet and downloads dialog, split out of [BrowserSheets] (4.3/4.5). */
+/** Transient sheets for site settings, download manager, and pre-download confirmation. */
 @Composable
 private fun TransientBrowserDialogs(
     state: BrowserUiState,
     viewModel: BrowserViewModel,
     showSiteSettings: Boolean,
     onDismissSiteSettings: () -> Unit,
-    showDownloads: Boolean,
-    onDismissDownloads: () -> Unit,
 ) {
+    val context = LocalContext.current
     if (showSiteSettings) {
         val host = state.activeTab?.let { BrowserTab.hostOf(it.url) }.orEmpty()
         if (host.isNotBlank()) {
@@ -1323,8 +1452,69 @@ private fun TransientBrowserDialogs(
             )
         }
     }
-    if (showDownloads) {
-        val entries = remember(showDownloads) { viewModel.queryDownloads() }
-        DownloadsDialog(entries = entries, onDismiss = onDismissDownloads)
+    if (state.isDownloadsSheetVisible) {
+        DownloadsSheet(
+            downloads = state.downloads,
+            actions =
+                DownloadsSheetActions(
+                    onDismiss = { viewModel.setDownloadsSheetVisible(false) },
+                    onOpenFile = { item ->
+                        when (viewModel.openDownloadedFile(context, item)) {
+                            OpenFileResult.OPENED -> Unit
+                            OpenFileResult.FILE_MISSING ->
+                                Toast.makeText(
+                                    context,
+                                    R.string.downloads_open_missing,
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            OpenFileResult.NO_APP_FOUND ->
+                                Toast.makeText(
+                                    context,
+                                    R.string.downloads_open_no_app,
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                        }
+                    },
+                    onShareFile = { item ->
+                        if (!viewModel.shareDownloadedFile(context, item)) {
+                            Toast.makeText(
+                                context,
+                                R.string.downloads_open_missing,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    },
+                    onCopyUrl = { item -> viewModel.copyDownloadUrl(item.cleanedUrl) },
+                    onPause = viewModel::pauseDownload,
+                    onPauseAll = viewModel::pauseAllDownloads,
+                    onResume = viewModel::resumeDownload,
+                    onCancel = viewModel::cancelDownload,
+                    onRetry = viewModel::retryDownload,
+                    onRemove = viewModel::removeDownload,
+                    onClearFinished = viewModel::clearFinishedDownloads,
+                    onOpenSystemDownloads = {
+                        if (!viewModel.openSystemDownloads(context)) {
+                            Toast.makeText(
+                                context,
+                                R.string.downloads_open_no_app,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    },
+                ),
+        )
+    }
+    state.pendingDownloadRequest?.let { pending ->
+        PreDownloadSheet(
+            request = pending,
+            defaultWifiOnly = state.downloadWifiOnly,
+            askBeforeDownload = state.askBeforeDownload,
+            onAskBeforeDownloadChange = viewModel::setAskBeforeDownloadPreference,
+            onConfirm = { fileName, wifiOnly ->
+                (context as? MainActivity)?.requestNotificationPermission()
+                viewModel.confirmPendingDownload(fileName, wifiOnly)
+            },
+            onDismiss = viewModel::dismissPendingDownload,
+        )
     }
 }

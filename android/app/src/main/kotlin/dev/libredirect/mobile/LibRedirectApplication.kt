@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import android.os.Process
 import android.util.Log
+import dev.libredirect.mobile.downloads.DownloadRepository
 import dev.libredirect.mobile.manifest.ManifestRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,7 @@ import kotlin.system.exitProcess
 
 class LibRedirectApplication : Application() {
     val manifestRepository: ManifestRepository by lazy { ManifestRepository(this) }
+    val downloadRepository: DownloadRepository by lazy { DownloadRepository(this) }
 
     /**
      * Application-lifetime scope for work that must outlive any single

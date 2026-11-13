@@ -8,5 +8,6 @@ object ShortcutActions {
     const val OPEN_NEW_TAB = "dev.libredirect.mobile.ACTION_OPEN_NEW_TAB"
     const val SHOW_SERVICES = "dev.libredirect.mobile.ACTION_SHOW_SERVICES"
     const val OPEN_SERVICE = "dev.libredirect.mobile.ACTION_OPEN_SERVICE"
+    const val OPEN_DOWNLOADS = "dev.libredirect.mobile.ACTION_OPEN_DOWNLOADS"
     const val EXTRA_ROUTE_ID = "dev.libredirect.mobile.EXTRA_ROUTE_ID"
 }

@@ -331,6 +331,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setBackgroundAudioEnabled(enabled: Boolean) =
         launchSafely { settingsRepository.setBackgroundAudioEnabled(enabled) }
 
+    fun setAskBeforeDownload(enabled: Boolean) =
+        launchSafely { settingsRepository.setAskBeforeDownload(enabled) }
+
+    fun setDownloadWifiOnly(enabled: Boolean) =
+        launchSafely { settingsRepository.setDownloadWifiOnly(enabled) }
+
+    fun setClearIncognitoDownloads(enabled: Boolean) =
+        launchSafely { settingsRepository.setClearIncognitoDownloads(enabled) }
+
     fun setCloseIncognitoOnExit(enabled: Boolean) = launchSafely { settingsRepository.setCloseIncognitoOnExit(enabled) }
 
     fun setAutoCloseTabs(mode: TabAutoClose) = launchSafely { settingsRepository.setAutoCloseOldTabs(mode.id) }
@@ -785,6 +794,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             contentBlockerEnabled = settings.contentBlockerEnabled,
             blocklistHostCount = cachedBlocklistHostCount,
             backgroundAudioEnabled = settings.backgroundAudioEnabled,
+            askBeforeDownload = settings.askBeforeDownload,
+            downloadWifiOnly = settings.downloadWifiOnly,
+            clearIncognitoDownloads = settings.clearIncognitoDownloads,
             closeIncognitoOnExit = settings.closeIncognitoOnExit,
             autoCloseTabs = TabAutoClose.fromId(settings.autoCloseOldTabs),
             historyLimit = settings.historyLimit,

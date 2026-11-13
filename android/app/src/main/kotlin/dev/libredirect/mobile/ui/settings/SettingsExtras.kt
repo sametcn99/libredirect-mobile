@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShortText
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PrivacyTip
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -107,6 +109,7 @@ fun SettingsExtrasSection(
         LatencyMeasureCard(state = state, actions = actions)
 
         BrowserExtrasCards(state = state, actions = actions)
+        DownloadSettingsCards(state = state, actions = actions)
         BackupCard(state = state, actions = actions)
         WhatsNewCard(state = state, actions = actions)
         DiagnosticsEntryCard(actions = actions)
@@ -295,6 +298,39 @@ private fun BrowserExtrasCards(
         subtitle = stringResource(R.string.settings_close_incognito_desc),
         checked = state.closeIncognitoOnExit,
         onCheckedChange = actions.onCloseIncognitoChange,
+    )
+}
+
+/** In-app download manager preferences. */
+@Composable
+private fun DownloadSettingsCards(
+    state: MainUiState,
+    actions: SettingsActions,
+) {
+    SectionTitle(stringResource(R.string.settings_section_downloads))
+
+    SettingsToggleItem(
+        icon = Icons.Default.Download,
+        title = stringResource(R.string.settings_ask_before_download),
+        subtitle = stringResource(R.string.settings_ask_before_download_desc),
+        checked = state.askBeforeDownload,
+        onCheckedChange = actions.onAskBeforeDownloadChange,
+    )
+
+    SettingsToggleItem(
+        icon = Icons.Default.Wifi,
+        title = stringResource(R.string.settings_download_wifi_only),
+        subtitle = stringResource(R.string.settings_download_wifi_only_desc),
+        checked = state.downloadWifiOnly,
+        onCheckedChange = actions.onDownloadWifiOnlyChange,
+    )
+
+    SettingsToggleItem(
+        icon = Icons.Default.PrivacyTip,
+        title = stringResource(R.string.settings_clear_incognito_downloads),
+        subtitle = stringResource(R.string.settings_clear_incognito_downloads_desc),
+        checked = state.clearIncognitoDownloads,
+        onCheckedChange = actions.onClearIncognitoDownloadsChange,
     )
 }
 

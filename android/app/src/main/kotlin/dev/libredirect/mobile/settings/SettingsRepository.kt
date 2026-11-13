@@ -190,6 +190,18 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.BACKGROUND_AUDIO_ENABLED] = enabled }
     }
 
+    suspend fun setAskBeforeDownload(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.ASK_BEFORE_DOWNLOAD] = enabled }
+    }
+
+    suspend fun setDownloadWifiOnly(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.DOWNLOAD_WIFI_ONLY] = enabled }
+    }
+
+    suspend fun setClearIncognitoDownloads(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.CLEAR_INCOGNITO_DOWNLOADS] = enabled }
+    }
+
     suspend fun setSiteSetting(
         host: String,
         setting: SiteSetting?,
@@ -279,6 +291,9 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.HISTORY_LIMIT] = settings.historyLimit
             prefs[Keys.AUTO_HIDE_TOOLBAR] = settings.autoHideToolbar
             prefs[Keys.BACKGROUND_AUDIO_ENABLED] = settings.backgroundAudioEnabled
+            prefs[Keys.ASK_BEFORE_DOWNLOAD] = settings.askBeforeDownload
+            prefs[Keys.DOWNLOAD_WIFI_ONLY] = settings.downloadWifiOnly
+            prefs[Keys.CLEAR_INCOGNITO_DOWNLOADS] = settings.clearIncognitoDownloads
             prefs[Keys.SITE_SETTINGS] = json.encodeToString(settings.siteSettings)
             prefs[Keys.PAUSED_UNTIL] = 0L
         }
@@ -378,6 +393,9 @@ class SettingsRepository(private val context: Context) {
             historyLimit = prefs[Keys.HISTORY_LIMIT] ?: 200,
             autoHideToolbar = prefs[Keys.AUTO_HIDE_TOOLBAR] ?: false,
             backgroundAudioEnabled = prefs[Keys.BACKGROUND_AUDIO_ENABLED] ?: false,
+            askBeforeDownload = prefs[Keys.ASK_BEFORE_DOWNLOAD] ?: true,
+            downloadWifiOnly = prefs[Keys.DOWNLOAD_WIFI_ONLY] ?: false,
+            clearIncognitoDownloads = prefs[Keys.CLEAR_INCOGNITO_DOWNLOADS] ?: true,
             siteSettings = decodeOrDefault(prefs[Keys.SITE_SETTINGS], emptyMap()),
             pausedUntilEpochMillis = prefs[Keys.PAUSED_UNTIL] ?: 0L,
         )
@@ -432,6 +450,9 @@ class SettingsRepository(private val context: Context) {
         val HISTORY_LIMIT = intPreferencesKey("history_limit")
         val AUTO_HIDE_TOOLBAR = booleanPreferencesKey("auto_hide_toolbar")
         val BACKGROUND_AUDIO_ENABLED = booleanPreferencesKey("background_audio_enabled")
+        val ASK_BEFORE_DOWNLOAD = booleanPreferencesKey("ask_before_download")
+        val DOWNLOAD_WIFI_ONLY = booleanPreferencesKey("download_wifi_only")
+        val CLEAR_INCOGNITO_DOWNLOADS = booleanPreferencesKey("clear_incognito_downloads")
         val SITE_SETTINGS = stringPreferencesKey("site_settings_json")
         val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
         val MANIFEST_LAST_GENERATION_AT = longPreferencesKey("manifest_last_generation_at")

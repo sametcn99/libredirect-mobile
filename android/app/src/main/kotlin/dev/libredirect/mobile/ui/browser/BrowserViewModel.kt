@@ -2,7 +2,6 @@ package dev.libredirect.mobile.ui.browser
 
 import android.annotation.SuppressLint
 import android.app.Application
-import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -13,11 +12,11 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.Message
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
@@ -56,6 +55,22 @@ import dev.libredirect.mobile.core.url.ShortLinkPolicy
 import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlParser
 import dev.libredirect.mobile.core.url.UrlUnwrapper
+import dev.libredirect.mobile.downloads.DownloadEvent
+import dev.libredirect.mobile.downloads.DownloadFailureReason
+import dev.libredirect.mobile.downloads.DownloadItem
+import dev.libredirect.mobile.downloads.DownloadSourceKind
+import dev.libredirect.mobile.downloads.DownloadStorage
+import dev.libredirect.mobile.downloads.OpenFileResult
+import dev.libredirect.mobile.downloads.PendingDownloadRequest
+import dev.libredirect.mobile.downloads.ensureFileExtension
+import dev.libredirect.mobile.downloads.fileExtensionOf
+import dev.libredirect.mobile.downloads.guessMimeType
+import dev.libredirect.mobile.downloads.isGenericMimeType
+import dev.libredirect.mobile.downloads.isPotentiallyDangerousFile
+import dev.libredirect.mobile.downloads.parseDataUri
+import dev.libredirect.mobile.downloads.prepareDownloadUrl
+import dev.libredirect.mobile.downloads.resolveInitialHttpDownloadMetadata
+import dev.libredirect.mobile.downloads.sanitizeFileName
 import dev.libredirect.mobile.media.MediaPlaybackBus
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
@@ -66,6 +81,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -74,7 +90,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Instance choices offered for the active tab's original link. Built when the
@@ -97,14 +115,6 @@ data class InstanceAlternatives(
 data class FileChooserRequest(
     val id: Long,
     val intent: Intent,
-)
-
-/** One row of the in-app downloads list (4.5), read from the system DownloadManager. */
-data class DownloadEntry(
-    val id: Long,
-    val title: String,
-    val status: Int,
-    val localUri: String?,
 )
 
 data class BrowserUiState(
@@ -147,9 +157,19 @@ data class BrowserUiState(
     val isInPipMode: Boolean = false,
     /** Long-pressed link/image target offered to the context menu; null hides the dialog. */
     val linkContextUrl: String? = null,
+    val linkContextIsImage: Boolean = false,
     /** Pending `onShowFileChooser` request; null when none. */
     val fileChooserRequest: FileChooserRequest? = null,
+    /** Live in-app download list, ordered newest-first. */
+    val downloads: List<DownloadItem> = emptyList(),
+    val isDownloadsSheetVisible: Boolean = false,
+    /** Download waiting for user confirmation/renaming in the pre-download sheet. */
+    val pendingDownloadRequest: PendingDownloadRequest? = null,
+    val askBeforeDownload: Boolean = true,
+    val downloadWifiOnly: Boolean = false,
 ) {
+    val activeDownloadCount: Int
+        get() = downloads.count { it.status.isActive }
     val activeTab: BrowserTab?
         get() = tabs.find { it.id == activeTabId } ?: tabs.firstOrNull()
 
@@ -176,9 +196,28 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val manifestRepository = app.manifestRepository
     private val settingsRepository = SettingsRepository(app)
     private val browserDataRepository = BrowserDataRepository(app)
+    private val downloadRepository = app.downloadRepository
+    private val downloadStorage = DownloadStorage(app)
     private val blocklistStore = BlocklistStore(app)
     private val instanceProbe = InstanceProbe()
     private val shortLinkResolver = ShortLinkResolver()
+
+    val downloadEvents: SharedFlow<DownloadEvent> = downloadRepository.events
+
+    private data class BlobSession(
+        val requestId: String,
+        val tabId: String,
+        val nonce: String,
+        val originalUrl: String,
+        val sourceHost: String,
+        val suggestedName: String,
+        val mimeHint: String?,
+        val userAgent: String,
+        val isIncognito: Boolean,
+        var downloadId: String? = null,
+    )
+
+    private val blobSessions = ConcurrentHashMap<String, BlobSession>()
 
     private val initialTab = BrowserTab(id = UUID.randomUUID().toString(), url = BrowserTab.DEFAULT_HOME_URL)
 
@@ -240,6 +279,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val initialStateLoaded = CompletableDeferred<Unit>()
 
     private var sessionPersistJob: Job? = null
+    private var pendingMetadataProbeJob: Job? = null
 
     private val webViewPool = mutableMapOf<String, WebView>()
 
@@ -296,10 +336,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         autoDarken = settings.browserAutoDarken,
                         textZoom = settings.browserTextZoom,
                         autoHideToolbar = settings.autoHideToolbar,
+                        askBeforeDownload = settings.askBeforeDownload,
+                        downloadWifiOnly = settings.downloadWifiOnly,
                     )
                 }
                 applyAutoDarkenToAll(settings.browserAutoDarken)
                 applyTextZoomToAll(settings.browserTextZoom)
+            }
+        }
+        viewModelScope.launch {
+            downloadRepository.downloads.collect { items ->
+                _uiState.update { it.copy(downloads = items) }
             }
         }
         viewModelScope.launch {
@@ -470,6 +517,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             isTabsSheetVisible = false,
             isMenuSheetVisible = false,
             isBookmarksHistorySheetVisible = false,
+            isDownloadsSheetVisible = false,
             isSearchEngineDialogVisible = false,
             isFindInPageVisible = false,
             isInstancePickerVisible = false,
@@ -864,12 +912,31 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /** Shows the long-press context menu for a link/image target picked from [WebView.hitTestResult]. */
-    private fun showLinkContextMenu(url: String) {
-        _uiState.update { it.copy(linkContextUrl = url) }
+    private fun showLinkContextMenu(
+        url: String,
+        isImage: Boolean,
+    ) {
+        _uiState.update { it.copy(linkContextUrl = url, linkContextIsImage = isImage) }
     }
 
     fun dismissLinkContextMenu() {
-        _uiState.update { it.copy(linkContextUrl = null) }
+        _uiState.update { it.copy(linkContextUrl = null, linkContextIsImage = false) }
+    }
+
+    fun downloadFromLinkContext(url: String) {
+        dismissLinkContextMenu()
+        val tabId = _uiState.value.activeTabId
+        val userAgent =
+            webViewPool[tabId]?.settings?.userAgentString
+                ?: WebSettings.getDefaultUserAgent(app)
+        handleWebViewDownload(
+            tabId = tabId,
+            url = url,
+            userAgent = userAgent,
+            contentDisposition = null,
+            mimeType = null,
+            contentLength = -1L,
+        )
     }
 
     fun openLinkInNewTab(url: String) {
@@ -949,6 +1016,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
      * WebView Profile API is unavailable or a WebView still uses the profile).
      */
     private fun deleteIncognitoProfileIfUnused(retryAllowed: Boolean = true) {
+        if (cachedSettings.clearIncognitoDownloads && _uiState.value.tabs.none { it.isIncognito }) {
+            downloadRepository.clearIncognitoHistory()
+        }
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
         if (_uiState.value.tabs.any { it.isIncognito }) return
         try {
@@ -1666,34 +1736,49 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 // Bridge added only while the opt-in setting is on.
                 addJavascriptInterface(MediaStateBridge(), MEDIA_BRIDGE_NAME)
             }
-            setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
-                _uiState.update {
-                    it.copy(
-                        findActiveMatchIndex = activeMatchOrdinal + 1,
-                        findMatchCount = numberOfMatches,
-                    )
-                }
+            if (site?.javaScriptEnabled ?: true) {
+                addJavascriptInterface(BlobDownloadBridge(tabId), BLOB_BRIDGE_NAME)
             }
-            setOnLongClickListener {
-                val hit = hitTestResult
-                val url = hit.extra
-                val isLinkTarget =
-                    hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
-                        hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ||
-                        hit.type == WebView.HitTestResult.IMAGE_TYPE
-                if (isLinkTarget && !url.isNullOrBlank() && url.startsWith("http", ignoreCase = true)) {
-                    showLinkContextMenu(url)
-                    true
-                } else {
-                    false
-                }
-            }
-            webViewClient = BrowserTabWebViewClient(tabId)
-            webChromeClient = BrowserTabWebChromeClient(tabId)
-            setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-                enqueueDownload(url, userAgent, contentDisposition, mimeType)
+            configureDownloadAndContextListeners(tabId)
+        }
+
+    private fun WebView.configureDownloadAndContextListeners(tabId: String) {
+        setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
+            _uiState.update {
+                it.copy(
+                    findActiveMatchIndex = activeMatchOrdinal + 1,
+                    findMatchCount = numberOfMatches,
+                )
             }
         }
+        setOnLongClickListener {
+            val hit = hitTestResult
+            val url = hit.extra
+            val isImage =
+                hit.type == WebView.HitTestResult.IMAGE_TYPE ||
+                    hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+            val isLinkTarget =
+                hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || isImage
+            val isSupportedScheme =
+                !url.isNullOrBlank() &&
+                    (
+                        url.startsWith("http://", ignoreCase = true) ||
+                            url.startsWith("https://", ignoreCase = true) ||
+                            (isImage && url.startsWith("data:", ignoreCase = true))
+                    )
+            if (isLinkTarget && isSupportedScheme) {
+                showLinkContextMenu(url, isImage = isImage)
+                true
+            } else {
+                false
+            }
+        }
+        webViewClient = BrowserTabWebViewClient(tabId)
+        webChromeClient = BrowserTabWebChromeClient(tabId)
+        setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            handleWebViewDownload(tabId, url, userAgent, contentDisposition, mimeType, contentLength)
+        }
+    }
 
     /** Effective per-site overrides for a tab's host (4.3); null = follow globals. */
     private fun siteSettingFor(tab: BrowserTab?): SiteSetting? =
@@ -1764,49 +1849,470 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /**
-     * Hands downloads to the system DownloadManager so they show up in the
-     * system's Downloads list with a progress notification. On API < 29 the
-     * shared Downloads directory needs a storage permission we don't request;
-     * there the file falls back to the app-specific downloads directory.
-     */
-    private fun enqueueDownload(
+    @Suppress("LongParameterList")
+    private fun handleWebViewDownload(
+        tabId: String,
         url: String,
         userAgent: String,
         contentDisposition: String?,
         mimeType: String?,
+        contentLength: Long,
     ) {
-        val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+        val tab = _uiState.value.tabs.find { it.id == tabId } ?: _uiState.value.activeTab
+        val isIncognito = tab?.isIncognito == true
+        val referer = tab?.url?.takeIf { it.startsWith("http", ignoreCase = true) }
+        val resolvedUa = userAgent.ifBlank { WebSettings.getDefaultUserAgent(app) }
+        val sourceHost = tab?.displayHost.orEmpty()
+
+        when {
+            url.startsWith("blob:", ignoreCase = true) ->
+                prepareBlobDownload(
+                    tabId = tabId,
+                    blobUrl = url,
+                    userAgent = resolvedUa,
+                    contentDisposition = contentDisposition,
+                    mimeType = mimeType,
+                    isIncognito = isIncognito,
+                    sourceHost = sourceHost,
+                )
+            url.startsWith("data:", ignoreCase = true) ->
+                prepareDataUriDownload(
+                    dataUrl = url,
+                    userAgent = resolvedUa,
+                    contentDisposition = contentDisposition,
+                    mimeType = mimeType,
+                    isIncognito = isIncognito,
+                    sourceHost = sourceHost,
+                )
+            url.startsWith("http://", ignoreCase = true) ||
+                url.startsWith("https://", ignoreCase = true) ->
+                prepareHttpDownload(
+                    url = url,
+                    userAgent = resolvedUa,
+                    contentDisposition = contentDisposition,
+                    mimeType = mimeType,
+                    contentLength = contentLength,
+                    referer = referer,
+                    cookies = cookiesForDownload(url, isIncognito),
+                    isIncognito = isIncognito,
+                )
+            else ->
+                Toast.makeText(app, R.string.downloads_reason_invalid_url, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    @Suppress("LongParameterList")
+    private fun prepareHttpDownload(
+        url: String,
+        userAgent: String,
+        contentDisposition: String?,
+        mimeType: String?,
+        contentLength: Long,
+        referer: String?,
+        cookies: String?,
+        isIncognito: Boolean,
+    ) {
+        val prepared = prepareDownloadUrl(url, cachedSettings)
+        val platformGuess = URLUtil.guessFileName(prepared.cleanedUrl, contentDisposition, mimeType)
+        val metadata =
+            resolveInitialHttpDownloadMetadata(
+                url = prepared.cleanedUrl,
+                contentDisposition = contentDisposition,
+                declaredMimeType = mimeType,
+                platformGuess = platformGuess,
+            )
+        val suggestedName = metadata.fileName
+        val resolvedMime = metadata.mimeType
+        if (prepared.strippedCount > 0 || prepared.unwrappedLayers > 0) {
+            addPrivacyStats(
+                PrivacyStats(
+                    strippedTrackingParams = prepared.strippedCount.toLong(),
+                    unwrappedWrappers = prepared.unwrappedLayers.toLong(),
+                ),
+            )
+        }
         val request =
-            DownloadManager.Request(Uri.parse(url)).apply {
-                setMimeType(mimeType)
-                setTitle(fileName)
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                addRequestHeader("User-Agent", userAgent)
-                CookieManager.getInstance().getCookie(url)?.let { addRequestHeader("Cookie", it) }
+            PendingDownloadRequest(
+                id = UUID.randomUUID().toString(),
+                originalUrl = url,
+                cleanedUrl = prepared.cleanedUrl,
+                strippedTrackingCount = prepared.strippedCount,
+                sourceHost = prepared.sourceHost,
+                sourceKind = DownloadSourceKind.HTTP,
+                suggestedFileName = suggestedName,
+                mimeType = resolvedMime,
+                contentLength = contentLength,
+                userAgent = userAgent,
+                referer = referer,
+                cookies = cookies,
+                isIncognito = isIncognito,
+                isPotentiallyDangerous = isPotentiallyDangerousFile(suggestedName, resolvedMime),
+            )
+        dispatchPendingOrStart(request)
+    }
+
+    @Suppress("LongParameterList")
+    private fun prepareDataUriDownload(
+        dataUrl: String,
+        userAgent: String,
+        contentDisposition: String?,
+        mimeType: String?,
+        isIncognito: Boolean,
+        sourceHost: String,
+    ) {
+        val decoded = parseDataUri(dataUrl)
+        if (decoded == null) {
+            downloadRepository.recordImmediateFailure(
+                fileName = sanitizeFileName("download", mimeType),
+                url = "data:...",
+                sourceHost = sourceHost,
+                sourceKind = DownloadSourceKind.DATA_URI,
+                mimeType = mimeType ?: "application/octet-stream",
+                isIncognito = isIncognito,
+                reason = DownloadFailureReason.INVALID_URL,
+            )
+            Toast.makeText(app, R.string.downloads_reason_invalid_url, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val effectiveMime = decoded.mimeType.ifBlank { mimeType.orEmpty() }.ifBlank { "application/octet-stream" }
+        val rawGuess = URLUtil.guessFileName("https://data.local/download", contentDisposition, effectiveMime)
+        val suggestedName = sanitizeFileName(rawGuess, effectiveMime)
+        val request =
+            PendingDownloadRequest(
+                id = UUID.randomUUID().toString(),
+                originalUrl = dataUrl,
+                cleanedUrl = dataUrl,
+                strippedTrackingCount = 0,
+                sourceHost = sourceHost,
+                sourceKind = DownloadSourceKind.DATA_URI,
+                suggestedFileName = suggestedName,
+                mimeType = guessMimeType(suggestedName, effectiveMime),
+                contentLength = decoded.bytes.size.toLong(),
+                userAgent = userAgent,
+                referer = null,
+                cookies = null,
+                isIncognito = isIncognito,
+                isPotentiallyDangerous = isPotentiallyDangerousFile(suggestedName, effectiveMime),
+            )
+        dispatchPendingOrStart(request)
+    }
+
+    @Suppress("LongParameterList")
+    private fun prepareBlobDownload(
+        tabId: String,
+        blobUrl: String,
+        userAgent: String,
+        contentDisposition: String?,
+        mimeType: String?,
+        isIncognito: Boolean,
+        sourceHost: String,
+    ) {
+        val rawGuess = URLUtil.guessFileName(blobUrl, contentDisposition, mimeType)
+        val suggestedName = sanitizeFileName(rawGuess, mimeType)
+        val resolvedMime = guessMimeType(suggestedName, mimeType)
+        val webView = webViewPool[tabId]
+        val jsEnabled = webView?.settings?.javaScriptEnabled == true
+        if (webView == null || !jsEnabled) {
+            downloadRepository.recordImmediateFailure(
+                fileName = suggestedName,
+                url = blobUrl,
+                sourceHost = sourceHost,
+                sourceKind = DownloadSourceKind.BLOB_URI,
+                mimeType = resolvedMime,
+                isIncognito = isIncognito,
+                reason = DownloadFailureReason.JS_DISABLED,
+            )
+            Toast.makeText(app, R.string.downloads_reason_js_disabled, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val requestId = UUID.randomUUID().toString()
+        val nonce = UUID.randomUUID().toString()
+        blobSessions[requestId] =
+            BlobSession(
+                requestId = requestId,
+                tabId = tabId,
+                nonce = nonce,
+                originalUrl = blobUrl,
+                sourceHost = sourceHost,
+                suggestedName = suggestedName,
+                mimeHint = mimeType,
+                userAgent = userAgent,
+                isIncognito = isIncognito,
+            )
+        webView.evaluateJavascript(blobPrepareJs(requestId, nonce, blobUrl), null)
+    }
+
+    private fun dispatchPendingOrStart(request: PendingDownloadRequest) {
+        pendingMetadataProbeJob?.cancel()
+        if (cachedSettings.askBeforeDownload || request.isPotentiallyDangerous) {
+            _uiState.update { it.copy(pendingDownloadRequest = request) }
+            if (shouldProbeDownloadMetadata(request)) {
+                pendingMetadataProbeJob =
+                    viewModelScope.launch {
+                        val updated = downloadRepository.probeHttpMetadata(request) ?: return@launch
+                        _uiState.update { state ->
+                            if (state.pendingDownloadRequest?.id == request.id) {
+                                state.copy(pendingDownloadRequest = updated)
+                            } else {
+                                state
+                            }
+                        }
+                    }
             }
-        // On API < 29 the shared Downloads directory needs a storage
-        // permission this app does not request; surface the private-dir
-        // fallback instead of letting the file "disappear" into app storage.
-        val usingPrivateFallback =
-            try {
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-                false
-            } catch (_: SecurityException) {
-                request.setDestinationInExternalFilesDir(app, Environment.DIRECTORY_DOWNLOADS, fileName)
-                true
-            }
-        try {
-            app.getSystemService(DownloadManager::class.java).enqueue(request)
-            val messageRes =
-                if (usingPrivateFallback) {
-                    R.string.browser_download_private_fallback
-                } else {
-                    R.string.browser_download_started
+        } else {
+            startDownloadInternal(
+                request = request,
+                fileName = request.suggestedFileName,
+                wifiOnly = cachedSettings.downloadWifiOnly,
+            )
+        }
+    }
+
+    private fun shouldProbeDownloadMetadata(request: PendingDownloadRequest): Boolean =
+        request.sourceKind == DownloadSourceKind.HTTP &&
+            (
+                request.contentLength <= 0L ||
+                    isGenericMimeType(request.mimeType) ||
+                    fileExtensionOf(request.suggestedFileName).let { it.isEmpty() || it == "bin" }
+            )
+
+    fun confirmPendingDownload(
+        fileName: String,
+        wifiOnly: Boolean,
+    ) {
+        pendingMetadataProbeJob?.cancel()
+        val pending = _uiState.value.pendingDownloadRequest ?: return
+        _uiState.update { it.copy(pendingDownloadRequest = null) }
+        startDownloadInternal(pending, fileName, wifiOnly)
+    }
+
+    fun dismissPendingDownload() {
+        pendingMetadataProbeJob?.cancel()
+        val pending = _uiState.value.pendingDownloadRequest ?: return
+        _uiState.update { it.copy(pendingDownloadRequest = null) }
+        val reqId = pending.blobRequestId
+        val webView = pending.tabId?.let { webViewPool[it] }
+        if (reqId != null) {
+            blobSessions.remove(reqId)
+            val js =
+                "if(window.__lrPendingBlobs){delete window.__lrPendingBlobs[${JSONObject.quote(reqId)}];}"
+            webView?.evaluateJavascript(js, null)
+        }
+    }
+
+    private fun startDownloadInternal(
+        request: PendingDownloadRequest,
+        fileName: String,
+        wifiOnly: Boolean,
+    ) {
+        when (request.sourceKind) {
+            DownloadSourceKind.HTTP ->
+                downloadRepository.enqueueHttp(request, fileName, wifiOnly)
+            DownloadSourceKind.DATA_URI ->
+                downloadRepository.enqueueDataUri(request, fileName)
+            DownloadSourceKind.BLOB_URI -> {
+                val reqId = request.blobRequestId ?: return
+                val session = blobSessions[reqId]
+                val webView = request.tabId?.let { webViewPool[it] }
+                val downloadId = downloadRepository.beginBlobDownload(request, fileName)
+                if (session == null || webView == null) {
+                    blobSessions.remove(reqId)
+                    downloadRepository.failBlobDownload(downloadId, "Tab closed")
+                    return
                 }
-            Toast.makeText(app, messageRes, Toast.LENGTH_SHORT).show()
-        } catch (_: Exception) {
-            Toast.makeText(app, R.string.browser_download_failed, Toast.LENGTH_SHORT).show()
+                session.downloadId = downloadId
+                webView.evaluateJavascript(
+                    blobStreamJs(reqId, session.nonce, request.originalUrl),
+                    null,
+                )
+            }
+        }
+    }
+
+    private fun cookiesForDownload(
+        url: String,
+        isIncognito: Boolean,
+    ): String? {
+        val manager =
+            when {
+                !isIncognito -> CookieManager.getInstance()
+                !WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) -> null
+                else ->
+                    runCatching {
+                        ProfileStore.getInstance().getProfile(INCOGNITO_PROFILE_NAME)?.cookieManager
+                    }.getOrNull()
+            }
+        return manager?.let { runCatching { it.getCookie(url) }.getOrNull() }
+    }
+
+    private fun blobPrepareJs(
+        requestId: String,
+        nonce: String,
+        blobUrl: String,
+    ): String {
+        val qUrl = JSONObject.quote(blobUrl)
+        val qId = JSONObject.quote(requestId)
+        val qNonce = JSONObject.quote(nonce)
+        return """
+            (function(){
+              var b=window.__lrPendingBlobs=window.__lrPendingBlobs||{};
+              fetch($qUrl).then(function(r){return r.blob();}).then(function(blob){
+                b[$qId]=blob;
+                window.$BLOB_BRIDGE_NAME.onBlobPrepared($qId,$qNonce,blob.size||-1,blob.type||'');
+              }).catch(function(e){
+                window.$BLOB_BRIDGE_NAME.onBlobPrepareError($qId,$qNonce,String(e||'error'));
+              });
+            })();
+        """.trimIndent()
+    }
+
+    private fun blobStreamJs(
+        requestId: String,
+        nonce: String,
+        fallbackBlobUrl: String,
+    ): String {
+        val qId = JSONObject.quote(requestId)
+        val qNonce = JSONObject.quote(nonce)
+        val qUrl = JSONObject.quote(fallbackBlobUrl)
+        val bridge = BLOB_BRIDGE_NAME
+        return """
+            (function(){
+              var s=window.__lrPendingBlobs||{};
+              var cached=s[$qId];
+              if(s[$qId]){delete s[$qId];}
+              var getB=cached?Promise.resolve(cached):fetch($qUrl).then(function(r){return r.blob();});
+              getB.then(function(blob){
+                var total=blob.size||0;
+                var chunk=$BLOB_CHUNK_BYTES;
+                if(total===0){window.$bridge.onBlobChunk($qId,$qNonce,'',true,0);return;}
+                var off=0;
+                function next(){
+                  var end=Math.min(off+chunk,total);
+                  var rd=new FileReader();
+                  rd.onloadend=function(){
+                    try{
+                      var v=String(rd.result||'');
+                      var idx=v.indexOf(',');
+                      var b64=idx>=0?v.substring(idx+1):'';
+                      var last=end>=total;
+                      window.$bridge.onBlobChunk($qId,$qNonce,b64,last,total);
+                      if(!last){off=end;next();}
+                    }catch(err){window.$bridge.onBlobError($qId,$qNonce,String(err||'read'));}
+                  };
+                  rd.onerror=function(){window.$bridge.onBlobError($qId,$qNonce,'FileReader error');};
+                  rd.readAsDataURL(blob.slice(off,end));
+                }
+                next();
+              }).catch(function(e){window.$bridge.onBlobError($qId,$qNonce,String(e||'blob'));});
+            })();
+        """.trimIndent()
+    }
+
+    inner class BlobDownloadBridge(
+        private val tabId: String,
+    ) {
+        @JavascriptInterface
+        fun onBlobPrepared(
+            requestId: String,
+            nonce: String,
+            totalBytes: Long,
+            mimeType: String?,
+        ) {
+            val session = blobSessions[requestId] ?: return
+            if (session.nonce != nonce || session.tabId != tabId) return
+            viewModelScope.launch {
+                val activeSession = blobSessions[requestId] ?: return@launch
+                val resolvedMime =
+                    guessMimeType(
+                        activeSession.suggestedName,
+                        mimeType?.ifBlank { null } ?: activeSession.mimeHint,
+                    )
+                val finalName =
+                    sanitizeFileName(
+                        ensureFileExtension(
+                            activeSession.suggestedName,
+                            activeSession.suggestedName,
+                            resolvedMime,
+                        ),
+                        resolvedMime,
+                    )
+                val request =
+                    PendingDownloadRequest(
+                        id = UUID.randomUUID().toString(),
+                        originalUrl = activeSession.originalUrl,
+                        cleanedUrl = activeSession.originalUrl,
+                        strippedTrackingCount = 0,
+                        sourceHost = activeSession.sourceHost,
+                        sourceKind = DownloadSourceKind.BLOB_URI,
+                        suggestedFileName = finalName,
+                        mimeType = resolvedMime,
+                        contentLength = totalBytes,
+                        userAgent = activeSession.userAgent,
+                        referer = null,
+                        cookies = null,
+                        isIncognito = activeSession.isIncognito,
+                        isPotentiallyDangerous = isPotentiallyDangerousFile(finalName, resolvedMime),
+                        blobRequestId = requestId,
+                        tabId = tabId,
+                    )
+                dispatchPendingOrStart(request)
+            }
+        }
+
+        @JavascriptInterface
+        fun onBlobPrepareError(
+            requestId: String,
+            nonce: String,
+            detail: String?,
+        ) {
+            val session = blobSessions[requestId] ?: return
+            if (session.nonce != nonce || session.tabId != tabId) return
+            blobSessions.remove(requestId)
+            viewModelScope.launch {
+                val resolvedMime = guessMimeType(session.suggestedName, session.mimeHint)
+                downloadRepository.recordImmediateFailure(
+                    fileName = session.suggestedName,
+                    url = session.originalUrl,
+                    sourceHost = session.sourceHost,
+                    sourceKind = DownloadSourceKind.BLOB_URI,
+                    mimeType = resolvedMime,
+                    isIncognito = session.isIncognito,
+                    reason = DownloadFailureReason.BLOB_ERROR,
+                    detail = detail,
+                )
+            }
+        }
+
+        @JavascriptInterface
+        fun onBlobChunk(
+            requestId: String,
+            nonce: String,
+            base64Chunk: String,
+            isLast: Boolean,
+            totalHintBytes: Long,
+        ) {
+            val session = blobSessions[requestId]?.takeIf { it.nonce == nonce && it.tabId == tabId }
+            val downloadId = session?.downloadId ?: return
+            downloadRepository.appendBlobChunk(
+                id = downloadId,
+                base64Chunk = base64Chunk,
+                isLast = isLast,
+                totalHintBytes = totalHintBytes,
+            )
+            if (isLast) {
+                blobSessions.remove(requestId)
+            }
+        }
+
+        @JavascriptInterface
+        fun onBlobError(
+            requestId: String,
+            nonce: String,
+            detail: String?,
+        ) {
+            val session = blobSessions[requestId]?.takeIf { it.nonce == nonce && it.tabId == tabId } ?: return
+            blobSessions.remove(requestId)
+            session.downloadId?.let { downloadRepository.failBlobDownload(it, detail) }
         }
     }
 
@@ -2030,29 +2536,86 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         printManager.print(title, webView.createPrintDocumentAdapter(title), null)
     }
 
-    // --- downloads list (4.5) ---
+    // --- downloads manager ---
 
-    fun queryDownloads(): List<DownloadEntry> {
-        val manager = app.getSystemService(DownloadManager::class.java) ?: return emptyList()
-        val query = DownloadManager.Query()
-        val entries = mutableListOf<DownloadEntry>()
-        manager.query(query).use { cursor ->
-            val idIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_ID)
-            val titleIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE)
-            val statusIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)
-            val uriIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
-            while (cursor.moveToNext()) {
-                entries +=
-                    DownloadEntry(
-                        id = cursor.getLong(idIdx),
-                        title = cursor.getString(titleIdx),
-                        status = cursor.getInt(statusIdx),
-                        localUri = cursor.getString(uriIdx),
-                    )
-            }
+    fun setDownloadsSheetVisible(visible: Boolean) {
+        _uiState.update { it.copy(isDownloadsSheetVisible = visible) }
+        if (visible) {
+            downloadRepository.refreshFileAvailability()
         }
-        return entries.takeLast(MAX_DOWNLOAD_ENTRIES).reversed()
     }
+
+    fun openDownloadsFromNotification() {
+        _uiState.update { it.withOverlaysClosed().copy(isDownloadsSheetVisible = true) }
+        downloadRepository.refreshFileAvailability()
+        requestBrowserFocus()
+    }
+
+    fun setAskBeforeDownloadPreference(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAskBeforeDownload(enabled) }
+    }
+
+    fun setDownloadWifiOnlyPreference(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setDownloadWifiOnly(enabled) }
+    }
+
+    fun pauseDownload(id: String) {
+        downloadRepository.pause(id)
+    }
+
+    fun pauseAllDownloads() {
+        downloadRepository.pauseAll()
+    }
+
+    fun resumeDownload(
+        id: String,
+        allowMeteredOverride: Boolean = false,
+    ) {
+        downloadRepository.resume(id, allowMeteredOverride)
+    }
+
+    fun cancelDownload(id: String) {
+        downloadRepository.cancel(id)
+    }
+
+    fun retryDownload(id: String) {
+        downloadRepository.retry(id)
+    }
+
+    fun removeDownload(
+        id: String,
+        deleteFile: Boolean,
+    ) {
+        downloadRepository.removeEntry(id, deleteFile)
+    }
+
+    fun clearFinishedDownloads(deleteFiles: Boolean) {
+        downloadRepository.clearFinished(deleteFiles)
+    }
+
+    fun openDownloadedFile(
+        context: Context,
+        item: DownloadItem,
+    ): OpenFileResult {
+        val result = downloadStorage.openFile(context, item)
+        if (result == OpenFileResult.FILE_MISSING) {
+            downloadRepository.refreshFileAvailability()
+        }
+        return result
+    }
+
+    fun shareDownloadedFile(
+        context: Context,
+        item: DownloadItem,
+    ): Boolean = downloadStorage.shareFile(context, item, context.getString(R.string.downloads_share_title))
+
+    fun copyDownloadUrl(url: String) {
+        val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("download_url", url))
+        Toast.makeText(app, R.string.downloads_url_copied, Toast.LENGTH_SHORT).show()
+    }
+
+    fun openSystemDownloads(context: Context): Boolean = downloadStorage.openSystemDownloads(context)
 
     // --- tab switcher extras (4.5) ---
 
@@ -2637,10 +3200,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         const val TOOLBAR_SHOW_SCROLL_PX = 64
         const val TOOLBAR_HIDE_SCROLL_PX = 300
 
-        /** Rows shown in the in-app downloads dialog (4.5). */
-        const val MAX_DOWNLOAD_ENTRIES = 50
-
         /** Name of the JS bridge pages use to report media state (4.6). */
         const val MEDIA_BRIDGE_NAME = "AndroidMedia"
+
+        /** Name of the JS bridge used for nonce-gated blob download streaming. */
+        const val BLOB_BRIDGE_NAME = "AndroidBlobDownload"
+
+        /** Chunk size (bytes) per base64 bridge hop when streaming blobs. */
+        const val BLOB_CHUNK_BYTES = 262_144
     }
 }

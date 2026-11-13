@@ -167,6 +167,8 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
             ShortcutActions.OPEN_SERVICE ->
                 browserViewModel.openServiceShortcut(intent.getStringExtra(ShortcutActions.EXTRA_ROUTE_ID))
 
+            ShortcutActions.OPEN_DOWNLOADS -> browserViewModel.openDownloadsFromNotification()
+
             // Only the app's own in-app-browser action is honored. This
             // activity is exported (it is the launcher), so honoring raw
             // ACTION_VIEW here would let any app bypass RedirectActivity and

@@ -104,6 +104,7 @@ fun BrowserMenuSheet(
     textZoom: Int,
     instanceAlternatives: InstanceAlternatives?,
     blockedCount: Int,
+    activeDownloadCount: Int = 0,
     onTextZoomChange: (Int) -> Unit,
     actions: BrowserMenuActions,
 ) {
@@ -243,6 +244,12 @@ fun BrowserMenuSheet(
                 icon = Icons.Default.Download,
                 label = stringResource(R.string.browser_menu_downloads),
                 onClick = dismissThen(actions.onOpenDownloads),
+                trailing =
+                    if (activeDownloadCount > 0) {
+                        stringResource(R.string.downloads_badge_active_fmt, activeDownloadCount)
+                    } else {
+                        null
+                    },
             )
             MenuRow(
                 icon = Icons.AutoMirrored.Filled.OpenInNew,

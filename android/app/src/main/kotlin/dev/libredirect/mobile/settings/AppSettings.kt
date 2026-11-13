@@ -118,6 +118,12 @@ data class AppSettings(
     val autoHideToolbar: Boolean = false,
     /** Keep audio playing in a foreground service when the app is backgrounded (4.6). Opt-in. */
     val backgroundAudioEnabled: Boolean = false,
+    /** Show a rename/metadata confirmation sheet before starting a browser download. */
+    val askBeforeDownload: Boolean = true,
+    /** Restrict browser downloads to unmetered (Wi-Fi) networks by default. */
+    val downloadWifiOnly: Boolean = false,
+    /** Drop incognito download records from the in-app list when the incognito session ends. */
+    val clearIncognitoDownloads: Boolean = true,
     /** Host -> per-site browser overrides (4.3). */
     val siteSettings: Map<String, SiteSetting> = emptyMap(),
     /** Epoch millis until which routing is paused (2.6); 0 means not paused. */
