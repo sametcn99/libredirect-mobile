@@ -19,7 +19,7 @@ PRIVACY
 BUILT-IN BROWSER
 • Multi-tab browsing with incognito tabs (ephemeral profile), bookmarks, history with configurable limits.
 • Picture-in-picture video, background audio playback (opt-in), reader mode, print to PDF, per-site settings.
-• Downloads via the system Download Manager, in-app downloads list, find in page, pull-to-refresh.
+• Built-in download manager (pause/resume, Wi-Fi-only option, pre-download rename and safety warnings, smart media/proxy filename resolution, category filters and search), find in page, pull-to-refresh.
 
 EVERYTHING IS LOCAL
 • No telemetry, no analytics, no accounts. Routing data is generated on-device from the live LibRedirect upstream lists and validated before activation. Fail-open: if routing cannot decide, the original link opens unchanged.

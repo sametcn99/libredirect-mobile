@@ -19,7 +19,7 @@ GİZLİLİK
 DAHİLİ TARAYICI
 • Gizli sekmeli (geçici profil) çok sekmeli gezinme, yer imleri, sınırı ayarlanabilir geçmiş.
 • Resim içinde resim video, arka planda ses çalma (isteğe bağlı), okuma modu, PDF yazdırma, site bazlı ayarlar.
-• Sistem İndirme Yöneticisi ile indirmeler, uygulama içi indirme listesi, sayfada bul, çekerek yenile.
+• Dahili indirme yöneticisi (duraklat/devam ettir, yalnızca Wi-Fi seçeneği, indirme öncesi yeniden adlandırma ve güvenlik uyarısı, akıllı medya/proxy dosya adı çözümleme, kategori filtreleri ve arama), sayfada bul, çekerek yenile.
 
 HER ŞEY YERELDE
 • Telemetri yok, analitik yok, hesap yok. Yönlendirme verisi, canlı LibRedirect üst akış listelerinden cihazda üretilir ve etkinleştirilmeden önce doğrulanır. Fail-open: yönlendirme karar veremezse orijinal bağlantı değişmeden açılır.

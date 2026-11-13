@@ -28,7 +28,7 @@ Routing rules live in a declarative manifest. This design lets the service catal
 
 ### Built-in browser
 
-- **Multi-tab browsing**: A tabbed WebView browser ("LibRedirect Browser") that receives routed links directly, with a tab switcher (sort, groups, close others), navigation controls, and a combined URL/search address bar. Open tabs survive process death; stale tabs can auto-close.
+- **Multi-tab browsing**: A tabbed WebView browser ("LibRedirect Browser") that receives routed links directly, with a tab switcher (sort, groups, close all / close other tabs), navigation controls, and a combined URL/search address bar. Open tabs survive process death; stale tabs can auto-close.
 - **Content blocking**: Well-known tracker/ad hosts are blocked per-request (on by default). A bundled list works offline; updates come from one fixed HTTPS source through the same validation pipeline as the routing data.
 - **Per-site settings**: JavaScript, desktop mode, text size, forced dark rendering, and content blocking per host, from the address bar's security icon.
 - **Picture-in-picture**: Fullscreen video continues in a PiP window when you leave the app.
@@ -37,7 +37,9 @@ Routing rules live in a declarative manifest. This design lets the service catal
 - **Start page**: New tabs offer a grid of bookmarks and frequently visited sites.
 - **Search engines**: Choose DuckDuckGo, SearXNG, Brave Search, Google, Startpage, or add a custom engine via a `%s` URL template.
 - **Bookmarks and history**: Local bookmark list with standard HTML and JSON import/export; history limit configurable (off / 50 / 200 / 500 / 1000).
-- **Downloads**: Handed to the system Download Manager with progress notifications, plus an in-app downloads list.
+- **Built-in download manager**: OkHttp-backed transfer engine running in a foreground service with live progress, speed, and ETA notifications (`Pause all` / `Cancel`), HTTP `Range` pause/resume, failure categorization and retry, **Wi-Fi only** scheduling (resumes automatically on unmetered networks or via manual override), and `http(s):` / `data:` / `blob:` support.
+- **Pre-download confirmation & smart filename resolution**: A configurable confirmation sheet (also forced for executables/installers) supports renaming files, live `Range`-probed size and MIME previews, and stripped tracking-parameter counts. Proxy query URLs (e.g. `/mediaproxy?url=...`), `Content-Disposition` headers, server `Content-Type`, and leading container signatures (`MP4`, `MOV`, `WebM`, `JPEG`, `PNG`, `PDF`, …) resolve automatically so proxied media saves with its real extension instead of `.bin`.
+- **Downloads library & privacy controls**: In-app downloads sheet with search, category filter chips (`Active`, `Completed`, `Images`, `Videos`, `Audio`, `Documents`, `Archives & apps`, `Failed`), system `MediaStore` / `FileProvider` open and share actions without storage permissions, optional local-file cleanup on removal, and settings for confirmation prompts, Wi-Fi-only downloads, and incognito download history cleanup.
 - **Page appearance**: Light/dark rendering, auto-darkening, and a hide-toolbars-while-scrolling option.
 - **Browsing tools**: Find in page, desktop-site toggle, print/save-as-PDF, share page/link, share/copy original link, open in external browser, clear cookies and cache, HTTPS security indicator, and a banner showing the original → redirected URL mapping.
 
@@ -112,18 +114,19 @@ The app checks GitHub's "latest release" endpoint and, if a newer version exists
 
 ## Privacy and permissions
 
-- The core permission is `INTERNET`. Two opt-in features add system permissions, and nothing else:
-  - **Background audio** (off by default): `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, and `POST_NOTIFICATIONS` (Android 13+ runtime prompt) keep playback alive with media controls in a notification.
+- The core permission is `INTERNET`. Two foreground/notification features declare additional system permissions, and nothing else:
+  - **Background audio** (off by default): `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` keep audio playback alive with media controls in a notification.
+  - **In-app downloads**: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC` (API 34+), and `POST_NOTIFICATIONS` (requested at runtime on Android 13+ when enabling background audio or starting a download) drive transfer progress and completion notifications. Completed files publish via `MediaStore` on Android 10+ (or app-private downloads storage exposed via `FileProvider` on older Android versions).
   - Otherwise no permissions are requested — no storage, no location, no contacts.
 - No telemetry, analytics, or crash reporting.
 - Routing happens locally on device. The outbound requests are: the (throttled) routing-data regeneration, the optional daily refreshes (instances, blocklist), the optional update check, and — only if you enable it — short-link resolution to the allowlisted shortener. All are direct HTTPS fetches to their documented sources.
-- Bookmarks, history, settings, and the active manifest are stored locally in app-private storage. System backup is disabled (`allowBackup="false"`); a manual settings export/import exists instead (Settings → Backup & restore).
+- Bookmarks, history, the in-app downloads index (excluding transient transfer cookies/auth headers), settings, and the active manifest are stored locally in app-private storage. System backup is disabled (`allowBackup="false"`); a manual settings export/import exists instead (Settings → Backup & restore).
 
 ## Security model
 
 Remote updates change nothing except instance origin lists. Fetched data is parsed strictly (HTTPS-only, origin-only URLs), merged, re-validated, and self-tested before activation. If an update fails any step, the app keeps the last known good manifest.
 
-Routing accepts only safe URL schemes and rejects malformed or private/local redirect targets. The built-in browser pins a conservative WebView posture: third-party cookies are rejected, mixed content is never allowed, and Safe Browsing stays enabled. It stores all browsing data locally and never syncs it. For the full policy and threat model, see [SECURITY.md](SECURITY.md).
+Routing accepts only safe URL schemes and rejects malformed or private/local redirect targets. The built-in browser pins a conservative WebView posture: third-party cookies are rejected, mixed content is never allowed, and Safe Browsing stays enabled. It stores all browsing data locally and never syncs it. Built-in downloads apply the same tracking-parameter stripping, wrapper unwrapping, and exception rules before connecting, warn before saving executables or installers, and keep active transfer cookies strictly in memory rather than persisting them on disk. For the full policy and threat model, see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 

@@ -42,19 +42,23 @@ sources; there is no backend of our own and no telemetry:
    This is the one deliberate exception to "routing never touches the
    network": requests go to the shortener service, which is why the feature
    is opt-in and prominently documented.
-5. **In-app browser traffic** — whatever the user navigates to in the
-   built-in WebView browser.
+5. **In-app browser & download traffic** — whatever the user navigates to
+   or explicitly downloads in the built-in WebView browser (plus short
+   ranged metadata probes while the pre-download confirmation sheet is open
+   for an HTTP download whose size, type, or extension is unknown).
 
 ## Permissions
 
-`INTERNET` is the only permission required for routing. The opt-in
-background-audio feature additionally declares `FOREGROUND_SERVICE`,
-`FOREGROUND_SERVICE_MEDIA_PLAYBACK`, and (runtime, on Android 13+)
-`POST_NOTIFICATIONS`, solely to keep WebView media playing behind a
-notification with play/pause/stop controls. No storage, location, contact,
-or identifier permissions exist, and `QUERY_ALL_PACKAGES` is not used — the
-app sees only launchable activities (for the per-app exception picker and
-onboarding) and VIEW-capable browsers.
+`INTERNET` is the only permission required for routing. Foreground
+playback and downloads additionally declare `FOREGROUND_SERVICE`,
+`FOREGROUND_SERVICE_MEDIA_PLAYBACK` (for the opt-in background audio
+service), `FOREGROUND_SERVICE_DATA_SYNC` (for the in-app download manager
+foreground service on Android 14+), and `POST_NOTIFICATIONS` (requested at
+runtime on Android 13+ when enabling background audio or starting a
+download) to display media controls and transfer notifications. No storage,
+location, contact, or identifier permissions exist, and
+`QUERY_ALL_PACKAGES` is not used — the app sees only launchable activities
+(for the per-app exception picker and onboarding) and VIEW-capable browsers.
 
 ## Routing data updates (manifest refresh)
 
@@ -99,10 +103,17 @@ model. The app adds the following local behavior:
   invariant intact.
 - **Per-site settings** (JavaScript off, forced dark, …) apply only inside
   this app's WebView and are stored locally.
-- **Downloads** are delegated to the system Download Manager. On Android
-  10+ files land in the shared Downloads directory via DownloadManager's
-  own permissions; on older versions they go to the app's private
-  downloads directory. The app does not request storage permissions.
+- **Downloads** run through the app's built-in OkHttp download manager in a
+  foreground service (`DownloadService`) rather than delegating to the
+  system Download Manager. Outbound HTTP download URLs pass through the
+  same tracking-parameter stripping, allowlisted wrapper unwrapping, and
+  domain-exception rules before connecting; active cookies stay in memory
+  only during transfer and are never persisted to the local downloads
+  index. A pre-download prompt warns on executable or installer files
+  even if confirmation prompts are otherwise turned off, and completed
+  files are published via `MediaStore.Downloads` on Android 10+ (or the
+  app's private downloads directory exposed through `FileProvider` on
+  older versions) without requesting storage permissions.
 - **Browsing data controls** (clear cookies/cache, clear history) act only
   on this app's own WebView profile and local storage.
 - **Settings backup/restore** goes through the system file picker (SAF) —
