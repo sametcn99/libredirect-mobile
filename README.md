@@ -4,6 +4,169 @@ LibRedirect Mobile is an Android app that routes links from large online service
 
 Routing rules live in a declarative manifest. This design lets the service catalog evolve without adding service-specific routing code to the Android client.
 
+## Screenshots
+
+All screenshots below were captured from LibRedirect Mobile **v1.3.11** (Build 20). Expand any section to view the images.
+
+<details>
+<summary><strong>Home &amp; Service Catalog</strong> (6 screenshots)</summary>
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/home.png" alt="Home screen in light mode" width="195" /><br />
+      <sub><b>Home (Light)</b><br />Quick link tester, privacy activity counters, and quick actions</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/home-dark.png" alt="Home screen in dark mode" width="195" /><br />
+      <sub><b>Home (Dark)</b><br />Adaptive dark theme with live stats and quick navigation</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/home-services.png" alt="Popular services on Home screen" width="195" /><br />
+      <sub><b>Popular Services</b><br />Featured frontend cards highlighted on the Home dashboard</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/services.png" alt="Redirect Services catalog screen" width="195" /><br />
+      <sub><b>Redirect Services</b><br />Searchable catalog with status and category filters</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/service-detail.png" alt="YouTube service detail screen" width="195" /><br />
+      <sub><b>Service Detail</b><br />Redirect mode, frontend choice, instances, and custom URL</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/service-detail-health.png" alt="Instance health latency checks" width="195" /><br />
+      <sub><b>Instance Health</b><br />On-demand latency probes and reachability indicators</sub>
+    </td>
+  </tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>Built-in Multi-Tab Browser</strong> (11 screenshots)</summary>
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-routed.png" alt="Built-in browser showing YouTube routed to Invidious" width="195" /><br />
+      <sub><b>Routed Browsing</b><br />YouTube link automatically routed to an Invidious frontend</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-menu.png" alt="In-app browser menu sheet" width="195" /><br />
+      <sub><b>Browser Menu</b><br />Page theme, text zoom, original link actions, reader, and print</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-instance-picker.png" alt="Try another instance picker dialog" width="195" /><br />
+      <sub><b>Try Another Instance</b><br />Quick instance switcher with live latency measurement</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-site-settings.png" alt="Per-site browser settings sheet" width="195" /><br />
+      <sub><b>Site Settings</b><br />Per-host JavaScript, desktop mode, dark mode, and blocking</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-tabs.png" alt="Open Tabs switcher with normal and incognito tabs" width="195" /><br />
+      <sub><b>Open Tabs</b><br />Live preview cards, incognito tabs, and Close All action</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-tabs-close-dialog.png" alt="Close All tabs confirmation dialog" width="195" /><br />
+      <sub><b>Close All Dialog</b><br />Clear all tabs or keep the active tab with stacked actions</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-reader.png" alt="Reader Mode article view" width="195" /><br />
+      <sub><b>Reader Mode</b><br />Clean distraction-free typography for readable articles</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-find.png" alt="Find in Page search bar and highlighted matches" width="195" /><br />
+      <sub><b>Find in Page</b><br />In-page query bar with match count and highlighted hits</sub>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-bookmarks.png" alt="Browser bookmarks sheet with import and export" width="195" /><br />
+      <sub><b>Bookmarks</b><br />Saved pages with JSON import and export</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-history.png" alt="Searchable browser history sheet" width="195" /><br />
+      <sub><b>History</b><br />Searchable browsing log with one-tap Clear History</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-clear-data.png" alt="Clear cookies and cache confirmation dialog" width="195" /><br />
+      <sub><b>Clear Cookies &amp; Cache</b><br />Per-site data cleanup dialog (shown in Dark Mode)</sub>
+    </td>
+  </tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>Download Manager</strong> (2 screenshots)</summary>
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/download-pre-prompt.png" alt="Confirm download pre-prompt sheet" width="195" /><br />
+      <sub><b>Pre-Download Prompt</b><br />Tracker stripping summary, editable filename, Wi-Fi-only toggle</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/downloads-sheet.png" alt="In-app Downloads manager sheet" width="195" /><br />
+      <sub><b>Downloads Sheet</b><br />Live progress, speed/ETA, type filters, Pause all, and tracker chip</sub>
+    </td>
+  </tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>Settings, Custom Rules &amp; Diagnostics</strong> (8 screenshots)</summary>
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/settings.png" alt="Settings and Info screen" width="195" /><br />
+      <sub><b>Settings &amp; Info</b><br />Default browser, language, search engine, and clipboard tools</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/settings-privacy.png" alt="Privacy, tracking protection, and failover settings" width="195" /><br />
+      <sub><b>Privacy &amp; Failover</b><br />Short link resolution, custom params, blocklists, and failover</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/settings-downloads.png" alt="Browser behavior and download preferences" width="195" /><br />
+      <sub><b>Browser &amp; Downloads</b><br />Toolbar auto-hide, incognito cleanup, and download defaults</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/settings-language.png" alt="Language selection dialog" width="195" /><br />
+      <sub><b>Language Picker</b><br />System default, English, and Türkçe localization</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/browser-picker.png" alt="Default browser picker screen" width="195" /><br />
+      <sub><b>Default Browser</b><br />Choose between the built-in browser and installed apps</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/exceptions.png" alt="Domain routing exceptions screen" width="195" /><br />
+      <sub><b>Exceptions</b><br />Host/wildcard bypass rules and links opened from other apps</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/custom-services.png" alt="Custom services creator screen" width="195" /><br />
+      <sub><b>Custom Services</b><br />3-step custom domain-to-frontend rule builder</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/diagnostics.png" alt="Local diagnostics screen" width="195" /><br />
+      <sub><b>Diagnostics</b><br />Local app/WebView info, routing counts, flags, and error log</sub>
+    </td>
+  </tr>
+</table>
+
+</details>
+
 ## Features
 
 ### Routing
