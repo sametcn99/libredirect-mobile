@@ -8,10 +8,12 @@ import android.net.NetworkRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -74,10 +76,8 @@ class DownloadRepository(
         }
     private val stateMutex = Mutex()
     private val loaded = CompletableDeferred<Unit>()
-    private val blobOps =
-        kotlinx.coroutines.channels.Channel<suspend () -> Unit>(
-            kotlinx.coroutines.channels.Channel.UNLIMITED,
-        )
+    private val controlOps = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+    private val blobOps = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val activeCalls = ConcurrentHashMap<String, Call>()
     private val ephemeralCookiesById = ConcurrentHashMap<String, String>()
@@ -94,6 +94,10 @@ class DownloadRepository(
     init {
         scope.launch {
             loadInitialIndex()
+            runScheduleNext()
+            for (op in controlOps) {
+                op()
+            }
         }
         scope.launch {
             loaded.await()
@@ -122,7 +126,6 @@ class DownloadRepository(
         val sorted = initial.sortedByDescending { it.createdAtEpochMillis }
         updateDownloadsState(persist = true) { sorted }
         loaded.complete(Unit)
-        scheduleNext()
     }
 
     private fun normalizeRestoredItem(item: DownloadItem): DownloadItem =
@@ -174,11 +177,10 @@ class DownloadRepository(
                 updatedAtEpochMillis = now,
             )
         request.cookies?.takeIf { it.isNotBlank() }?.let { ephemeralCookiesById[id] = it }
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             insertItem(item)
             _events.tryEmit(DownloadEvent.Started(item))
-            scheduleNext()
+            runScheduleNext()
         }
         return id
     }
@@ -281,11 +283,10 @@ class DownloadRepository(
                 createdAtEpochMillis = now,
                 updatedAtEpochMillis = now,
             )
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             insertItem(item)
             _events.tryEmit(DownloadEvent.Started(item))
-            executeDataUriSave(id, request.originalUrl, finalName, resolvedMime)
+            scope.launch { executeDataUriSave(id, request.originalUrl, finalName, resolvedMime) }
         }
         return id
     }
@@ -452,8 +453,7 @@ class DownloadRepository(
                 createdAtEpochMillis = now,
                 updatedAtEpochMillis = now,
             )
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             insertItem(item)
             _events.tryEmit(DownloadEvent.Failed(item))
         }
@@ -461,12 +461,11 @@ class DownloadRepository(
     }
 
     fun pause(id: String) {
-        scope.launch {
-            loaded.await()
-            val item = findItem(id) ?: return@launch
-            if (item.sourceKind != DownloadSourceKind.HTTP) return@launch
-            if (!item.status.isActive && item.status != DownloadStatus.WAITING_FOR_WIFI) return@launch
-            activeJobs.remove(id)?.cancel()
+        controlOps.trySend {
+            val item = findItem(id) ?: return@trySend
+            if (item.sourceKind != DownloadSourceKind.HTTP) return@trySend
+            if (!item.status.isActive && item.status != DownloadStatus.WAITING_FOR_WIFI) return@trySend
+            signalCancelActiveTransfer(id)
             val staged = stagedByteCount(id)
             updateItem(id, persist = true) {
                 it.copy(
@@ -477,20 +476,18 @@ class DownloadRepository(
                     updatedAtEpochMillis = System.currentTimeMillis(),
                 )
             }
-            cancelActiveTransferOnly(id)
-            scheduleNext()
+            runScheduleNext()
         }
     }
 
     fun pauseAll() {
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             val toPause =
                 _downloads.value
                     .filter { it.sourceKind == DownloadSourceKind.HTTP && it.status.isActive }
                     .map { it.id }
-            if (toPause.isEmpty()) return@launch
-            toPause.forEach { activeJobs.remove(it)?.cancel() }
+            if (toPause.isEmpty()) return@trySend
+            toPause.forEach(::signalCancelActiveTransfer)
             val now = System.currentTimeMillis()
             val stagedById = toPause.associateWith(::stagedByteCount)
             updateDownloadsState(persist = true) { list ->
@@ -508,7 +505,6 @@ class DownloadRepository(
                     }
                 }
             }
-            toPause.forEach { cancelActiveTransferOnly(it) }
         }
     }
 
@@ -516,11 +512,10 @@ class DownloadRepository(
         id: String,
         allowMeteredOverride: Boolean = false,
     ) {
-        scope.launch {
-            loaded.await()
-            val item = findItem(id) ?: return@launch
-            if (item.sourceKind != DownloadSourceKind.HTTP) return@launch
-            if (item.status == DownloadStatus.COMPLETED || item.status.isActive) return@launch
+        controlOps.trySend {
+            val item = findItem(id) ?: return@trySend
+            if (item.sourceKind != DownloadSourceKind.HTTP) return@trySend
+            if (item.status == DownloadStatus.COMPLETED || item.status.isActive) return@trySend
             updateItem(id, persist = true) {
                 it.copy(
                     status = DownloadStatus.QUEUED,
@@ -533,7 +528,7 @@ class DownloadRepository(
                     updatedAtEpochMillis = System.currentTimeMillis(),
                 )
             }
-            scheduleNext()
+            runScheduleNext()
         }
     }
 
@@ -542,9 +537,9 @@ class DownloadRepository(
     }
 
     fun cancel(id: String) {
-        scope.launch {
-            loaded.await()
-            findItem(id) ?: return@launch
+        controlOps.trySend {
+            findItem(id) ?: return@trySend
+            signalCancelActiveTransfer(id)
             updateItem(id, persist = true) {
                 it.copy(
                     status = DownloadStatus.CANCELED,
@@ -555,21 +550,22 @@ class DownloadRepository(
                     updatedAtEpochMillis = System.currentTimeMillis(),
                 )
             }
-            cancelActiveTransferOnly(id)
             ephemeralCookiesById.remove(id)
             blobWriters.remove(id)
-            storage.deleteStagingFile(id)
-            scheduleNext()
+            if (!activeJobs.containsKey(id)) {
+                storage.deleteStagingFile(id)
+            }
+            runScheduleNext()
         }
     }
 
     fun cancelAllActive() {
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             val activeIds =
                 _downloads.value
                     .filter { it.status.isActive || it.status == DownloadStatus.WAITING_FOR_WIFI }
                     .map { it.id }
+            activeIds.forEach(::signalCancelActiveTransfer)
             val now = System.currentTimeMillis()
             updateDownloadsState(persist = true) { list ->
                 list.map { item ->
@@ -588,10 +584,11 @@ class DownloadRepository(
                 }
             }
             activeIds.forEach { id ->
-                cancelActiveTransferOnly(id)
                 ephemeralCookiesById.remove(id)
                 blobWriters.remove(id)
-                storage.deleteStagingFile(id)
+                if (!activeJobs.containsKey(id)) {
+                    storage.deleteStagingFile(id)
+                }
             }
             unregisterWifiCallbackIfUnused()
         }
@@ -601,26 +598,26 @@ class DownloadRepository(
         id: String,
         deleteFile: Boolean,
     ) {
-        scope.launch {
-            loaded.await()
-            val item = findItem(id) ?: return@launch
-            cancelActiveTransferOnly(id)
+        controlOps.trySend {
+            val item = findItem(id) ?: return@trySend
+            signalCancelActiveTransfer(id)
             ephemeralCookiesById.remove(id)
             blobWriters.remove(id)
-            storage.deleteStagingFile(id)
+            if (!activeJobs.containsKey(id)) {
+                storage.deleteStagingFile(id)
+            }
             if (deleteFile) {
                 storage.deleteLocalFile(item)
             }
             updateDownloadsState(persist = true) { list -> list.filterNot { it.id == id } }
-            scheduleNext()
+            runScheduleNext()
         }
     }
 
     fun clearFinished(deleteFiles: Boolean) {
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             val removable = _downloads.value.filter { !it.status.isInProgressOrPaused }
-            if (removable.isEmpty()) return@launch
+            if (removable.isEmpty()) return@trySend
             if (deleteFiles) {
                 removable.forEach { storage.deleteLocalFile(it) }
             }
@@ -630,13 +627,12 @@ class DownloadRepository(
     }
 
     fun clearIncognitoHistory() {
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             val removable = _downloads.value.filter { it.isIncognito && !it.status.isActive }
-            if (removable.isEmpty()) return@launch
+            if (removable.isEmpty()) return@trySend
             removable.forEach { item ->
                 ephemeralCookiesById.remove(item.id)
-                if (item.status != DownloadStatus.COMPLETED) {
+                if (item.status != DownloadStatus.COMPLETED && !activeJobs.containsKey(item.id)) {
                     storage.deleteStagingFile(item.id)
                 }
             }
@@ -647,10 +643,9 @@ class DownloadRepository(
     }
 
     fun refreshFileAvailability() {
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             val snapshot = _downloads.value.filter { it.status == DownloadStatus.COMPLETED }
-            if (snapshot.isEmpty()) return@launch
+            if (snapshot.isEmpty()) return@trySend
             val missingIds = snapshot.filter { !storage.isFileAvailable(it) }.map { it.id }.toSet()
             updateDownloadsState(persist = false) { list ->
                 list.map { item ->
@@ -665,52 +660,68 @@ class DownloadRepository(
         }
     }
 
-    private fun scheduleNext() {
-        scope.launch {
-            loaded.await()
-            val currentList = _downloads.value
-            val runningCount = activeJobs.size
-            val slots = (MAX_CONCURRENT_DOWNLOADS - runningCount).coerceAtLeast(0)
-            if (slots > 0) {
-                val queuedHttp =
-                    currentList
-                        .filter { it.sourceKind == DownloadSourceKind.HTTP && it.status == DownloadStatus.QUEUED }
-                        .sortedBy { it.createdAtEpochMillis }
-                for (candidate in queuedHttp) {
-                    if (activeJobs.size >= MAX_CONCURRENT_DOWNLOADS) break
-                    if (candidate.wifiOnly && !isUnmeteredNetwork()) {
-                        updateItem(candidate.id, persist = true) {
-                            it.copy(
-                                status = DownloadStatus.WAITING_FOR_WIFI,
-                                updatedAtEpochMillis = System.currentTimeMillis(),
-                            )
-                        }
-                        ensureWifiCallbackRegistered()
-                    } else {
-                        launchHttpJob(candidate.id)
+    private suspend fun runScheduleNext() {
+        val currentList = _downloads.value
+        val activeCount = activeJobs.values.count { it.isActive }
+        val slots = (MAX_CONCURRENT_DOWNLOADS - activeCount).coerceAtLeast(0)
+        if (slots > 0) {
+            val queuedHttp =
+                currentList
+                    .filter {
+                        it.sourceKind == DownloadSourceKind.HTTP &&
+                            it.status == DownloadStatus.QUEUED &&
+                            !activeJobs.containsKey(it.id)
+                    }.sortedBy { it.createdAtEpochMillis }
+            var launched = 0
+            for (candidate in queuedHttp) {
+                if (launched >= slots) break
+                if (candidate.wifiOnly && !isUnmeteredNetwork()) {
+                    updateItem(candidate.id, persist = true) {
+                        it.copy(
+                            status = DownloadStatus.WAITING_FOR_WIFI,
+                            updatedAtEpochMillis = System.currentTimeMillis(),
+                        )
                     }
+                    ensureWifiCallbackRegistered()
+                } else {
+                    launchHttpJob(candidate.id)
+                    launched++
                 }
             }
-            if (_downloads.value.any { it.status.isActive }) {
-                onStartService()
-            }
-            unregisterWifiCallbackIfUnused()
         }
+        if (_downloads.value.any { it.status.isActive }) {
+            onStartService()
+        }
+        unregisterWifiCallbackIfUnused()
     }
 
     private fun launchHttpJob(id: String) {
         if (activeJobs.containsKey(id)) return
-        val job =
-            scope.launch {
+        lateinit var job: Job
+        job =
+            scope.launch(start = CoroutineStart.LAZY) {
                 try {
                     runHttpTransfer(id)
                 } finally {
-                    activeJobs.remove(id)
-                    activeCalls.remove(id)
-                    scheduleNext()
+                    withContext(NonCancellable) {
+                        activeJobs.remove(id, job)
+                        controlOps.trySend {
+                            cleanupStagingIfEnded(id)
+                            runScheduleNext()
+                        }
+                    }
                 }
             }
         activeJobs[id] = job
+        job.start()
+    }
+
+    private fun cleanupStagingIfEnded(id: String) {
+        if (activeJobs.containsKey(id)) return
+        val item = findItem(id)
+        if (item == null || item.status == DownloadStatus.CANCELED) {
+            storage.deleteStagingFile(id)
+        }
     }
 
     @Suppress("ReturnCount", "CyclomaticComplexMethod", "LongMethod")
@@ -729,92 +740,98 @@ class DownloadRepository(
 
         val staging = storage.stagingFile(id)
         var existingOffset = if (staging.exists()) staging.length() else 0L
-        var response = executeHttpCall(id, initial, existingOffset) ?: return
-        if (response.code == HTTP_RANGE_NOT_SATISFIABLE && existingOffset > 0L) {
-            response.close()
+        var callAndResp = executeHttpCall(id, initial, existingOffset) ?: return
+        if (callAndResp.second.code == HTTP_RANGE_NOT_SATISFIABLE && existingOffset > 0L) {
+            callAndResp.second.close()
+            activeCalls.remove(id, callAndResp.first)
             storage.deleteStagingFile(id)
             existingOffset = 0L
-            response = executeHttpCall(id, initial, 0L) ?: return
+            callAndResp = executeHttpCall(id, initial, 0L) ?: return
         }
 
-        response.use { resp ->
-            if (!resp.isSuccessful) {
+        val (activeCall, response) = callAndResp
+        try {
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    ephemeralCookiesById.remove(id)
+                    markFailed(
+                        id = id,
+                        reason = DownloadFailureReason.HTTP_ERROR,
+                        detail = "HTTP ${resp.code}",
+                        httpStatusCode = resp.code,
+                    )
+                    return
+                }
+                val body = resp.body
+                if (body == null) {
+                    markFailed(id, DownloadFailureReason.NETWORK_ERROR, "Empty response body")
+                    return
+                }
+
+                val isPartial = resp.code == HTTP_PARTIAL_CONTENT && existingOffset > 0L
+                val append = isPartial
+                val startOffset = if (isPartial) existingOffset else 0L
+                if (!append && staging.exists()) {
+                    staging.delete()
+                }
+                val contentLength = body.contentLength()
+                val contentRangeTotal =
+                    if (isPartial) {
+                        parseContentRangeTotalBytes(resp.header("Content-Range"))
+                    } else {
+                        null
+                    }
+                val totalBytes =
+                    when {
+                        contentRangeTotal != null -> contentRangeTotal
+                        contentLength >= 0L -> startOffset + contentLength
+                        else -> initial.totalBytes
+                    }
+                val contentDisposition = resp.header("Content-Disposition")
+                val serverContentType = resp.header("Content-Type")
+                val headerResolved =
+                    resolveServerDownloadMetadata(
+                        url = initial.cleanedUrl,
+                        currentFileName = initial.fileName,
+                        currentMimeType = initial.mimeType,
+                        contentDisposition = contentDisposition,
+                        serverContentType = serverContentType,
+                    )
+                val metadataChanged =
+                    headerResolved.fileName != initial.fileName || headerResolved.mimeType != initial.mimeType
+
+                val writtenTotal =
+                    streamResponseBody(
+                        id = id,
+                        body = body,
+                        staging = staging,
+                        append = append,
+                        startOffset = startOffset,
+                        totalBytes = totalBytes,
+                        resolvedMetadata = headerResolved,
+                        persistMetadata = metadataChanged,
+                    ) ?: return
+
+                val latest = findItem(id) ?: return
+                if (latest.status != DownloadStatus.RUNNING) return
+                val finalMetadata =
+                    finalizeServerMetadata(
+                        latest = latest,
+                        staging = staging,
+                        headerResolved = headerResolved,
+                        contentDisposition = contentDisposition,
+                        serverContentType = serverContentType,
+                    )
+                val published = storage.publishCompletedFile(staging, finalMetadata.fileName, finalMetadata.mimeType)
+                if (published == null) {
+                    markFailed(id, DownloadFailureReason.STORAGE_ERROR, null, bytesDownloaded = writtenTotal)
+                    return
+                }
                 ephemeralCookiesById.remove(id)
-                markFailed(
-                    id = id,
-                    reason = DownloadFailureReason.HTTP_ERROR,
-                    detail = "HTTP ${resp.code}",
-                    httpStatusCode = resp.code,
-                )
-                return
+                markCompleted(id, published, writtenTotal, finalMetadata.mimeType)
             }
-            val body = resp.body
-            if (body == null) {
-                markFailed(id, DownloadFailureReason.NETWORK_ERROR, "Empty response body")
-                return
-            }
-
-            val isPartial = resp.code == HTTP_PARTIAL_CONTENT && existingOffset > 0L
-            val append = isPartial
-            val startOffset = if (isPartial) existingOffset else 0L
-            if (!append && staging.exists()) {
-                staging.delete()
-            }
-            val contentLength = body.contentLength()
-            val contentRangeTotal =
-                if (isPartial) {
-                    parseContentRangeTotalBytes(resp.header("Content-Range"))
-                } else {
-                    null
-                }
-            val totalBytes =
-                when {
-                    contentRangeTotal != null -> contentRangeTotal
-                    contentLength >= 0L -> startOffset + contentLength
-                    else -> initial.totalBytes
-                }
-            val contentDisposition = resp.header("Content-Disposition")
-            val serverContentType = resp.header("Content-Type")
-            val headerResolved =
-                resolveServerDownloadMetadata(
-                    url = initial.cleanedUrl,
-                    currentFileName = initial.fileName,
-                    currentMimeType = initial.mimeType,
-                    contentDisposition = contentDisposition,
-                    serverContentType = serverContentType,
-                )
-            val metadataChanged =
-                headerResolved.fileName != initial.fileName || headerResolved.mimeType != initial.mimeType
-
-            val writtenTotal =
-                streamResponseBody(
-                    id = id,
-                    body = body,
-                    staging = staging,
-                    append = append,
-                    startOffset = startOffset,
-                    totalBytes = totalBytes,
-                    resolvedMetadata = headerResolved,
-                    persistMetadata = metadataChanged,
-                ) ?: return
-
-            val latest = findItem(id) ?: return
-            if (latest.status != DownloadStatus.RUNNING) return
-            val finalMetadata =
-                finalizeServerMetadata(
-                    latest = latest,
-                    staging = staging,
-                    headerResolved = headerResolved,
-                    contentDisposition = contentDisposition,
-                    serverContentType = serverContentType,
-                )
-            val published = storage.publishCompletedFile(staging, finalMetadata.fileName, finalMetadata.mimeType)
-            if (published == null) {
-                markFailed(id, DownloadFailureReason.STORAGE_ERROR, null, bytesDownloaded = writtenTotal)
-                return
-            }
-            ephemeralCookiesById.remove(id)
-            markCompleted(id, published, writtenTotal, finalMetadata.mimeType)
+        } finally {
+            activeCalls.remove(id, activeCall)
         }
     }
 
@@ -855,7 +872,8 @@ class DownloadRepository(
             }
             writtenTotal
         } catch (cancelled: CancellationException) {
-            if (findItem(id)?.status == DownloadStatus.PAUSED) {
+            val status = findItem(id)?.status
+            if (status == DownloadStatus.PAUSED || status == DownloadStatus.QUEUED) {
                 withContext(NonCancellable) {
                     syncPausedBytes(id, maxOf(writtenTotal, stagedByteCount(id)))
                 }
@@ -866,7 +884,7 @@ class DownloadRepository(
             val actualBytes = maxOf(writtenTotal, stagedByteCount(id))
             if (status == DownloadStatus.RUNNING) {
                 markFailed(id, DownloadFailureReason.NETWORK_ERROR, io.message, bytesDownloaded = actualBytes)
-            } else if (status == DownloadStatus.PAUSED) {
+            } else if (status == DownloadStatus.PAUSED || status == DownloadStatus.QUEUED) {
                 syncPausedBytes(id, actualBytes)
             }
             null
@@ -881,9 +899,11 @@ class DownloadRepository(
         bytes: Long,
     ) {
         val current = findItem(id)
-        if (current?.status == DownloadStatus.PAUSED && bytes > current.bytesDownloaded) {
+        val canSync = current?.status == DownloadStatus.PAUSED || current?.status == DownloadStatus.QUEUED
+        if (canSync && bytes > current.bytesDownloaded) {
             updateItem(id, persist = true) { item ->
-                if (item.status == DownloadStatus.PAUSED && bytes > item.bytesDownloaded) {
+                val stillCanSync = item.status == DownloadStatus.PAUSED || item.status == DownloadStatus.QUEUED
+                if (stillCanSync && bytes > item.bytesDownloaded) {
                     item.copy(bytesDownloaded = bytes, updatedAtEpochMillis = System.currentTimeMillis())
                 } else {
                     item
@@ -909,8 +929,8 @@ class DownloadRepository(
         while (true) {
             currentCoroutineContext().ensureActive()
             val read = input.read(buffer)
-            if (read < 0) break
             currentCoroutineContext().ensureActive()
+            if (read < 0) break
             output.write(buffer, 0, read)
             writtenTotal += read
             windowBytes += read
@@ -991,7 +1011,7 @@ class DownloadRepository(
         id: String,
         item: DownloadItem,
         offset: Long,
-    ): Response? {
+    ): Pair<Call, Response>? {
         val rangeHeader = if (offset > 0L) "bytes=$offset-" else null
         val request =
             buildHttpRequest(
@@ -1004,25 +1024,29 @@ class DownloadRepository(
         val call = client.newCall(request)
         activeCalls[id] = call
         return try {
-            call.execute()
+            currentCoroutineContext().ensureActive()
+            call to call.execute()
         } catch (cancelled: CancellationException) {
             call.cancel()
+            activeCalls.remove(id, call)
             throw cancelled
         } catch (io: IOException) {
+            activeCalls.remove(id, call)
             val latest = findItem(id)
             if (latest?.status == DownloadStatus.RUNNING) {
                 markFailed(id, DownloadFailureReason.NETWORK_ERROR, io.message, bytesDownloaded = offset)
             }
             null
         } catch (illegal: IllegalArgumentException) {
+            activeCalls.remove(id, call)
             markFailed(id, DownloadFailureReason.INVALID_URL, illegal.message)
             null
         }
     }
 
-    private fun cancelActiveTransferOnly(id: String) {
-        activeCalls.remove(id)?.cancel()
-        activeJobs.remove(id)?.cancel()
+    private fun signalCancelActiveTransfer(id: String) {
+        activeCalls[id]?.cancel()
+        activeJobs[id]?.cancel()
     }
 
     private suspend fun insertItem(item: DownloadItem) {
@@ -1187,13 +1211,12 @@ class DownloadRepository(
 
     private fun requeueWifiWaitingDownloads() {
         if (!isUnmeteredNetwork()) return
-        scope.launch {
-            loaded.await()
+        controlOps.trySend {
             val waitingIds =
                 _downloads.value
                     .filter { it.status == DownloadStatus.WAITING_FOR_WIFI }
                     .map { it.id }
-            if (waitingIds.isEmpty()) return@launch
+            if (waitingIds.isEmpty()) return@trySend
             val now = System.currentTimeMillis()
             updateDownloadsState(persist = true) { list ->
                 list.map { item ->
@@ -1204,7 +1227,7 @@ class DownloadRepository(
                     }
                 }
             }
-            scheduleNext()
+            runScheduleNext()
         }
     }
 
