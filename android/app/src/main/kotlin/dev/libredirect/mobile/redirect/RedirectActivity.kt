@@ -60,8 +60,8 @@ class RedirectActivity : ComponentActivity() {
                 DiagnosticsLog.record(TAG, "Routing failed: ${error.message}")
                 showMessage(app, R.string.redirect_cannot_open)
             } finally {
-                // A no-op when the activity is already gone.
-                finish()
+                // Always finish on the main thread so the translucent proxy window closes cleanly.
+                finishOnMain()
             }
         }
     }
@@ -134,15 +134,18 @@ class RedirectActivity : ComponentActivity() {
         // dialog instead of redirecting; the dialog finishes the launch.
         val redirect = result as? RoutingResult.Redirect
         if (redirect != null && settings.isRouteAskMode(redirect.routeId)) {
-            AskRouteActivity.start(app, redirect, prepared.url)
+            withContext(Dispatchers.Main.immediate) {
+                val launchContext = activeLaunchContext(app)
+                AskRouteActivity.start(
+                    launchContext,
+                    redirect,
+                    prepared.url,
+                    preferredBrowserPackage = settings.selectedBrowserPackage,
+                    hasBrowserPreference = true,
+                )
+                finishIfAlive()
+            }
             return
-        }
-
-        if (redirect != null) {
-            recordOutcome(dataRepository, settings, prepared, redirected = true)
-            dataRepository.recordRedirect(redirect.routeId)
-        } else if (result is RoutingResult.Passthrough && prepared.url != effectiveUrl) {
-            recordOutcome(dataRepository, settings, prepared, redirected = false)
         }
 
         val redirectInfo =
@@ -154,20 +157,80 @@ class RedirectActivity : ComponentActivity() {
                     instance = it.instance,
                 )
             }
-        // Launch from the application context: by the time routing finishes
-        // the activity may already be destroyed.
-        val launcher = BrowserLauncher(app)
+        // Hand off to the browser on the main thread using the alive Activity
+        // context first (prevents Android 14+ BAL blocks), finish the
+        // translucent proxy immediately, and persist stats in the background.
         val launched =
-            launcher.launch(
-                app,
-                destination,
-                preferredPackage = settings.selectedBrowserPackage,
-                redirect = redirectInfo,
-            )
+            withContext(Dispatchers.Main.immediate) {
+                val launchContext = activeLaunchContext(app)
+                val ok =
+                    BrowserLauncher(launchContext).launch(
+                        launchContext,
+                        destination,
+                        preferredPackage = settings.selectedBrowserPackage,
+                        redirect = redirectInfo,
+                    )
+                finishIfAlive()
+                ok
+            }
         if (!launched) {
             showMessage(app, R.string.redirect_no_browser)
+        } else if (redirect != null || (result is RoutingResult.Passthrough && prepared.url != effectiveUrl)) {
+            scheduleStatsRecord(
+                app,
+                PendingRedirectStats(
+                    dataRepository = dataRepository,
+                    settings = settings,
+                    prepared = prepared,
+                    redirectRouteId = redirect?.routeId,
+                ),
+            )
         }
     }
+
+    private fun activeLaunchContext(app: LibRedirectApplication): Context =
+        if (!isFinishing && !isDestroyed) this@RedirectActivity else app
+
+    private fun finishIfAlive() {
+        if (!isFinishing && !isDestroyed) finish()
+    }
+
+    private suspend fun finishOnMain() {
+        withContext(Dispatchers.Main.immediate) {
+            finishIfAlive()
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun scheduleStatsRecord(
+        app: LibRedirectApplication,
+        stats: PendingRedirectStats,
+    ) {
+        app.applicationScope.launch(Dispatchers.IO) {
+            try {
+                recordOutcome(
+                    stats.dataRepository,
+                    stats.settings,
+                    stats.prepared,
+                    redirected = stats.redirectRouteId != null,
+                )
+                stats.redirectRouteId?.let { routeId ->
+                    stats.dataRepository.recordRedirect(routeId)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.w(TAG, "Could not persist redirect statistics", error)
+            }
+        }
+    }
+
+    private data class PendingRedirectStats(
+        val dataRepository: BrowserDataRepository,
+        val settings: AppSettings,
+        val prepared: LinkPipeline.Prepared,
+        val redirectRouteId: String?,
+    )
 
     /**
      * Local privacy counters (3.4): one redirect/passthrough event plus the
@@ -216,11 +279,14 @@ class RedirectActivity : ComponentActivity() {
                 }
         }
 
-    private fun showMessage(
+    private suspend fun showMessage(
         context: Context,
         messageRes: Int,
     ) {
-        Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()
+        // Toast creation throws without a prepared Looper; callers may run on Default/IO.
+        withContext(Dispatchers.Main.immediate) {
+            Toast.makeText(context.applicationContext, messageRes, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private companion object {

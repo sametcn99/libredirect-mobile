@@ -42,7 +42,9 @@ import dev.libredirect.mobile.ui.browser.BrowserDataRepository
 import dev.libredirect.mobile.ui.browser.BrowserTab
 import dev.libredirect.mobile.ui.theme.LibRedirectMobileTheme
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The lightweight "ask every time" dialog (2.4): shown when a link matches a
@@ -51,6 +53,9 @@ import kotlinx.coroutines.launch
  * user was asked and did not choose.
  */
 class AskRouteActivity : ComponentActivity() {
+    private var cachedPreferredBrowser: String? = null
+    private var browserPrefLoaded: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val originalUrl = intent.getStringExtra(EXTRA_ORIGINAL_URL)
@@ -60,6 +65,18 @@ class AskRouteActivity : ComponentActivity() {
             return
         }
         val app = applicationContext as LibRedirectApplication
+        if (intent.hasExtra(EXTRA_PREFERRED_BROWSER)) {
+            cachedPreferredBrowser = intent.getStringExtra(EXTRA_PREFERRED_BROWSER)
+            browserPrefLoaded = true
+        } else {
+            app.applicationScope.launch {
+                val selected = SettingsRepository(app).current().selectedBrowserPackage
+                withContext(Dispatchers.Main.immediate) {
+                    cachedPreferredBrowser = selected
+                    browserPrefLoaded = true
+                }
+            }
+        }
         setContent {
             LibRedirectMobileTheme {
                 AskRouteDialog(
@@ -67,7 +84,6 @@ class AskRouteActivity : ComponentActivity() {
                     serviceName = intent.getStringExtra(EXTRA_SERVICE_NAME).orEmpty(),
                     frontendName = intent.getStringExtra(EXTRA_FRONTEND_NAME).orEmpty(),
                     onOpenFrontend = {
-                        finish()
                         val info =
                             InAppRedirectInfo(
                                 originalUrl = originalUrl,
@@ -78,7 +94,6 @@ class AskRouteActivity : ComponentActivity() {
                         launch(app, redirectedUrl, info)
                     },
                     onOpenOriginal = {
-                        finish()
                         launch(app, originalUrl, null)
                     },
                     onExclude = {
@@ -96,28 +111,99 @@ class AskRouteActivity : ComponentActivity() {
         url: String,
         redirect: InAppRedirectInfo?,
     ) {
+        if (browserPrefLoaded) {
+            launchImmediately(app, url, cachedPreferredBrowser, redirect)
+        } else {
+            launchAfterLoadingPreference(app, url, redirect)
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun launchImmediately(
+        app: LibRedirectApplication,
+        url: String,
+        preferredPackage: String?,
+        redirect: InAppRedirectInfo?,
+    ) {
+        val launched =
+            try {
+                BrowserLauncher(this).launch(
+                    this,
+                    url,
+                    preferredPackage = preferredPackage,
+                    redirect = redirect,
+                )
+            } catch (_: Exception) {
+                false
+            }
+        finishIfAlive()
+        if (!launched) {
+            Toast.makeText(app, R.string.redirect_no_browser, Toast.LENGTH_SHORT).show()
+        } else {
+            recordRedirectAsync(app, redirect)
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun launchAfterLoadingPreference(
+        app: LibRedirectApplication,
+        url: String,
+        redirect: InAppRedirectInfo?,
+    ) {
         app.applicationScope.launch {
             try {
                 val settings = SettingsRepository(app).current()
-                redirect?.let { info -> BrowserDataRepository(app).recordRedirect(info.routeId) }
                 val launched =
-                    BrowserLauncher(app).launch(
-                        app,
-                        url,
-                        preferredPackage = settings.selectedBrowserPackage,
-                        redirect = redirect,
-                    )
+                    withContext(Dispatchers.Main.immediate) {
+                        val launchContext: Context = if (!isFinishing && !isDestroyed) this@AskRouteActivity else app
+                        val ok =
+                            BrowserLauncher(launchContext).launch(
+                                launchContext,
+                                url,
+                                preferredPackage = settings.selectedBrowserPackage,
+                                redirect = redirect,
+                            )
+                        finishIfAlive()
+                        ok
+                    }
                 if (!launched) {
-                    Toast.makeText(app, R.string.redirect_no_browser, Toast.LENGTH_SHORT).show()
+                    showToast(app, R.string.redirect_no_browser)
+                } else {
+                    recordRedirectAsync(app, redirect)
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                Toast.makeText(app, R.string.redirect_cannot_open, Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main.immediate) {
+                    finishIfAlive()
+                    Toast.makeText(app, R.string.redirect_cannot_open, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
 
+    private fun finishIfAlive() {
+        if (!isFinishing && !isDestroyed) finish()
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun recordRedirectAsync(
+        app: LibRedirectApplication,
+        redirect: InAppRedirectInfo?,
+    ) {
+        val routeId = redirect?.routeId ?: return
+        app.applicationScope.launch(Dispatchers.IO) {
+            try {
+                BrowserDataRepository(app).recordRedirect(routeId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Counter persistence must never block or crash browser launch.
+            }
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
     private fun addException(
         app: LibRedirectApplication,
         originalUrl: String,
@@ -128,12 +214,21 @@ class AskRouteActivity : ComponentActivity() {
                 val current = repository.current().exceptions
                 val host = BrowserTab.hostOf(originalUrl)
                 repository.setExceptions(current + ExceptionRule.Domain(host))
-                Toast.makeText(app, R.string.ask_route_exception_added, Toast.LENGTH_SHORT).show()
+                showToast(app, R.string.ask_route_exception_added)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
                 // Nothing user-visible to recover with; the dialog is gone already.
             }
+        }
+    }
+
+    private suspend fun showToast(
+        app: LibRedirectApplication,
+        messageRes: Int,
+    ) {
+        withContext(Dispatchers.Main.immediate) {
+            Toast.makeText(app, messageRes, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -145,11 +240,14 @@ class AskRouteActivity : ComponentActivity() {
         const val EXTRA_INSTANCE = "instance"
         const val EXTRA_SERVICE_NAME = "service_name"
         const val EXTRA_FRONTEND_NAME = "frontend_name"
+        const val EXTRA_PREFERRED_BROWSER = "preferred_browser"
 
         fun start(
             context: Context,
             redirect: dev.libredirect.mobile.core.routing.RoutingResult.Redirect,
             originalUrl: String,
+            preferredBrowserPackage: String? = null,
+            hasBrowserPreference: Boolean = false,
         ) {
             val app = context.applicationContext as LibRedirectApplication
             val route = app.manifestRepository.activeManifest()?.routes?.find { it.id == redirect.routeId }
@@ -164,6 +262,9 @@ class AskRouteActivity : ComponentActivity() {
                     redirect.instance?.let { putExtra(EXTRA_INSTANCE, it) }
                     putExtra(EXTRA_SERVICE_NAME, route?.name ?: redirect.routeId)
                     putExtra(EXTRA_FRONTEND_NAME, frontend?.name ?: redirect.frontendId)
+                    if (hasBrowserPreference || preferredBrowserPackage != null) {
+                        putExtra(EXTRA_PREFERRED_BROWSER, preferredBrowserPackage)
+                    }
                 }
             context.startActivity(intent)
         }
