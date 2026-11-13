@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -41,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -244,27 +246,40 @@ fun TabSwitcherSheet(
             title = { Text(stringResource(R.string.tab_switcher_close_all)) },
             text = { Text(stringResource(R.string.tab_switcher_close_all_confirm)) },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        isCloseAllConfirmVisible = false
-                        actions.onCloseAll()
-                    },
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(stringResource(R.string.action_clear), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    // 4.5: keep the current tab, drop the rest.
-                    TextButton(
+                    FilledTonalButton(
                         onClick = {
                             isCloseAllConfirmVisible = false
-                            actions.onCloseOthers()
+                            actions.onCloseAll()
                         },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors =
+                            ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            ),
                     ) {
-                        Text(stringResource(R.string.tab_switcher_close_others))
+                        Text(stringResource(R.string.action_clear))
                     }
-                    TextButton(onClick = { isCloseAllConfirmVisible = false }) {
+                    if (tabs.size > 1) {
+                        // 4.5: keep the current tab, drop the rest.
+                        OutlinedButton(
+                            onClick = {
+                                isCloseAllConfirmVisible = false
+                                actions.onCloseOthers()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.tab_switcher_close_others))
+                        }
+                    }
+                    TextButton(
+                        onClick = { isCloseAllConfirmVisible = false },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Text(stringResource(R.string.action_cancel))
                     }
                 }
