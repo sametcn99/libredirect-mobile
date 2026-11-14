@@ -51,6 +51,7 @@ import dev.libredirect.mobile.core.routing.RouteMatcher
 import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.core.url.CustomTrackingScope
+import dev.libredirect.mobile.core.url.QueryParams
 import dev.libredirect.mobile.core.url.ShortLinkPolicy
 import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlParser
@@ -1190,18 +1191,20 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         val trimmed = queryOrUrl.trim()
         if (trimmed.isEmpty()) return
 
+        val looksLikeUrl =
+            trimmed.startsWith("http://", ignoreCase = true) ||
+                trimmed.startsWith("https://", ignoreCase = true)
+        val looksLikeBareDomain = trimmed.contains('.') && !trimmed.contains(' ')
+        val isSearchFallback = !looksLikeUrl && !looksLikeBareDomain
         val targetUrl =
             when {
-                trimmed.startsWith("http://", ignoreCase = true) ||
-                    trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-
-                trimmed.contains('.') && !trimmed.contains(' ') -> "https://$trimmed"
-
+                looksLikeUrl -> trimmed
+                looksLikeBareDomain -> "https://$trimmed"
                 else -> _uiState.value.searchEngine.buildSearchUrl(trimmed)
             }
 
         val currentTabId = _uiState.value.activeTabId
-        val resolved = resolveRedirection(targetUrl, currentTabId)
+        val resolved = resolveRedirection(targetUrl, currentTabId, allowQueryParamStrip = !isSearchFallback)
         if (resolved == null) {
             // A fresh, unredirected navigation: the tab is now about this link.
             _uiState.update { current ->
@@ -1262,6 +1265,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private fun resolveRedirection(
         url: String,
         tabId: String,
+        allowQueryParamStrip: Boolean = true,
     ): String? {
         val settings = cachedSettings
         val manifest = cachedManifest
@@ -1291,7 +1295,29 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+
+        // Strip-all query cleaning (mirrors LinkPipeline): engine-built
+        // search URLs carry the payload in their query and must be exempt.
+        cleanedQueryUrl(workingUrl, allowQueryParamStrip)?.let { workingUrl = it }
+
         return routeAndApply(workingUrl, tabId, originalForRecord = null)
+    }
+
+    /**
+     * Strip-all query cleaning for [url]; null when disabled, exempt, or
+     * nothing would change. Records the removed pairs in the privacy stats.
+     */
+    @Suppress("ReturnCount") // guard chain: early-outs precede the strip apply
+    private fun cleanedQueryUrl(
+        url: String,
+        allowStrip: Boolean,
+    ): String? {
+        if (!allowStrip || !cachedSettings.queryParamStripEnabled || isExceptionMatch(url)) return null
+        val parsed = UrlParser.parse(url) ?: return null
+        val stripped = QueryParams.stripAllExcept(url, parsed)
+        if (stripped.removedCount <= 0) return null
+        addPrivacyStats(PrivacyStats(strippedTrackingParams = stripped.removedCount.toLong()))
+        return stripped.url
     }
 
     /**
@@ -1313,6 +1339,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 .copy(instanceHealth = cachedHealth, nowMillis = System.currentTimeMillis())
         val result = UrlRouter(manifest).resolve(url, context)
         if (result !is RoutingResult.Redirect) return null
+        // Ask-every-time services (2.4) keep their in-browser behavior: the
+        // link loads as-is here; only the external RedirectActivity shows
+        // the ask dialog before opening a browser.
+        if (settings.isRouteAskMode(result.routeId)) return null
 
         // Local, per-route usage counter (A6) + privacy counters (3.4).
         val strippedCount = strippedParamCount(url)

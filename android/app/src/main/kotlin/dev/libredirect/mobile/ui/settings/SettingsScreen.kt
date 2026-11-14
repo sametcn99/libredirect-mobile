@@ -100,6 +100,7 @@ data class SettingsActions(
     // 2.x/3.x/4.x/5.x batch (see SettingsExtrasSection)
     val onUnwrapWrappersChange: (Boolean) -> Unit = {},
     val onShortLinkResolveChange: (Boolean) -> Unit = {},
+    val onQueryParamStripChange: (Boolean) -> Unit = {},
     val onCustomTrackingParamsChange: (List<CustomTrackingParam>) -> Unit = {},
     val onContentBlockerChange: (Boolean) -> Unit = {},
     val onUpdateBlocklist: () -> Unit = {},

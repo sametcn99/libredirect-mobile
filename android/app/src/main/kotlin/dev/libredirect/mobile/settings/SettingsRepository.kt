@@ -160,6 +160,10 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.SHORT_LINK_RESOLVE_ENABLED] = enabled }
     }
 
+    suspend fun setQueryParamStripEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[Keys.QUERY_PARAM_STRIP_ENABLED] = enabled }
+    }
+
     suspend fun setCustomTrackingParams(params: List<CustomTrackingParam>) {
         context.settingsDataStore.edit { prefs -> prefs[Keys.CUSTOM_TRACKING_PARAMS] = json.encodeToString(params) }
     }
@@ -283,6 +287,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.AUTO_FAILOVER_ENABLED] = settings.autoFailoverEnabled
             prefs[Keys.BACKGROUND_LATENCY_ENABLED] = settings.backgroundLatencyMeasureEnabled
             prefs[Keys.UNWRAP_WRAPPERS_ENABLED] = settings.unwrapRedirectWrappersEnabled
+            prefs[Keys.QUERY_PARAM_STRIP_ENABLED] = settings.queryParamStripEnabled
             prefs[Keys.SHORT_LINK_RESOLVE_ENABLED] = settings.shortLinkResolveEnabled
             prefs[Keys.CUSTOM_TRACKING_PARAMS] = json.encodeToString(settings.customTrackingParams)
             prefs[Keys.CONTENT_BLOCKER_ENABLED] = settings.contentBlockerEnabled
@@ -385,6 +390,7 @@ class SettingsRepository(private val context: Context) {
             autoFailoverEnabled = prefs[Keys.AUTO_FAILOVER_ENABLED] ?: true,
             backgroundLatencyMeasureEnabled = prefs[Keys.BACKGROUND_LATENCY_ENABLED] ?: false,
             unwrapRedirectWrappersEnabled = prefs[Keys.UNWRAP_WRAPPERS_ENABLED] ?: true,
+            queryParamStripEnabled = prefs[Keys.QUERY_PARAM_STRIP_ENABLED] ?: true,
             shortLinkResolveEnabled = prefs[Keys.SHORT_LINK_RESOLVE_ENABLED] ?: false,
             customTrackingParams = decodeOrDefault(prefs[Keys.CUSTOM_TRACKING_PARAMS], emptyList()),
             contentBlockerEnabled = prefs[Keys.CONTENT_BLOCKER_ENABLED] ?: true,
@@ -442,6 +448,7 @@ class SettingsRepository(private val context: Context) {
         val AUTO_FAILOVER_ENABLED = booleanPreferencesKey("auto_failover_enabled")
         val BACKGROUND_LATENCY_ENABLED = booleanPreferencesKey("background_latency_measure_enabled")
         val UNWRAP_WRAPPERS_ENABLED = booleanPreferencesKey("unwrap_wrappers_enabled")
+        val QUERY_PARAM_STRIP_ENABLED = booleanPreferencesKey("query_param_strip_enabled")
         val SHORT_LINK_RESOLVE_ENABLED = booleanPreferencesKey("short_link_resolve_enabled")
         val CUSTOM_TRACKING_PARAMS = stringPreferencesKey("custom_tracking_params_json")
         val CONTENT_BLOCKER_ENABLED = booleanPreferencesKey("content_blocker_enabled")

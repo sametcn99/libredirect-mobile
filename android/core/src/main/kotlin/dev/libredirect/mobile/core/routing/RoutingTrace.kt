@@ -42,9 +42,6 @@ enum class TraceReason {
     /** A user exception rule matched. */
     EXCEPTION_MATCHED,
 
-    /** The service is set to "ask every time"; nothing was redirected yet. */
-    ASK_MODE,
-
     /** Routing is paused until a timestamp. */
     PAUSED,
 

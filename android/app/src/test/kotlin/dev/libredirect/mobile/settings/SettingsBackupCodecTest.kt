@@ -35,6 +35,7 @@ class SettingsBackupCodecTest {
             backgroundLatencyMeasureEnabled = true,
             unwrapRedirectWrappersEnabled = false,
             shortLinkResolveEnabled = true,
+            queryParamStripEnabled = false,
             customTrackingParams =
                 listOf(
                     CustomTrackingParam(host = null, name = "mytag"),
@@ -79,6 +80,7 @@ class SettingsBackupCodecTest {
         val encoded = SettingsBackupCodec.encode(backup)
         listOf(
             "askModeRoutes",
+            "queryParamStripEnabled",
             "customTrackingParams",
             "siteSettings",
             "backgroundAudioEnabled",

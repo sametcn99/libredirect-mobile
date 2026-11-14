@@ -57,7 +57,7 @@ class RoutingTraceTest {
     }
 
     @Test
-    fun `exception and ask-mode and disabled and override traces`() {
+    fun `exception and disabled and override traces`() {
         val router = UrlRouter(manifest)
         val exception =
             router.explain(
@@ -66,9 +66,6 @@ class RoutingTraceTest {
             )
         assertEquals(TraceReason.EXCEPTION_MATCHED, exception.reason)
         assertEquals("youtube.com", exception.detail)
-
-        val ask = router.explain("https://youtube.com/watch", RoutingContext(askModeRoutes = setOf("youtube")))
-        assertEquals(TraceReason.ASK_MODE, ask.reason)
 
         val disabled = router.explain("https://youtube.com/watch", RoutingContext(disabledRoutes = setOf("youtube")))
         assertEquals(TraceReason.ROUTE_DISABLED, disabled.reason)

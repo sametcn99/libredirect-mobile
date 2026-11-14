@@ -290,6 +290,7 @@ fun AppNavHost(
                                 onAppLockChange = mainViewModel::setAppLockEnabled,
                                 onUnwrapWrappersChange = mainViewModel::setUnwrapWrappersEnabled,
                                 onShortLinkResolveChange = mainViewModel::setShortLinkResolveEnabled,
+                                onQueryParamStripChange = mainViewModel::setQueryParamStripEnabled,
                                 onCustomTrackingParamsChange = { params ->
                                     mainViewModel.setCustomTrackingParams(params)
                                 },

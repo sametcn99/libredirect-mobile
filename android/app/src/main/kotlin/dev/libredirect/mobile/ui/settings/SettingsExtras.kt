@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShortText
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
@@ -83,6 +84,14 @@ fun SettingsExtrasSection(
             subtitle = stringResource(R.string.settings_short_links_desc),
             checked = state.shortLinkResolveEnabled,
             onCheckedChange = actions.onShortLinkResolveChange,
+        )
+
+        SettingsToggleItem(
+            icon = Icons.Default.CleaningServices,
+            title = stringResource(R.string.settings_strip_query_params),
+            subtitle = stringResource(R.string.settings_strip_query_params_desc),
+            checked = state.queryParamStripEnabled,
+            onCheckedChange = actions.onQueryParamStripChange,
         )
 
         TrackingParamsCard(state = state, onChange = actions.onCustomTrackingParamsChange)

@@ -59,6 +59,7 @@ data class MainUiState(
     val privacyStats: PrivacyStats = PrivacyStats(),
     val unwrapWrappersEnabled: Boolean = true,
     val shortLinkResolveEnabled: Boolean = false,
+    val queryParamStripEnabled: Boolean = true,
     // User-defined tracking parameter rules (3.2).
     val customTrackingParams: List<CustomTrackingParam> = emptyList(),
     val contentBlockerEnabled: Boolean = true,

@@ -173,6 +173,7 @@ All screenshots below were captured from LibRedirect Mobile **v1.3.11** (Build 2
 
 - **Privacy-focused routing**: Redirect eligible links without accounts, analytics, or a backend.
 - **Tracking-parameter stripping**: Well-known tracking parameters (`utm_*`, `fbclid`, `gclid`, YouTube's `si`, Amazon's `ref_*`, X's `s`/`t`, …) are removed before a link is opened — including links that are not routed at all. User exceptions keep their URLs byte-for-byte intact, and you can add your own global or per-host rules.
+- **Query-parameter stripping (on by default)**: On top of the tracking denylist, every non-functional query parameter (locale tags like Instagram's `?hl=en`, share attribution, …) is dropped before routing; only functional names such as video, search, and permalink IDs survive. Toggleable in Settings → Privacy.
 - **Wrapper & AMP unwrapping**: Redirect wrappers (`google.com/url?q=`, `l.facebook.com`, `out.reddit.com`, AMP caches, …) are resolved entirely offline before routing (on by default).
 - **Short-link resolution (opt-in, off by default)**: When enabled, links from a fixed allowlist of shorteners (t.co, bit.ly, …) are followed with HTTPS requests before routing. This is the one feature that makes routing touch the network — see [SECURITY.md](SECURITY.md).
 - **Offline-first routing**: Route links locally — apart from the opt-in short-link feature, routing never makes a network request.

@@ -4,6 +4,7 @@ import dev.libredirect.mobile.browser.ShortLinkResolver
 import dev.libredirect.mobile.core.routing.ExceptionMatcher
 import dev.libredirect.mobile.core.routing.InstanceHealth
 import dev.libredirect.mobile.core.routing.RoutingContext
+import dev.libredirect.mobile.core.url.QueryParams
 import dev.libredirect.mobile.core.url.ShortLinkPolicy
 import dev.libredirect.mobile.core.url.UrlParser
 import dev.libredirect.mobile.core.url.UrlUnwrapper
@@ -27,17 +28,23 @@ class LinkPipeline(
         val url: String,
         val unwrappedLayers: Int = 0,
         val shortLinkResolved: Boolean = false,
+        val strippedQueryParams: Int = 0,
     )
 
     /**
      * Runs the local preprocessing steps. Only ever touches the network
      * when the opt-in short-link resolver is enabled AND the host is on the
-     * fixed allowlist.
+     * fixed allowlist. [allowQueryParamStrip] must be false for URLs the
+     * app itself generated (search fallbacks), whose query is the payload.
      */
-    suspend fun prepare(input: String): Prepared {
+    suspend fun prepare(
+        input: String,
+        allowQueryParamStrip: Boolean = true,
+    ): Prepared {
         var url = input
         var unwrappedLayers = 0
         var shortLinkResolved = false
+        var strippedQueryParams = 0
 
         if (matchesUserException(input)) return Prepared(url)
 
@@ -60,7 +67,23 @@ class LinkPipeline(
             }
         }
 
-        return Prepared(url = url, unwrappedLayers = unwrappedLayers, shortLinkResolved = shortLinkResolved)
+        if (allowQueryParamStrip && settings.queryParamStripEnabled) {
+            val parsed = UrlParser.parse(url)
+            if (parsed != null) {
+                val stripped = QueryParams.stripAllExcept(url, parsed)
+                if (stripped.removedCount > 0) {
+                    url = stripped.url
+                    strippedQueryParams = stripped.removedCount
+                }
+            }
+        }
+
+        return Prepared(
+            url = url,
+            unwrappedLayers = unwrappedLayers,
+            shortLinkResolved = shortLinkResolved,
+            strippedQueryParams = strippedQueryParams,
+        )
     }
 
     private fun matchesUserException(url: String): Boolean {

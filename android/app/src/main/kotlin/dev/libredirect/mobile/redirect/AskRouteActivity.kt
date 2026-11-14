@@ -70,10 +70,17 @@ class AskRouteActivity : ComponentActivity() {
             browserPrefLoaded = true
         } else {
             app.applicationScope.launch {
-                val selected = SettingsRepository(app).current().selectedBrowserPackage
-                withContext(Dispatchers.Main.immediate) {
-                    cachedPreferredBrowser = selected
-                    browserPrefLoaded = true
+                try {
+                    val selected = SettingsRepository(app).current().selectedBrowserPackage
+                    withContext(Dispatchers.Main.immediate) {
+                        cachedPreferredBrowser = selected
+                        browserPrefLoaded = true
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // Leave the preference unloaded: the launch falls back to
+                    // the system default browser instead of crashing.
                 }
             }
         }
@@ -232,6 +239,12 @@ class AskRouteActivity : ComponentActivity() {
         }
     }
 
+    /** See [DisplayNames]: caller-resolved names, kept out of [start]'s I/O. */
+    data class DisplayNames(
+        val serviceName: String,
+        val frontendName: String,
+    )
+
     companion object {
         const val EXTRA_ORIGINAL_URL = "original_url"
         const val EXTRA_REDIRECTED_URL = "redirected_url"
@@ -245,23 +258,20 @@ class AskRouteActivity : ComponentActivity() {
         fun start(
             context: Context,
             redirect: dev.libredirect.mobile.core.routing.RoutingResult.Redirect,
-            originalUrl: String,
+            displayNames: DisplayNames,
             preferredBrowserPackage: String? = null,
             hasBrowserPreference: Boolean = false,
         ) {
-            val app = context.applicationContext as LibRedirectApplication
-            val route = app.manifestRepository.activeManifest()?.routes?.find { it.id == redirect.routeId }
-            val frontend = route?.frontends?.find { it.id == redirect.frontendId }
             val intent =
                 Intent(context, AskRouteActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    putExtra(EXTRA_ORIGINAL_URL, originalUrl)
+                    putExtra(EXTRA_ORIGINAL_URL, redirect.originalUrl)
                     putExtra(EXTRA_REDIRECTED_URL, redirect.redirectedUrl)
                     putExtra(EXTRA_ROUTE_ID, redirect.routeId)
                     putExtra(EXTRA_FRONTEND_ID, redirect.frontendId)
                     redirect.instance?.let { putExtra(EXTRA_INSTANCE, it) }
-                    putExtra(EXTRA_SERVICE_NAME, route?.name ?: redirect.routeId)
-                    putExtra(EXTRA_FRONTEND_NAME, frontend?.name ?: redirect.frontendId)
+                    putExtra(EXTRA_SERVICE_NAME, displayNames.serviceName)
+                    putExtra(EXTRA_FRONTEND_NAME, displayNames.frontendName)
                     if (hasBrowserPreference || preferredBrowserPackage != null) {
                         putExtra(EXTRA_PREFERRED_BROWSER, preferredBrowserPackage)
                     }

@@ -33,9 +33,10 @@ import kotlinx.coroutines.withContext
  * (route resolution should not block on drawing anything).
  *
  * Pipeline order (2.x/3.x): extract the URL → unwrap wrappers (3.1) →
- * optionally resolve shorteners (3.3) → route with health data (2.1) →
- * ask dialog when the service demands it (2.4) → launch; privacy counters
- * land in the local stats store (3.4).
+ * optionally resolve shorteners (3.3) → optionally strip non-functional
+ * query parameters → route with health data (2.1) → ask dialog when the
+ * service demands it (2.4) → launch; privacy counters land in the local
+ * stats store (3.4).
  */
 class RedirectActivity : ComponentActivity() {
     @Suppress("TooGenericExceptionCaught")
@@ -55,7 +56,11 @@ class RedirectActivity : ComponentActivity() {
                 if (incomingUrl != null) route(app, incomingUrl, referrer)
             } catch (_: CancellationException) {
                 // Scope cancellation means the process is going away anyway.
-            } catch (error: Exception) {
+            } catch (error: Throwable) {
+                // Throwable, not Exception: an Error (R8/minification linkage
+                // failures have happened before — see v1.3.7) must land here
+                // with a diagnostic record, not in the crash-recovery handler
+                // that restarts MainActivity and silently loses this log.
                 Log.e(TAG, "Could not route incoming URL", error)
                 DiagnosticsLog.record(TAG, "Routing failed: ${error.message}")
                 showMessage(app, R.string.redirect_cannot_open)
@@ -102,7 +107,9 @@ class RedirectActivity : ComponentActivity() {
         val pipeline = LinkPipeline(settings, sourceApp)
 
         // Process-text input that is not a URL becomes a search in the user's
-        // engine instead of being rejected as an unopenable string.
+        // engine instead of being rejected as an unopenable string. The
+        // engine-built URL must then keep its query (it IS the payload), so
+        // query-param stripping is skipped for that case.
         val effectiveUrl =
             ProcessTextResolver.resolve(
                 text = url,
@@ -114,7 +121,7 @@ class RedirectActivity : ComponentActivity() {
                     ),
             )
 
-        val prepared = pipeline.prepare(effectiveUrl)
+        val prepared = pipeline.prepare(effectiveUrl, allowQueryParamStrip = effectiveUrl == url)
         val health = pipeline.healthSnapshot(dataRepository)
         val context = pipeline.routingContext(health, nowMillis = System.currentTimeMillis())
 
@@ -134,12 +141,22 @@ class RedirectActivity : ComponentActivity() {
         // dialog instead of redirecting; the dialog finishes the launch.
         val redirect = result as? RoutingResult.Redirect
         if (redirect != null && settings.isRouteAskMode(redirect.routeId)) {
+            // Resolve display names here, off the main thread — the manifest
+            // lookup may still hit disk on a cold start.
+            val askRoute = manifest?.routes?.find { it.id == redirect.routeId }
+            val displayNames =
+                AskRouteActivity.DisplayNames(
+                    serviceName = askRoute?.name ?: redirect.routeId,
+                    frontendName =
+                        askRoute?.frontends?.find { it.id == redirect.frontendId }?.name
+                            ?: redirect.frontendId,
+                )
             withContext(Dispatchers.Main.immediate) {
                 val launchContext = activeLaunchContext(app)
                 AskRouteActivity.start(
                     launchContext,
                     redirect,
-                    prepared.url,
+                    displayNames = displayNames,
                     preferredBrowserPackage = settings.selectedBrowserPackage,
                     hasBrowserPreference = true,
                 )
@@ -234,7 +251,8 @@ class RedirectActivity : ComponentActivity() {
 
     /**
      * Local privacy counters (3.4): one redirect/passthrough event plus the
-     * tracking parameters the router cleaned off the routed URL and the
+     * tracking parameters the router cleaned off the routed URL, the
+     * non-functional query parameters the pipeline stripped, and the
      * wrappers/short-links the pipeline unwrapped on the way.
      */
     private suspend fun recordOutcome(
@@ -256,7 +274,7 @@ class RedirectActivity : ComponentActivity() {
         dataRepository.addPrivacyStats(
             PrivacyStats(
                 totalRedirects = if (redirected) 1 else 0,
-                strippedTrackingParams = stripped.toLong(),
+                strippedTrackingParams = (stripped + prepared.strippedQueryParams).toLong(),
                 unwrappedWrappers = prepared.unwrappedLayers.toLong(),
                 resolvedShortLinks = if (prepared.shortLinkResolved) 1 else 0,
             ),

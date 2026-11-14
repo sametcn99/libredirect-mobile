@@ -104,6 +104,13 @@ data class AppSettings(
      * network" and requests go to the shortener, so off by default.
      */
     val shortLinkResolveEnabled: Boolean = false,
+    /**
+     * Strip every query parameter that is not functionally meaningful
+     * (video id, search term, permalink id, …) before routing, in addition
+     * to the tracking-parameter denylist. On by default; functional names
+     * are protected by [dev.libredirect.mobile.core.url.QueryParams].
+     */
+    val queryParamStripEnabled: Boolean = true,
     /** User-defined tracking parameter rules (3.2). */
     val customTrackingParams: List<CustomTrackingParam> = emptyList(),
     /** Block known tracker/content hosts inside the WebView (4.2). On by default. */
@@ -152,7 +159,6 @@ data class AppSettings(
         RoutingContext(
             exceptions = exceptions,
             disabledRoutes = disabledRoutes,
-            askModeRoutes = askModeRoutes,
             selectedFrontends = selectedFrontends,
             instanceSelections = instanceSelections,
             customTrackingRules = customTrackingRules(),

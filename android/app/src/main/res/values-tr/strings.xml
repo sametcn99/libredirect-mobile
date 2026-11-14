@@ -344,6 +344,8 @@
     <string name="settings_unwrap_wrappers">Yönlendirme sarmalayıcılarını ve AMP aç</string>
     <string name="settings_unwrap_wrappers_desc">google.com/url, facebook, out.reddit, AMP önbelleği gibi sarmalayıcı bağlantıların gerçek hedefini yönlendirmeden önce çıkarır. Tamamen çevrimdışı çalışır.</string>
     <string name="settings_short_links">Kısaltılmış bağlantıları çöz</string>
+    <string name="settings_strip_query_params">URL parametrelerini temizle</string>
+    <string name="settings_strip_query_params_desc">Yönlendirmeden önce gereksiz sorgu parametrelerini (?hl=en gibi dil etiketleri, paylaşım etiketleri, …) kaldırır; video kimliği ve arama terimi gibi işlevsel parametreler korunur. Varsayılan olarak açıktır.</string>
     <string name="settings_short_links_desc">t.co, bit.ly ve benzeri kısaltıcıları yönlendirmeden önce hedefine kadar takip eder. Varsayılan olarak kapalıdır: kısaltıcı servise ağ isteği yapılır. Yalnızca bilinen kısaltıcı alan adları takip edilir.</string>
     <string name="settings_custom_tracking">Özel takip parametreleri</string>
     <string name="settings_custom_tracking_desc_fmt">%1$d kullanıcı tanımlı kural</string>

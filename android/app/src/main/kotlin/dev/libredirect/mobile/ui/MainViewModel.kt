@@ -297,6 +297,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setShortLinkResolveEnabled(enabled: Boolean) =
         launchSafely { settingsRepository.setShortLinkResolveEnabled(enabled) }
 
+    fun setQueryParamStripEnabled(enabled: Boolean) =
+        launchSafely { settingsRepository.setQueryParamStripEnabled(enabled) }
+
     fun resetPrivacyStats() = launchSafely { browserDataRepository.resetPrivacyStats() }
 
     /** "Update blocklist now" (4.2): fetch → validate → activate, with a user-visible outcome. */
@@ -552,7 +555,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "Settings: routing=${settings.routingEnabled} paused=${settings.pausedUntilEpochMillis > 0} " +
                     "browser=inApp(${settings.selectedBrowserPackage == BrowserLauncher.IN_APP_BROWSER_PACKAGE}) " +
                     "blocker=${settings.contentBlockerEnabled} unwrap=${settings.unwrapWrappersEnabled} " +
-                    "shortLinks=${settings.shortLinkResolveEnabled} failover=${settings.autoFailoverEnabled} " +
+                    "shortLinks=${settings.shortLinkResolveEnabled} stripQuery=${settings.queryParamStripEnabled} " +
+                    "failover=${settings.autoFailoverEnabled} " +
                     "bgAudio=${settings.backgroundAudioEnabled} historyLimit=${settings.historyLimit}",
             )
             appendLine("Exceptions: ${settings.exceptions.size} rule(s)")
@@ -790,6 +794,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             privacyStats = _uiState.value.privacyStats,
             unwrapWrappersEnabled = settings.unwrapRedirectWrappersEnabled,
             shortLinkResolveEnabled = settings.shortLinkResolveEnabled,
+            queryParamStripEnabled = settings.queryParamStripEnabled,
             customTrackingParams = settings.customTrackingParams,
             contentBlockerEnabled = settings.contentBlockerEnabled,
             blocklistHostCount = cachedBlocklistHostCount,

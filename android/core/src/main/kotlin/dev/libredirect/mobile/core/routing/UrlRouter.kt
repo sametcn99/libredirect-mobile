@@ -86,12 +86,6 @@ class UrlRouter(
                     passthroughTrace(TrackingParams.stripFrom(input, url, scope), TraceReason.NO_ROUTE, route.id),
                 )
 
-            route.id in context.askModeRoutes ->
-                Decision(
-                    RoutingResult.Passthrough(TrackingParams.stripFrom(input, url, scope)),
-                    passthroughTrace(TrackingParams.stripFrom(input, url, scope), TraceReason.ASK_MODE, route.id),
-                )
-
             else -> applyStrategy(input, url, route.id, frontend, context)
         }
     }

@@ -7,9 +7,6 @@ package dev.libredirect.mobile.core.routing
  */
 data class RoutingContext(
     val exceptions: List<ExceptionRule> = emptyList(),
-    // Route ids the user set to "ask every time" (2.4): the router passes
-    // them through untouched and the Android layer asks before redirecting.
-    val askModeRoutes: Set<String> = emptySet(),
     // Route ids disabled by the user. Disabled routes pass the original URL through.
     val disabledRoutes: Set<String> = emptySet(),
     // routeId -> frontendId. Missing entry defaults to the route's first frontend.

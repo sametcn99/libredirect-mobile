@@ -345,6 +345,8 @@
     <string name="settings_unwrap_wrappers_desc">Extract the real target from google.com/url, facebook, out.reddit, AMP cache links and similar wrappers before routing. Entirely offline.</string>
     <string name="settings_short_links">Resolve shortener links</string>
     <string name="settings_short_links_desc">Follow t.co, bit.ly and similar shorteners to their target before routing. On by default off: this makes a network request to the shortener service. Only well-known shortener hosts are followed.</string>
+    <string name="settings_strip_query_params">Strip URL parameters</string>
+    <string name="settings_strip_query_params_desc">Drop every non-essential query parameter (locale tags like ?hl=en, share attribution, …) before routing; only functional ones such as video, search and permalink IDs are kept. On by default.</string>
     <string name="settings_custom_tracking">Custom tracking parameters</string>
     <string name="settings_custom_tracking_desc_fmt">%1$d user-defined parameter rule(s)</string>
     <string name="tracking_params_title">Custom tracking parameters</string>
