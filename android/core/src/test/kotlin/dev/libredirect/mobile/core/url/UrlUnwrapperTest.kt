@@ -87,6 +87,14 @@ class UrlUnwrapperTest {
     }
 
     @Test
+    fun `utf-8 percent-encoded target with non-ASCII characters unwraps`() {
+        assertEquals(
+            "https://example.org/çift",
+            UrlUnwrapper.unwrapOnce("https://l.facebook.com/l.php?u=https%3A%2F%2Fexample.org%2F%C3%A7ift"),
+        )
+    }
+
+    @Test
     fun `target that fails validation keeps the original`() {
         // Localhost target must not be produced as a "wrapped" destination.
         assertNull(UrlUnwrapper.unwrapOnce("https://l.facebook.com/l.php?u=http%3A%2F%2Flocalhost%3A8080%2Fx"))

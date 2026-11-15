@@ -92,11 +92,12 @@ object QueryParams {
         return StripResult(cleaned, removed)
     }
 
+    /** Java 10 `Charset` overloads are API 33+ only; UTF-8 behaves identically (issue #12). */
     private fun decodedName(pair: String): String? {
         val separator = pair.indexOf('=')
         val rawName = if (separator >= 0) pair.substring(0, separator) else pair
         return try {
-            URLDecoder.decode(rawName, Charsets.UTF_8)
+            URLDecoder.decode(rawName, Charsets.UTF_8.name())
         } catch (_: IllegalArgumentException) {
             null
         }

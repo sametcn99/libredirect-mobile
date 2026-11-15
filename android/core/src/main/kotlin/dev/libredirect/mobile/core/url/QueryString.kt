@@ -9,6 +9,11 @@ import java.net.URLEncoder
  * values — not raw percent-encoding. That's intentional here: a value
  * extracted from a source query string and re-embedded into a new one
  * should round-trip through the same convention.
+ *
+ * The String-name overloads are deliberate: the `Charset` overloads of
+ * `URLDecoder.decode`/`URLEncoder.encode` are Java 10 APIs that Android
+ * only ships from API 33, while this module supports API 26+. Android
+ * lint cannot catch this in a pure-JVM module (see issue #12).
  */
 object QueryString {
     fun find(
@@ -32,11 +37,11 @@ object QueryString {
             ?.firstOrNull { it.first }
             ?.second
 
-    fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
+    fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
 
     private fun decode(value: String): String? =
         try {
-            URLDecoder.decode(value, Charsets.UTF_8)
+            URLDecoder.decode(value, Charsets.UTF_8.name())
         } catch (_: IllegalArgumentException) {
             null
         }

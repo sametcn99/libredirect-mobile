@@ -58,4 +58,11 @@ class QueryParamsTest {
         assertEquals("https://example.com/?keep=1", result.url)
         assertEquals(1, result.removedCount)
     }
+
+    @Test
+    fun `percent-encoded functional names survive stripping verbatim`() {
+        val result = strip("https://youtube.com/watch?%76=abc&hl=en")
+        assertEquals("https://youtube.com/watch?%76=abc", result.url)
+        assertEquals(1, result.removedCount)
+    }
 }

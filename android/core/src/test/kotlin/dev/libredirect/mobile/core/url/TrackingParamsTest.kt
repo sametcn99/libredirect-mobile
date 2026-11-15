@@ -28,6 +28,11 @@ class TrackingParamsTest {
     }
 
     @Test
+    fun `percent-encoded tracking names are matched after decoding`() {
+        assertEquals("id=7", TrackingParams.cleanQuery("utm%5Fsource=x&id=7", "example.org"))
+    }
+
+    @Test
     fun `global click identifiers are removed`() {
         assertEquals("p=1", TrackingParams.cleanQuery("p=1&fbclid=IwAR123", "example.org"))
         assertEquals("p=1", TrackingParams.cleanQuery("p=1&gclid=EAIaIQ", "example.org"))

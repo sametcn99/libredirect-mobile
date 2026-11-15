@@ -104,9 +104,10 @@ object UrlUnwrapper {
         }
     }
 
+    // Java 10 `Charset` overloads are API 33+ only; UTF-8 behaves identically (issue #12).
     private fun String.decodeLeniently(): String? =
         try {
-            URLDecoder.decode(this, Charsets.UTF_8)
+            URLDecoder.decode(this, Charsets.UTF_8.name())
         } catch (_: IllegalArgumentException) {
             null
         }
