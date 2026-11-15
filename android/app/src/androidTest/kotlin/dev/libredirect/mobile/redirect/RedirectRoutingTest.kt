@@ -29,8 +29,12 @@ class RedirectRoutingTest {
                 action = Intent.ACTION_VIEW
                 data = Uri.parse("https://www.youtube.com/watch?v=abc")
             }
+        // RedirectActivity is a NoDisplay router that finishes itself as soon
+        // as the handoff is done, so onActivity races with the self-finish
+        // (observed failing on an API 28 emulator). Waiting for the finish
+        // proves the activity ran and completed without crashing.
         ActivityScenario.launch<RedirectActivity>(intent).use { scenario ->
-            scenario.onActivity { activity -> assertNotNull(activity) }
+            scenario.awaitDestroyed()
         }
 
         // The launch intent the browser would receive carries the extras.
@@ -55,10 +59,11 @@ class RedirectRoutingTest {
                 action = Intent.ACTION_PROCESS_TEXT
                 putExtra(android.content.Intent.EXTRA_PROCESS_TEXT, "javascript:alert(1)")
             }
+        // Fail-closed: a non-http(s) input must be dropped, not opened — the
+        // activity finishes without forwarding anything to a browser.
+        // Same self-finishing-activity caveat as above: wait for the finish.
         ActivityScenario.launch<RedirectActivity>(intent).use { scenario ->
-            scenario.onActivity { activity -> assertNotNull(activity) }
+            scenario.awaitDestroyed()
         }
-        // No browser launch: a non-http(s) input must be dropped (fail-closed
-        // for ineligible input), which the activity finishes without forwarding.
     }
 }
