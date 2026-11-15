@@ -20,6 +20,7 @@ androidxTestExtJunit = "1.2.1"
 espressoCore = "3.6.1"
 ktlint = "12.1.2"
 detekt = "1.23.8"
+animalsniffer = "2.0.1"
 
 [libraries]
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
@@ -51,6 +52,7 @@ androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-man
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+animalsniffer = { id = "ru.vyarus.animalsniffer", version.ref = "animalsniffer" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

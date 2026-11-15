@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ktlint) apply false
     alias(libs.plugins.detekt) apply false
+    alias(libs.plugins.animalsniffer) apply false
 }
 
 val lintFixRequested = gradle.startParameter.taskNames.any { taskName ->
