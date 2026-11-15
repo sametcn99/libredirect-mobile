@@ -16,6 +16,7 @@ import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlCandidate
 import dev.libredirect.mobile.core.url.UrlParser
 import dev.libredirect.mobile.diagnostics.DiagnosticsLog
+import dev.libredirect.mobile.diagnostics.RoutingOutcomeLog
 import dev.libredirect.mobile.settings.AppSettings
 import dev.libredirect.mobile.settings.SettingsRepository
 import dev.libredirect.mobile.ui.browser.BrowserDataRepository
@@ -50,10 +51,11 @@ class RedirectActivity : ComponentActivity() {
         // invisible and finishes (or is torn down) as soon as the user moves
         // on — a lifecycle-scoped coroutine would be cancelled mid-route and
         // silently drop the link.
+        val stage = RouteStage()
         app.applicationScope.launch {
             try {
                 val incomingUrl = extractUrl(intent)
-                if (incomingUrl != null) route(app, incomingUrl, referrer)
+                if (incomingUrl != null) route(app, incomingUrl, referrer, stage)
             } catch (_: CancellationException) {
                 // Scope cancellation means the process is going away anyway.
             } catch (error: Throwable) {
@@ -61,14 +63,24 @@ class RedirectActivity : ComponentActivity() {
                 // failures have happened before — see v1.3.7) must land here
                 // with a diagnostic record, not in the crash-recovery handler
                 // that restarts MainActivity and silently loses this log.
-                Log.e(TAG, "Could not route incoming URL", error)
-                DiagnosticsLog.record(TAG, "Routing failed: ${error.message}")
+                Log.e(TAG, "Could not route incoming URL at stage=${stage.current}", error)
+                DiagnosticsLog.record(TAG, error, "routing failed at stage=${stage.current}")
                 showMessage(app, R.string.redirect_cannot_open)
             } finally {
                 // Always finish on the main thread so the translucent proxy window closes cleanly.
                 finishOnMain()
             }
         }
+    }
+
+    /**
+     * Which pipeline step a link is currently in, so a failure record says
+     * WHERE it broke (extract → manifest-load → settings → prepare →
+     * resolve → ask → launch), not just that it broke.
+     */
+    private class RouteStage {
+        @Volatile
+        var current: String = "extract"
     }
 
     private fun extractUrl(intent: Intent): String? =
@@ -99,7 +111,9 @@ class RedirectActivity : ComponentActivity() {
         app: LibRedirectApplication,
         url: String,
         referrer: String?,
+        stage: RouteStage,
     ) {
+        stage.current = "manifest-load"
         val manifest = withContext(Dispatchers.IO) { app.manifestRepository.activeManifest() }
         val settings = SettingsRepository(app).current()
         val dataRepository = BrowserDataRepository(app)
@@ -121,7 +135,9 @@ class RedirectActivity : ComponentActivity() {
                     ),
             )
 
+        stage.current = "prepare"
         val prepared = pipeline.prepare(effectiveUrl, allowQueryParamStrip = effectiveUrl == url)
+        stage.current = "resolve"
         val health = pipeline.healthSnapshot(dataRepository)
         val context = pipeline.routingContext(health, nowMillis = System.currentTimeMillis())
 
@@ -134,13 +150,19 @@ class RedirectActivity : ComponentActivity() {
             } else {
                 dev.libredirect.mobile.core.routing.UrlRouter(manifest).resolve(prepared.url, context)
             }
+        RoutingOutcomeLog.record(prepared.url, result)
 
-        val destination = destinationFor(result) ?: return showMessage(app, R.string.redirect_cannot_open)
+        val destination = destinationFor(result)
+        if (destination == null) {
+            recordNoDestination(intent.action, result, stage.current, prepared.url)
+            return showMessage(app, R.string.redirect_cannot_open)
+        }
 
         // 2.4: services in "ask every time" mode open the lightweight ask
         // dialog instead of redirecting; the dialog finishes the launch.
         val redirect = result as? RoutingResult.Redirect
         if (redirect != null && settings.isRouteAskMode(redirect.routeId)) {
+            stage.current = "ask"
             // Resolve display names here, off the main thread — the manifest
             // lookup may still hit disk on a cold start.
             val askRoute = manifest?.routes?.find { it.id == redirect.routeId }
@@ -177,6 +199,7 @@ class RedirectActivity : ComponentActivity() {
         // Hand off to the browser on the main thread using the alive Activity
         // context first (prevents Android 14+ BAL blocks), finish the
         // translucent proxy immediately, and persist stats in the background.
+        stage.current = "launch"
         val launched =
             withContext(Dispatchers.Main.immediate) {
                 val launchContext = activeLaunchContext(app)
@@ -191,6 +214,7 @@ class RedirectActivity : ComponentActivity() {
                 ok
             }
         if (!launched) {
+            recordLaunchFailure(settings, prepared.url, hadRedirect = redirect != null)
             showMessage(app, R.string.redirect_no_browser)
         } else if (redirect != null || (result is RoutingResult.Passthrough && prepared.url != effectiveUrl)) {
             scheduleStatsRecord(
@@ -207,6 +231,34 @@ class RedirectActivity : ComponentActivity() {
 
     private fun activeLaunchContext(app: LibRedirectApplication): Context =
         if (!isFinishing && !isDestroyed) this@RedirectActivity else app
+
+    /** Diagnostics keep host-only traces: never the full URL (§6 privacy). */
+    private fun hostOf(url: String): String = UrlParser.parse(url)?.host ?: "(unparseable)"
+
+    private fun recordNoDestination(
+        intentAction: String?,
+        result: RoutingResult,
+        stage: String,
+        url: String,
+    ) {
+        DiagnosticsLog.record(
+            TAG,
+            "No destination for action=$intentAction outcome=${result.javaClass.simpleName} " +
+                "stage=$stage host=${hostOf(url)}",
+        )
+    }
+
+    private fun recordLaunchFailure(
+        settings: AppSettings,
+        url: String,
+        hadRedirect: Boolean,
+    ) {
+        val preferred = settings.selectedBrowserPackage ?: "default"
+        DiagnosticsLog.record(
+            TAG,
+            "Browser launch returned false: host=${hostOf(url)} preferred=$preferred redirect=$hadRedirect",
+        )
+    }
 
     private fun finishIfAlive() {
         if (!isFinishing && !isDestroyed) finish()

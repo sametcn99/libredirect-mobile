@@ -4,8 +4,10 @@ import android.app.Application
 import android.content.Intent
 import android.os.Process
 import android.util.Log
+import dev.libredirect.mobile.diagnostics.DiagnosticsLog
 import dev.libredirect.mobile.downloads.DownloadRepository
 import dev.libredirect.mobile.manifest.ManifestRepository
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +29,7 @@ class LibRedirectApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        DiagnosticsLog.install(File(filesDir, "diagnostics/recent-errors.jsonl"))
         installCrashRecovery()
     }
 
@@ -47,6 +50,13 @@ class LibRedirectApplication : Application() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             Log.e(TAG, "Unhandled exception on ${thread.name}", throwable)
+            // Persist the crash into the diagnostics ring BEFORE restarting:
+            // before issue #12's follow-ups this was in-memory only, so the
+            // restart destroyed the exact error the user would have reported.
+            // Must never throw inside the handler itself.
+            runCatching {
+                DiagnosticsLog.record(TAG, throwable, "unhandled exception on thread=${thread.name}")
+            }
             val crashPrefs = getSharedPreferences(CRASH_PREFS, MODE_PRIVATE)
             val lastRestart = crashPrefs.getLong(KEY_LAST_CRASH_RESTART, 0L)
             val recentlyRestarted = System.currentTimeMillis() - lastRestart < CRASH_RESTART_WINDOW_MILLIS

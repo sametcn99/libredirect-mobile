@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import dev.libredirect.mobile.diagnostics.DiagnosticsLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +43,7 @@ import java.util.concurrent.TimeUnit
 
 private const val MAX_CONCURRENT_DOWNLOADS = 2
 private const val MAX_HISTORY_ITEMS = 200
+private const val MAX_FAILURE_DETAIL_LENGTH = 120
 private const val PROGRESS_EMIT_INTERVAL_MS = 250L
 private const val PERSIST_INTERVAL_MS = 2_000L
 private const val MILLIS_PER_SEC = 1_000L
@@ -1131,9 +1133,19 @@ class DownloadRepository(
                 }
             }
         }
-        failedItem?.let {
-            _events.tryEmit(DownloadEvent.Failed(it))
-            onPostCompletionNotification(it)
+        failedItem?.let { item ->
+            _events.tryEmit(DownloadEvent.Failed(item))
+            onPostCompletionNotification(item)
+            // Diagnostics hook (issue #12 follow-up): every download failure
+            // funnels through here, so one record covers all failure paths.
+            // Host-only on purpose — never the full URL.
+            val detailPart = detail?.take(MAX_FAILURE_DETAIL_LENGTH)?.let { " detail=$it" }.orEmpty()
+            val httpPart = httpStatusCode?.let { " http=$it" }.orEmpty()
+            DiagnosticsLog.record(
+                "Downloads",
+                "Download failed: host=${item.sourceHost.ifBlank { "(unknown)" }} " +
+                    "reason=$reason$detailPart$httpPart",
+            )
         }
     }
 

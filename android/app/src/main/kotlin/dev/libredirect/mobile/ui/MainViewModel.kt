@@ -29,6 +29,7 @@ import dev.libredirect.mobile.core.routing.RoutingTrace
 import dev.libredirect.mobile.core.routing.TraceReason
 import dev.libredirect.mobile.core.url.UrlCandidate
 import dev.libredirect.mobile.diagnostics.DiagnosticsLog
+import dev.libredirect.mobile.diagnostics.RoutingOutcomeLog
 import dev.libredirect.mobile.manifest.InstanceHealthWorker
 import dev.libredirect.mobile.manifest.InstanceRefreshWorker
 import dev.libredirect.mobile.manifest.RefreshResult
@@ -54,6 +55,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.time.Instant
 
 // The settings plumbing is intentionally consolidated here: every Settings
 // card maps 1:1 to a small setter, and splitting those across helpers would
@@ -548,6 +550,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appendLine("LibRedirect Mobile diagnostics")
             appendLine("${settings.appVersionDisplay}")
             appendLine("Android API: ${Build.VERSION.SDK_INT}")
+            appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("App start: ${Instant.ofEpochMilli(DiagnosticsLog.startedAtEpochMillis)}")
             appendLine("WebView: $webviewVersion")
             appendLine("Routing data revision: ${settings.manifestRevision ?: "n/a"}")
             appendLine("Rules: $routeCount services / $frontendCount frontends / $instanceCount instances")
@@ -564,7 +568,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "redirects=${settings.privacyStats.totalRedirects} " +
                     "stripped=${settings.privacyStats.strippedTrackingParams}"
             appendLine("Privacy counters: $counters")
-            appendLine("--- recent errors ---")
+            appendLine("--- recent routing outcomes (host only, this session) ---")
+            appendLine(RoutingOutcomeLog.asText())
+            appendLine("--- recent errors (persisted across restarts) ---")
             append(DiagnosticsLog.asText())
         }
     }
@@ -859,7 +865,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 throw error
             } catch (error: Exception) {
                 Log.e(TAG, "Unexpected error", error)
-                DiagnosticsLog.record(TAG, error.message ?: "unexpected error")
+                DiagnosticsLog.record(TAG, error, "unexpected error")
                 _uiState.value =
                     _uiState.value.copy(
                         errorMessage = error.message ?: app.getString(R.string.generic_error),
