@@ -933,7 +933,9 @@ private fun AddressBar(
     }
 
     val shape = CircleShape
-    val shownValue = if (isFocused) fieldValue else TextFieldValue(tab?.displayHost.orEmpty())
+    // Full URL at rest (issue follow-up: the bar used to collapse to the
+    // bare domain); editing keeps its own field value.
+    val shownValue = if (isFocused) fieldValue else TextFieldValue(url)
     val textStyle =
         MaterialTheme.typography.bodyLarge.copy(
             color = MaterialTheme.colorScheme.onSurface,

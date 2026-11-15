@@ -58,7 +58,7 @@ data class BrowserTab(
     /** Auto-hide toolbar state with hysteresis; flips only on scroll-direction change (4.5). */
     val toolbarHidden: Boolean = false,
 ) {
-    /** Host shown when the address bar isn't being edited, e.g. "example.com". */
+    /** Short host label for tab titles, menus and other UI surfaces, e.g. "example.com". */
     val displayHost: String
         get() = hostOf(url)
 
