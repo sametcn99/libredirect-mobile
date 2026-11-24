@@ -41,7 +41,7 @@ object BookmarkCodec {
         sb.appendLine("<DL><p>")
         for (b in bookmarks) {
             val addDate = b.createdAtEpochMillis / MILLIS_PER_SECOND
-            val escapedUrl = escapeHtml(b.url)
+            val escapedUrl = escapeHtml(b.openUrl)
             val escapedTitle = escapeHtml(b.title.ifBlank { b.url })
             sb.appendLine("    <DT><A HREF=\"$escapedUrl\" ADD_DATE=\"$addDate\">$escapedTitle</A>")
         }

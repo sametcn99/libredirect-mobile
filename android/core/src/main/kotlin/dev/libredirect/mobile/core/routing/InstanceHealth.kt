@@ -16,12 +16,19 @@ data class InstanceHealth(
     val latencyMillis: Long? = null,
     /** Epoch millis of the most recent observed load failure, or null. */
     val lastFailedAtMillis: Long? = null,
+    val httpStatus: Int? = null,
+    val measuredAtMillis: Long? = null,
 ) {
     /** True while the instance is serving its post-failure cooldown window. */
     fun isCoolingDown(nowMillis: Long): Boolean {
         val failedAt = lastFailedAtMillis ?: return false
         return nowMillis - failedAt < COOLDOWN_MILLIS
     }
+
+    fun currentLatency(nowMillis: Long): Long? =
+        latencyMillis.takeUnless {
+            measuredAtMillis != null && nowMillis - measuredAtMillis >= MEASUREMENT_VALID_MILLIS
+        }
 
     /**
      * Relative selection weight for latency-weighted random picking: faster
@@ -40,6 +47,7 @@ data class InstanceHealth(
     companion object {
         /** How long an instance stays excluded after a failed load (2.1/2.2). */
         const val COOLDOWN_MILLIS = 10 * 60 * 1000L
+        private const val MEASUREMENT_VALID_MILLIS = 48 * 60 * 60 * 1000L
         const val LATENCY_FAILED = -1L
 
         const val NEUTRAL_WEIGHT = 1.0

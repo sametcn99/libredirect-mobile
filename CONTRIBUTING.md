@@ -52,6 +52,7 @@ cd android
 ./gradlew :core:test              # routing engine unit tests (JVM)
 ./gradlew testDebugUnitTest       # app module unit tests
 ./gradlew assembleDebug           # build the debug APK
+./gradlew :app:connectedDebugAndroidTest  # run with a booted emulator or device
 ```
 
 On Windows, use `gradlew.bat` instead of `./gradlew`.
@@ -135,8 +136,10 @@ Maintainers release as follows (there is no manual tagging):
 1. Bump `versionName` and `versionCode` in `android/app/build.gradle.kts`.
    The version display reads `BuildConfig` at compile time, so no other
    file needs the same numbers.
-2. Commit, then dispatch the `Android Release` GitHub Actions workflow
-   (`workflow_dispatch`). It reads the version from the build file, builds
+2. Commit and wait for Android CI to pass for that exact commit on `main`,
+   including the API 28 and API 36 device suites. Add release notes in
+   `.github/release-notes/v{versionName}.md` when writing a curated description.
+   Dispatch the `Android Release` GitHub Actions workflow. It builds
    and signs the APK, smoke-tests the bundled manifest inside the release
    APK, and publishes a GitHub Release tagged `v{versionName}` together
    with a SHA-256 checksum file.

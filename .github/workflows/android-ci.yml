@@ -96,3 +96,54 @@ jobs:
           if ! diff -u build-a.txt build-b.txt; then
             echo "::error::Release build is not reproducible"; exit 1
           fi
+
+  device-tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [28, 36]
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run connected tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          working-directory: android
+          script: ./gradlew :app:connectedDebugAndroidTest
+      - name: Verify device tests actually ran and passed
+        run: |
+          python3 - <<'PYXML'
+          import pathlib
+          import xml.etree.ElementTree as ET
+
+          reports = pathlib.Path("app/build/outputs/androidTest-results/connected").rglob("TEST-*.xml")
+          suites = [suite for report in reports for suite in ET.parse(report).iter("testsuite")]
+          ran = sum(int(suite.get("tests", 0)) - int(suite.get("skipped", 0)) for suite in suites)
+          failures = sum(int(suite.get("failures", 0)) + int(suite.get("errors", 0)) for suite in suites)
+          if ran == 0 or failures:
+              raise SystemExit(f"Connected tests executed: {ran}, failures: {failures}")
+          print(f"{ran} connected tests passed")
+          PYXML
+      - name: Upload device test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-test-results-api-${{ matrix.api-level }}
+          path: android/app/build/outputs/androidTest-results/connected/

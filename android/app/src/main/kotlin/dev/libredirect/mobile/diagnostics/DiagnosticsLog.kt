@@ -1,5 +1,6 @@
 package dev.libredirect.mobile.diagnostics
 
+import dev.libredirect.mobile.core.url.UrlParser
 import java.io.File
 import java.time.Instant
 import kotlinx.serialization.Serializable
@@ -101,6 +102,13 @@ internal class DiagnosticsBuffer(
     private val capacity: Int,
     private val persistenceFile: File?,
 ) {
+    private val webLink = Regex("""https?://[^\s<>"']+""", RegexOption.IGNORE_CASE)
+
+    private fun redactLinks(message: String): String =
+        webLink.replace(message) { match ->
+            UrlParser.parse(match.value)?.host ?: "(web address)"
+        }
+
     private val entries = ArrayDeque<DiagnosticsLog.Entry>()
 
     init {
@@ -160,10 +168,10 @@ internal class DiagnosticsBuffer(
         lines.forEach { line ->
             runCatching { json.decodeFromString(DiagnosticsLog.Entry.serializer(), line) }
                 .getOrNull()
-                ?.let(entries::addLast)
+                ?.let { entries.addLast(it.copy(message = redactLinks(it.message))) }
         }
         while (entries.size > capacity) entries.removeFirst()
-        if (lines.size > entries.size) persist()
+        if (lines.isNotEmpty()) persist()
     }
 
     private fun repeatOfLast(

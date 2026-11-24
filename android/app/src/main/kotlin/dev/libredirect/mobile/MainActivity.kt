@@ -29,9 +29,10 @@ import dev.libredirect.mobile.ui.theme.LibRedirectMobileTheme
 class MainActivity : AppCompatActivity(), BrowserRoleHost {
     private companion object {
         const val ASPECT_SCALE = 1000
-        const val MIN_PIP_ASPECT = 0.4f
-        const val MAX_PIP_ASPECT = 2.4f
+        const val MIN_PIP_NUMERATOR = 419
+        const val MAX_PIP_NUMERATOR = 2390
         const val WIDE_ASPECT = 16
+        const val WIDE_ASPECT_HEIGHT = 9
     }
 
     private val browserViewModel: BrowserViewModel by viewModels()
@@ -110,9 +111,12 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
         val aspect = browserViewModel.fullscreenAspectRatio()
         val rational =
             when {
-                aspect != null && aspect in MIN_PIP_ASPECT..MAX_PIP_ASPECT ->
-                    Rational((aspect * ASPECT_SCALE).toInt(), ASPECT_SCALE.toInt())
-                else -> Rational(WIDE_ASPECT, 1)
+                aspect != null && aspect.isFinite() && aspect > 0 ->
+                    Rational(
+                        (aspect * ASPECT_SCALE).toInt().coerceIn(MIN_PIP_NUMERATOR, MAX_PIP_NUMERATOR),
+                        ASPECT_SCALE,
+                    )
+                else -> Rational(WIDE_ASPECT, WIDE_ASPECT_HEIGHT)
             }
         val params = PictureInPictureParams.Builder().setAspectRatio(rational).build()
         try {
@@ -156,6 +160,11 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
         isColdStart: Boolean,
     ) {
         when (intent?.action) {
+            Intent.ACTION_SEND ->
+                if (intent.type == "text/plain") {
+                    intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.let(mainViewModel::inspectLinks)
+                }
+
             ShortcutActions.OPEN_NEW_TAB -> {
                 if (!isColdStart) {
                     browserViewModel.openNewTab()
@@ -190,6 +199,7 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
                     routeId = intent.getStringExtra(BrowserLauncher.EXTRA_ROUTE_ID),
                     frontendId = intent.getStringExtra(BrowserLauncher.EXTRA_FRONTEND_ID),
                     instance = intent.getStringExtra(BrowserLauncher.EXTRA_INSTANCE),
+                    alreadyResolved = true,
                 )
             }
         }

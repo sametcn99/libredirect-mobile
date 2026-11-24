@@ -75,7 +75,16 @@ class BrowserLauncher(
         url: String,
         preferredPackage: String?,
         redirect: InAppRedirectInfo? = null,
-    ): Boolean {
+    ): Boolean = launchOutcome(context, url, preferredPackage, redirect) != LaunchOutcome.FAILED
+
+    enum class LaunchOutcome { IN_APP, EXTERNAL, CHOOSER, FAILED }
+
+    fun launchOutcome(
+        context: Context,
+        url: String,
+        preferredPackage: String?,
+        redirect: InAppRedirectInfo? = null,
+    ): LaunchOutcome {
         if (preferredPackage == IN_APP_BROWSER_PACKAGE) {
             val intent =
                 Intent().apply {
@@ -90,10 +99,15 @@ class BrowserLauncher(
                         putExtra(EXTRA_INSTANCE, it.instance)
                     }
                 }
-            return tryStart(context, intent)
+            return if (tryStart(context, intent)) LaunchOutcome.IN_APP else LaunchOutcome.FAILED
         }
 
-        val target = preferredPackage?.takeIf { isInstalled(it) } ?: systemDefaultBrowserPackage()
+        val target =
+            when (preferredPackage) {
+                ASK_PACKAGE -> null
+                null, SYSTEM_DEFAULT_PACKAGE -> systemDefaultBrowserPackage()
+                else -> preferredPackage.takeIf { canHandle(url, it) }
+            }
         // NEW_TASK on the VIEW launches: callers may start these from a
         // non-activity context (RedirectActivity routes on the application
         // scope), where starting an activity without a task flag throws.
@@ -115,8 +129,34 @@ class BrowserLauncher(
                     )
                 }
             }
-        return tryStart(context, targetIntent)
+        return if (tryStart(context, targetIntent)) {
+            if (target == null) LaunchOutcome.CHOOSER else LaunchOutcome.EXTERNAL
+        } else if (target != null) {
+            launchOutcome(context, url, ASK_PACKAGE, redirect)
+        } else {
+            LaunchOutcome.FAILED
+        }
     }
+
+    private fun canHandle(
+        url: String,
+        target: String,
+    ): Boolean =
+        target != ownPackageName &&
+            packageManager.resolveActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(target), PackageManager.MATCH_DEFAULT_ONLY,
+            ) != null
+
+    fun installedTargets(url: String): List<BrowserInfo> =
+        (
+            installedBrowsers() +
+                packageManager.queryIntentActivities(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                    PackageManager.MATCH_ALL,
+                ).filterNot { it.activityInfo.packageName == ownPackageName }
+                    .map { BrowserInfo(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
+        )
+            .distinctBy { it.packageName }
 
     private fun systemDefaultBrowserPackage(): String? {
         val resolved = packageManager.resolveActivity(probeIntent(), PackageManager.MATCH_DEFAULT_ONLY)
@@ -142,6 +182,7 @@ class BrowserLauncher(
     companion object {
         const val IN_APP_BROWSER_PACKAGE = "dev.libredirect.mobile.inapp"
         const val SYSTEM_DEFAULT_PACKAGE = "system"
+        const val ASK_PACKAGE = "ask"
         const val ACTION_OPEN_IN_APP_BROWSER = "dev.libredirect.mobile.ACTION_OPEN_IN_APP_BROWSER"
         const val EXTRA_ORIGINAL_URL = "dev.libredirect.mobile.EXTRA_ORIGINAL_URL"
         const val EXTRA_ROUTE_ID = "dev.libredirect.mobile.EXTRA_ROUTE_ID"

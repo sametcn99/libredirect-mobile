@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package dev.libredirect.mobile.ui
 
@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +34,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,6 +45,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.settings.RouteLinkPolicy
 import dev.libredirect.mobile.ui.browser.BrowserPickerScreen
 import dev.libredirect.mobile.ui.browser.BrowserViewModel
 import dev.libredirect.mobile.ui.browser.InAppBrowserScreen
@@ -50,12 +53,16 @@ import dev.libredirect.mobile.ui.custom.CustomServicesScreen
 import dev.libredirect.mobile.ui.exceptions.ExceptionsScreen
 import dev.libredirect.mobile.ui.home.HomeActions
 import dev.libredirect.mobile.ui.home.HomeScreen
+import dev.libredirect.mobile.ui.home.LinkInspectionScreen
+import dev.libredirect.mobile.ui.home.RoutingSetupScreen
 import dev.libredirect.mobile.ui.service.ServiceDetailScreen
 import dev.libredirect.mobile.ui.services.ServicesScreen
 import dev.libredirect.mobile.ui.settings.DiagnosticsScreen
 import dev.libredirect.mobile.ui.settings.SettingsActions
 import dev.libredirect.mobile.ui.settings.SettingsScreen
 
+internal const val ROUTE_INSPECT_LINK = "inspect-link"
+private const val ROUTE_SETUP = "routing-setup"
 private const val ROUTE_HOME = "home"
 private const val ROUTE_BROWSER = "browser"
 
@@ -90,7 +97,7 @@ fun AppNavHost(
     navController: NavHostController = rememberNavController(),
 ) {
     val state by mainViewModel.uiState.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val currentState by rememberUpdatedState(state)
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -161,6 +168,14 @@ fun AppNavHost(
                 redirectCount = currentState.redirectStats[service.routeId] ?: 0,
                 onPinShortcut = { mainViewModel.pinServiceShortcut(service.routeId) },
                 routeMode = service.routeMode,
+                linkPolicy = currentState.linkPolicies.routes[routeId]
+                    ?: RouteLinkPolicy(fallback = currentState.linkPolicies.defaultFallback),
+                onTargetChange = { target ->
+                    mainViewModel.updateServiceLinkPolicy(routeId) { it.copy(targetPackage = target) }
+                },
+                onFallbackChange = { fallback ->
+                    mainViewModel.updateServiceLinkPolicy(routeId) { it.copy(fallback = fallback) }
+                },
                 onRouteModeChange = { mode -> mainViewModel.setRouteMode(service.routeId, mode) },
                 instanceHealth = currentState.instanceHealth,
                 isMeasuringHealth = currentState.isMeasuringHealth,
@@ -254,7 +269,22 @@ fun AppNavHost(
                                 onPauseRouting = mainViewModel::pauseRouting,
                                 onResumeRouting = mainViewModel::resumeRouting,
                                 onResetPrivacyStats = mainViewModel::resetPrivacyStats,
+                                onInspectLinks = mainViewModel::inspectLinks,
+                                onOpenSetup = { navController.navigate(ROUTE_SETUP) },
                             ),
+                    )
+                }
+
+                composable(ROUTE_SETUP) {
+                    RoutingSetupScreen(onBack = { navController.popBackStack() })
+                }
+
+                composable(ROUTE_INSPECT_LINK) {
+                    val input by mainViewModel.inspectionText.collectAsState()
+                    LinkInspectionScreen(
+                        text = input,
+                        inspect = mainViewModel::inspectLink,
+                        onBack = { navController.popBackStack() },
                     )
                 }
 
@@ -305,6 +335,9 @@ fun AppNavHost(
                                 onDownloadWifiOnlyChange = mainViewModel::setDownloadWifiOnly,
                                 onClearIncognitoDownloadsChange = mainViewModel::setClearIncognitoDownloads,
                                 onCloseIncognitoChange = mainViewModel::setCloseIncognitoOnExit,
+                                onRoutingPreset = mainViewModel::applyRoutingPreset,
+                                onHostLinkPolicyChange = mainViewModel::updateHostLinkPolicy,
+                                onHistoryLimitChange = mainViewModel::setHistoryLimit,
                                 onAutoCloseTabsChange = mainViewModel::setAutoCloseTabs,
                                 onAutoHideToolbarChange = mainViewModel::setAutoHideToolbar,
                                 onExportSettings = mainViewModel::exportSettingsTo,

@@ -57,6 +57,18 @@
                 android:resource="@xml/shortcuts" />
         </activity>
 
+        <activity-alias
+            android:name=".InspectSharedLink"
+            android:exported="true"
+            android:label="@string/inspect_share_target"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+
         <activity
             android:name=".redirect.RedirectActivity"
             android:excludeFromRecents="true"

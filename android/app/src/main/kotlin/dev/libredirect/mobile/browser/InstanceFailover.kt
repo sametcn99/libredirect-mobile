@@ -59,6 +59,13 @@ object InstanceFailover {
             } else {
                 emptyList()
             }
-        return healthy.minByOrNull { instance -> health[instance]?.latencyMillis ?: Long.MAX_VALUE }
+        return healthy.minByOrNull { instance ->
+            val latency = health[instance]?.currentLatency(nowMillis)
+            when {
+                latency == null -> Long.MAX_VALUE - 1
+                latency < 0 -> Long.MAX_VALUE
+                else -> latency
+            }
+        }
     }
 }

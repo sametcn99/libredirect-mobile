@@ -17,4 +17,6 @@ data class HomeActions(
     val onPauseRouting: (Int?) -> Unit = {},
     val onResumeRouting: () -> Unit = {},
     val onResetPrivacyStats: () -> Unit = {},
+    val onOpenSetup: () -> Unit = {},
+    val onInspectLinks: (String) -> Unit = {},
 )

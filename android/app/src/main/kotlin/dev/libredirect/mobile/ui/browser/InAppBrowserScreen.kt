@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package dev.libredirect.mobile.ui.browser
 
@@ -66,6 +66,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -308,7 +309,7 @@ fun InAppBrowserScreen(
                         .fillMaxWidth(),
             ) {
                 BrowserWebView(
-                    activeTabId = activeTab?.id,
+                    activeTabId = activeTab?.takeUnless { it.rendererLost }?.id,
                     isPageLoading = activeTab?.isLoading == true,
                     darkPages = darkPages,
                     viewModel = viewModel,
@@ -323,6 +324,10 @@ fun InAppBrowserScreen(
                         onRetry = viewModel::reloadActiveTab,
                         onTryAnotherInstance = viewModel::openInstancePickerIfAvailable,
                         onOpenExternal = { context.openExternalUrl(activeTab.url) },
+                        onOpenOriginal = viewModel::openFailedOriginal,
+                        canOpenOriginal = viewModel.canOpenFailedOriginal(activeTab.id),
+                        onOpenAlternative = viewModel::openAskedAlternative,
+                        canOpenAlternative = viewModel.canOpenAskedAlternative(activeTab.id),
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -385,7 +390,6 @@ fun InAppBrowserScreen(
     }
 }
 
-
 /** In-app error page shown over a failed main-frame load (A2). */
 @Composable
 private fun PageErrorOverlay(
@@ -394,6 +398,10 @@ private fun PageErrorOverlay(
     onRetry: () -> Unit,
     onTryAnotherInstance: () -> Unit,
     onOpenExternal: () -> Unit,
+    onOpenOriginal: () -> Unit,
+    canOpenOriginal: Boolean,
+    onOpenAlternative: () -> Unit,
+    canOpenAlternative: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -436,6 +444,12 @@ private fun PageErrorOverlay(
                 TextButton(onClick = onTryAnotherInstance) {
                     Text(stringResource(R.string.browser_menu_try_another_instance))
                 }
+            }
+            if (canOpenAlternative) {
+                TextButton(onClick = onOpenAlternative) { Text(stringResource(R.string.inspect_open)) }
+            }
+            if (canOpenOriginal) {
+                TextButton(onClick = onOpenOriginal) { Text(stringResource(R.string.inspect_unmodified)) }
             }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = onOpenExternal) {
@@ -659,7 +673,15 @@ private fun BrowserSheets(
         AlertDialog(
             onDismissRequest = { viewModel.setClearDataConfirmVisible(false) },
             title = { Text(stringResource(R.string.browser_menu_clear_cookies_cache)) },
-            text = { Text(stringResource(R.string.browser_clear_data_confirm)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.browser_clear_data_confirm))
+                    TextButton(
+                        enabled = viewModel.isSiteDataDeletionSupported() && state.activeTab?.isSecure == true,
+                        onClick = viewModel::clearCurrentSiteBrowsingData,
+                    ) { Text(stringResource(R.string.browser_clear_this_site)) }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = viewModel::clearBrowsingData) {
                     Text(stringResource(R.string.action_clear))
@@ -1445,6 +1467,7 @@ private fun TransientBrowserDialogs(
             SiteSettingsSheet(
                 host = host,
                 siteSetting = viewModel.currentSiteSetting(host),
+                defaults = viewModel.siteDefaults(),
                 onToggle = { transform -> viewModel.updateSiteSetting(host, transform) },
                 onReset = {
                     viewModel.resetSiteSetting(host)

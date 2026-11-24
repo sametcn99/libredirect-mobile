@@ -41,7 +41,7 @@ class InstanceHealthWorker(
         var totalMeasured = 0
         targets.values.forEach { instances ->
             val results = probe.measure(instances)
-            dataRepository.saveLatencies(results)
+            dataRepository.saveInstanceMeasurements(results)
             totalMeasured += results.size
         }
         dataRepository.setLastLatencyMeasureResult(System.currentTimeMillis(), totalMeasured)

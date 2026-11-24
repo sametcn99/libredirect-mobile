@@ -53,6 +53,29 @@ class InstancePickerTest {
     }
 
     @Test
+    fun `fastest skips cooldown and prefers unmeasured over failed`() {
+        val now = 50_000L
+        val health =
+            mapOf(
+                "https://a.example" to InstanceHealth(latencyMillis = 2L, lastFailedAtMillis = now),
+                "https://b.example" to InstanceHealth(latencyMillis = -1L, httpStatus = 429),
+            )
+        val picker = InstancePicker()
+        assertEquals("https://c.example", picker.pick(frontend, InstanceSelection.Fastest, health, now))
+    }
+
+    @Test
+    fun `fastest prefers a fresh measurement over an expired lower latency`() {
+        val now = 180_000_000L
+        val health =
+            mapOf(
+                "https://a.example" to InstanceHealth(latencyMillis = 2L, measuredAtMillis = 1L),
+                "https://b.example" to InstanceHealth(latencyMillis = 15L, measuredAtMillis = now),
+            )
+        assertEquals("https://b.example", InstancePicker().pick(frontend, InstanceSelection.Fastest, health, now))
+    }
+
+    @Test
     fun `empty instance list yields null regardless of mode`() {
         val instanceless =
             Frontend(id = "official", name = "Official Site", strategy = Strategy.Passthrough)

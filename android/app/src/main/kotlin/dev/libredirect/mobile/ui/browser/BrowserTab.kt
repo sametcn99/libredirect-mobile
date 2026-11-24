@@ -37,6 +37,7 @@ data class BrowserTab(
     val isIncognito: Boolean = false,
     /** True while the tab shows the in-app error page instead of rendered content. */
     val pageError: Boolean = false,
+    val rendererLost: Boolean = false,
     val favicon: Bitmap? = null,
     /**
      * Scaled screenshot of the page as it last looked on screen, captured in
@@ -58,6 +59,9 @@ data class BrowserTab(
     /** Auto-hide toolbar state with hysteresis; flips only on scroll-direction change (4.5). */
     val toolbarHidden: Boolean = false,
 ) {
+    val routeSourceUrl: String?
+        get() = lastRedirect?.takeIf { it.redirectedUrl == url }?.originalUrl
+
     /** Short host label for tab titles, menus and other UI surfaces, e.g. "example.com". */
     val displayHost: String
         get() = hostOf(url)

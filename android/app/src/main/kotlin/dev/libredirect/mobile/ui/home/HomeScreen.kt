@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package dev.libredirect.mobile.ui.home
 
@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -44,7 +42,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -65,7 +67,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -83,6 +84,8 @@ import dev.libredirect.mobile.ui.browser.PrivacyStats
 import dev.libredirect.mobile.ui.services.ServiceCard
 
 private const val TOP_SERVICES_LIMIT = 5
+private const val FIFTEEN_MINUTES = 15
+private const val ONE_HOUR_MINUTES = 60
 
 // Mirrors MainViewModel.PAUSE_INDEFINITE: any pause stamp this far in the
 // future means "until I turn it back on".
@@ -207,6 +210,7 @@ fun HomeScreen(
                     },
                     onOpenInApp = ::openInAppBrowser,
                     onOpenExternal = ::openInSystemBrowser,
+                    onInspect = { actions.onInspectLinks(linkText) },
                 )
             }
 
@@ -282,13 +286,8 @@ private fun LazyListScope.homeStatusCards(
     actions: HomeActions,
     openUrl: (String) -> Unit,
 ) {
-    if (state.pausedUntilEpochMillis > System.currentTimeMillis()) {
-        item {
-            PausedBannerCard(
-                pausedUntilEpochMillis = state.pausedUntilEpochMillis,
-                onResume = actions.onResumeRouting,
-            )
-        }
+    item {
+        RoutingControls(state, actions)
     }
     if (state.updateAvailable != null) {
         val release = state.updateAvailable
@@ -319,6 +318,49 @@ private fun LazyListScope.homeStatusCards(
             )
         }
     }
+}
+
+@Composable
+private fun RoutingControls(
+    state: MainUiState,
+    actions: HomeActions,
+) {
+    var pauseMenu by remember { mutableStateOf(false) }
+    val paused = state.routingEnabled && state.pausedUntilEpochMillis > System.currentTimeMillis()
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                stringResource(
+                    if (state.routingEnabled) R.string.home_routing_active else R.string.home_routing_disabled,
+                ),
+            )
+            Switch(checked = state.routingEnabled, onCheckedChange = actions.onRoutingEnabledChange)
+        }
+        if (state.routingEnabled && !paused) {
+            Box {
+                TextButton(onClick = { pauseMenu = true }) { Text(stringResource(R.string.home_pause_menu)) }
+                DropdownMenu(expanded = pauseMenu, onDismissRequest = { pauseMenu = false }) {
+                    listOf(
+                        R.string.home_pause_15m to FIFTEEN_MINUTES,
+                        R.string.home_pause_1h to ONE_HOUR_MINUTES,
+                        R.string.home_pause_until_resume to null,
+                    )
+                        .forEach { (label, minutes) ->
+                            DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = {
+                                pauseMenu = false
+                                actions.onPauseRouting(minutes)
+                            })
+                        }
+                }
+            }
+        }
+    }
+    TextButton(onClick = actions.onOpenSetup) { Text(stringResource(R.string.setup_title)) }
+    if (paused) PausedBannerCard(state.pausedUntilEpochMillis, actions.onResumeRouting)
 }
 
 @Composable
@@ -376,6 +418,7 @@ private fun QuickLinkCard(
     onLinkTextChange: (String) -> Unit,
     onOpenInApp: () -> Unit,
     onOpenExternal: () -> Unit,
+    onInspect: () -> Unit,
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(18.dp),
@@ -409,7 +452,7 @@ private fun QuickLinkCard(
                 value = linkText,
                 onValueChange = onLinkTextChange,
                 placeholder = { Text(stringResource(R.string.home_quick_link_placeholder)) },
-                singleLine = true,
+                maxLines = 4,
                 isError = linkError != null,
                 shape = RoundedCornerShape(14.dp),
                 colors =
@@ -420,6 +463,10 @@ private fun QuickLinkCard(
                     ),
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            TextButton(onClick = onInspect, enabled = linkText.isNotBlank()) {
+                Text(stringResource(R.string.inspect_title))
+            }
 
             AnimatedVisibility(visible = linkError != null) {
                 linkError?.let {
@@ -461,7 +508,6 @@ private fun QuickLinkCard(
                     )
                 }
             }
-
         }
     }
 }

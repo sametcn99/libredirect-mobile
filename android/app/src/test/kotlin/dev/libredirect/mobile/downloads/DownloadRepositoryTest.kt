@@ -1,5 +1,6 @@
 package dev.libredirect.mobile.downloads
 
+import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,11 +28,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.net.InetSocketAddress
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 class DownloadRepositoryTest {
     @get:Rule
@@ -159,6 +162,7 @@ class DownloadRepositoryTest {
                     .code(200)
                     .message("OK")
                     .header("Content-Length", fullPayload.size.toString())
+                    .header("ETag", "\"v1\"")
                     .body(
                         bodySource.asResponseBody(
                             "application/octet-stream".toMediaType(),
@@ -167,7 +171,7 @@ class DownloadRepositoryTest {
                     ).build()
             } else {
                 val range = req.header("Range")
-                seenRangeHeader.set(range?.startsWith("bytes=") == true)
+                seenRangeHeader.set(range?.startsWith("bytes=") == true && req.header("If-Range") == "\"v1\"")
                 val offset = range!!.removePrefix("bytes=").removeSuffix("-").toInt()
                 val remaining = fullPayload.copyOfRange(offset, fullPayload.size)
                 Response
@@ -178,6 +182,7 @@ class DownloadRepositoryTest {
                     .message("Partial Content")
                     .header("Content-Range", "bytes $offset-${fullPayload.size - 1}/${fullPayload.size}")
                     .header("Content-Length", remaining.size.toString())
+                    .header("ETag", "\"v1\"")
                     .body(remaining.toResponseBody("application/octet-stream".toMediaType()))
                     .build()
             }
@@ -397,6 +402,139 @@ class DownloadRepositoryTest {
             assertEquals("video/mp4", updated.mimeType)
             assertEquals(6426042L, updated.contentLength)
         }
+
+    @Test
+    fun `a changed validator on a partial response restarts instead of appending`() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val attempts = AtomicInteger()
+        val requests = java.util.Collections.synchronizedList(mutableListOf<String?>())
+        val old = ByteArray(48 * 1024) { 1 }
+        val updated = ByteArray(old.size) { 2 }
+        val client = clientWithInterceptor { chain ->
+            val request = chain.request()
+            val range = request.header("Range")
+            requests.add(range)
+            val builder = Response.Builder().request(request).protocol(Protocol.HTTP_1_1).message("OK")
+            when (attempts.incrementAndGet()) {
+                1 -> {
+                    val split = 24 * 1024
+                    val source = blockingChunkSource(
+                        old.copyOfRange(0, split), { started.countDown() }, release, old.copyOfRange(split, old.size),
+                    )
+                    builder.code(200).header("ETag", "\"old\"")
+                        .body(source.asResponseBody(null, old.size.toLong())).build()
+                }
+                2 -> {
+                    val offset = range!!.removePrefix("bytes=").removeSuffix("-").toInt()
+                    builder.code(206).header("ETag", "\"new\"")
+                        .header("Content-Range", "bytes $offset-${updated.lastIndex}/${updated.size}")
+                        .body(updated.copyOfRange(offset, updated.size).toResponseBody()).build()
+                }
+                else -> builder.code(200).header("ETag", "\"new\"").body(updated.toResponseBody()).build()
+            }
+        }
+        val repo = newRepo(client)
+        repo.enqueueHttp(httpRequest("restart", "changed.bin", old.size.toLong()), "changed.bin", false)
+        try {
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            repo.pause("restart")
+            awaitItem(repo, "restart") { it.status == DownloadStatus.PAUSED }
+        } finally {
+            release.countDown()
+        }
+        repo.resume("restart")
+        val done = awaitItem(repo, "restart") { it.status == DownloadStatus.COMPLETED }
+        assertEquals(3, attempts.get())
+        assertEquals(null, requests[0])
+        assertTrue(requests[1]?.startsWith("bytes=") == true)
+        assertEquals(null, requests[2])
+        assertArrayEquals(updated, File(done.filePath!!).readBytes())
+    }
+
+    @Test
+    fun `HTTP redirects never carry cookies or referrers to another origin`() {
+        val first = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val second = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val sourceCookies = AtomicReference<String?>()
+        val targetCookies = AtomicReference<String?>()
+        val targetReferrer = AtomicReference<String?>()
+        val firstOrigin = "http://127.0.0.1:${first.address.port}"
+        val secondOrigin = "http://localhost:${second.address.port}"
+        first.createContext("/download") { exchange ->
+            exchange.use {
+                sourceCookies.set(it.requestHeaders.getFirst("Cookie"))
+                it.responseHeaders.add("Location", "$secondOrigin/download")
+                it.sendResponseHeaders(302, -1)
+            }
+        }
+        second.createContext("/download") { exchange ->
+            exchange.use {
+                targetCookies.set(it.requestHeaders.getFirst("Cookie"))
+                targetReferrer.set(it.requestHeaders.getFirst("Referer"))
+                it.sendResponseHeaders(200, 1)
+                it.responseBody.write(byteArrayOf(42))
+            }
+        }
+        first.start()
+        second.start()
+        try {
+            val repo = newRepo()
+            val request =
+                httpRequest("origin", "file.bin", 1, "$firstOrigin/download")
+                    .copy(referer = "$firstOrigin/page?private=referrer")
+            repo.enqueueHttp(request, "file.bin", wifiOnly = false)
+            awaitItem(repo, "origin") { it.status == DownloadStatus.COMPLETED }
+            assertEquals("session=secret", sourceCookies.get())
+            assertEquals(null, targetCookies.get())
+            assertEquals(null, targetReferrer.get())
+
+            repo.enqueueHttp(request.copy(id = "wrapper", cleanedUrl = "$secondOrigin/download"), "file.bin", false)
+            awaitItem(repo, "wrapper") { it.status == DownloadStatus.COMPLETED }
+            assertEquals(null, targetCookies.get())
+        } finally {
+            first.stop(0)
+            second.stop(0)
+        }
+    }
+
+    @Test
+    fun `private downloads may finish after session close without writing URL or referrer to disk`() {
+        val started = CountDownLatch(1)
+        val continueTransfer = CountDownLatch(1)
+        val payload = ByteArray(64 * 1024) { 7 }
+        val client =
+            clientWithInterceptor { chain ->
+                val source =
+                    blockingChunkSource(
+                        firstPart = payload.copyOfRange(0, 16 * 1024),
+                        onFirstSent = { started.countDown() },
+                        waitGate = continueTransfer,
+                        restPart = payload.copyOfRange(16 * 1024, payload.size),
+                    )
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(source.asResponseBody(null, payload.size.toLong())).build()
+            }
+        val repo = newRepo(client)
+        val request =
+            httpRequest("private-transfer", "private.bin", payload.size.toLong())
+                .copy(isIncognito = true, referer = "https://private-referrer.example/")
+        repo.enqueueHttp(request, "private.bin", false)
+        try {
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            repo.clearIncognitoHistory()
+            assertFalse(indexFile.readText().contains(request.originalUrl))
+            assertFalse(indexFile.readText().contains("private-referrer"))
+        } finally {
+            continueTransfer.countDown()
+        }
+        awaitCondition { repo.downloads.value.none { it.id == request.id } }
+        assertFalse(indexFile.readText().contains(request.id))
+        val restored = newRepo()
+        awaitCondition { indexFile.exists() && restored.downloads.value.isEmpty() }
+        assertFalse(indexFile.readText().contains(request.referer.orEmpty()))
+        assertArrayEquals(payload, File(root, "published/private.bin").readBytes())
+    }
 
     private fun httpRequest(
         id: String,

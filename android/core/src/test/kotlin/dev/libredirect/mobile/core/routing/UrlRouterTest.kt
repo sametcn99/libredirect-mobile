@@ -151,18 +151,10 @@ class UrlRouterTest {
     }
 
     @Test
-    fun `replace-origin with no path or query`() {
-        val result = router.resolve("https://youtu.be", RoutingContext())
-        assertEquals(
-            RoutingResult.Redirect(
-                originalUrl = "https://youtu.be",
-                redirectedUrl = "https://yewtu.be",
-                routeId = "youtube",
-                frontendId = "invidious",
-                instance = "https://yewtu.be",
-            ),
-            result,
-        )
+    fun `bare short-link origin has no video id and stays on the original site`() {
+        val url = "https://youtu.be"
+        assertEquals(RoutingResult.Passthrough(url), router.resolve(url, RoutingContext()))
+        assertEquals(TraceReason.UNSUPPORTED_LINK_SHAPE, router.explain(url, RoutingContext()).reason)
     }
 
     @Test

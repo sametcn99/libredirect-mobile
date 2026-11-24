@@ -1,6 +1,7 @@
 package dev.libredirect.mobile.ui.browser
 
 import android.content.Context
+import dev.libredirect.mobile.core.routing.InstanceHealth
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -86,27 +87,40 @@ class BrowserDataRepository(private val context: Context) {
             decodeOrDefault(prefs[Keys.REDIRECT_STATS], emptyMap())
         }
 
-    /** Last measured instance latencies (instance origin -> TTFB ms, [LATENCY_FAILED_MILLIS] = unreachable). */
-    suspend fun cachedLatencies(): Map<String, Long> =
-        context.browserDataStore.data.first()[Keys.INSTANCE_LATENCIES]?.let { raw ->
-            decodeOrDefault(raw, emptyMap<String, Long>())
-        } ?: emptyMap()
+    suspend fun cachedLatencies(): Map<String, Long> {
+        val now = System.currentTimeMillis()
+        return instanceHealth().mapNotNull { (origin, health) ->
+            health.currentLatency(now)?.let { origin to it }
+        }.toMap()
+    }
 
-    suspend fun saveLatencies(latencies: Map<String, Long>) {
-        if (latencies.isEmpty()) return
-        context.browserDataStore.edit { prefs ->
-            val current = decodeOrDefault(prefs[Keys.INSTANCE_LATENCIES], emptyMap<String, Long>())
-            prefs[Keys.INSTANCE_LATENCIES] = json.encodeToString(current + latencies)
+    suspend fun instanceHealth(): Map<String, InstanceHealth> {
+        val prefs = context.browserDataStore.data.first()
+        val measurements = decodeOrDefault(prefs[Keys.INSTANCE_MEASUREMENTS], emptyMap<String, InstanceHealth>())
+        val failures = decodeOrDefault(prefs[Keys.INSTANCE_FAILURES], emptyMap<String, Long>())
+        return (measurements.keys + failures.keys).associateWith { origin ->
+            (measurements[origin] ?: InstanceHealth()).copy(lastFailedAtMillis = failures[origin])
         }
     }
 
-    suspend fun lastLatencyMeasureAt(): Long =
-        context.browserDataStore.data.first()[Keys.LAST_LATENCY_MEASURE_AT] ?: 0L
+    suspend fun saveInstanceMeasurements(results: Map<String, InstanceHealth>) {
+        if (results.isEmpty()) return
+        context.browserDataStore.edit { prefs ->
+            val current = decodeOrDefault(prefs[Keys.INSTANCE_MEASUREMENTS], emptyMap<String, InstanceHealth>())
+            prefs[Keys.INSTANCE_MEASUREMENTS] = json.encodeToString(current + results)
+            prefs.remove(Keys.INSTANCE_LATENCIES)
+        }
+    }
+
+    suspend fun lastLatencyMeasureAt(): Long = context.browserDataStore.data.first()[Keys.LAST_LATENCY_MEASURE_AT] ?: 0L
 
     suspend fun lastLatencyMeasureCount(): Int =
         context.browserDataStore.data.first()[Keys.LAST_LATENCY_MEASURE_COUNT] ?: 0
 
-    suspend fun setLastLatencyMeasureResult(atMillis: Long, count: Int) {
+    suspend fun setLastLatencyMeasureResult(
+        atMillis: Long,
+        count: Int,
+    ) {
         context.browserDataStore.edit { prefs ->
             prefs[Keys.LAST_LATENCY_MEASURE_AT] = atMillis
             prefs[Keys.LAST_LATENCY_MEASURE_COUNT] = count
@@ -116,19 +130,11 @@ class BrowserDataRepository(private val context: Context) {
     suspend fun clearLatencies() {
         context.browserDataStore.edit { prefs ->
             prefs.remove(Keys.INSTANCE_LATENCIES)
+            prefs.remove(Keys.INSTANCE_MEASUREMENTS)
             prefs.remove(Keys.LAST_LATENCY_MEASURE_AT)
             prefs.remove(Keys.LAST_LATENCY_MEASURE_COUNT)
         }
     }
-
-    /**
-     * Epoch millis of each instance's last observed load failure (2.1/2.2);
-     * [InstanceHealth]'s cooldown logic reads this through RoutingContext.
-     */
-    suspend fun instanceFailures(): Map<String, Long> =
-        context.browserDataStore.data.first()[Keys.INSTANCE_FAILURES]?.let { raw ->
-            decodeOrDefault(raw, emptyMap<String, Long>())
-        } ?: emptyMap()
 
     suspend fun recordInstanceFailure(
         instance: String,
@@ -172,15 +178,17 @@ class BrowserDataRepository(private val context: Context) {
     suspend fun addBookmark(
         title: String,
         url: String,
+        canonical: String? = null,
     ) {
         if (url.isBlank()) return
         context.browserDataStore.edit { prefs ->
             val current = decodeList<BrowserBookmark>(prefs[Keys.BOOKMARKS])
-            val filtered = current.filterNot { it.url == url }
+            val filtered = current.filterNot { it.matches(url) || (canonical != null && it.matches(canonical)) }
             val newBookmark =
                 BrowserBookmark(
                     title = title.ifBlank { url },
                     url = url,
+                    canonicalUrl = canonical,
                 )
             prefs[Keys.BOOKMARKS] = json.encodeToString(listOf(newBookmark) + filtered)
         }
@@ -191,11 +199,11 @@ class BrowserDataRepository(private val context: Context) {
         var addedCount = 0
         context.browserDataStore.edit { prefs ->
             val current = decodeList<BrowserBookmark>(prefs[Keys.BOOKMARKS])
-            val existingUrls = current.map { it.url }.toSet()
+            val existingUrls = current.flatMap { listOf(it.url, it.openUrl) }.toSet()
             val newItems =
                 imported
-                    .filter { it.url.isNotBlank() && it.url !in existingUrls }
-                    .distinctBy { it.url }
+                    .filter { it.url.isNotBlank() && it.url !in existingUrls && it.openUrl !in existingUrls }
+                    .distinctBy { it.openUrl }
             addedCount = newItems.size
             if (newItems.isNotEmpty()) {
                 prefs[Keys.BOOKMARKS] = json.encodeToString(newItems + current)
@@ -214,7 +222,7 @@ class BrowserDataRepository(private val context: Context) {
     suspend fun removeBookmarkByUrl(url: String) {
         context.browserDataStore.edit { prefs ->
             val current = decodeList<BrowserBookmark>(prefs[Keys.BOOKMARKS])
-            prefs[Keys.BOOKMARKS] = json.encodeToString(current.filterNot { it.url == url })
+            prefs[Keys.BOOKMARKS] = json.encodeToString(current.filterNot { it.matches(url) })
         }
     }
 
@@ -242,6 +250,13 @@ class BrowserDataRepository(private val context: Context) {
         context.browserDataStore.edit { prefs ->
             val current = decodeList<BrowserHistoryItem>(prefs[Keys.HISTORY])
             prefs[Keys.HISTORY] = json.encodeToString(current.filterNot { it.id == id })
+        }
+    }
+
+    suspend fun enforceHistoryLimit(limit: Int) {
+        context.browserDataStore.edit { prefs ->
+            val history = decodeList<BrowserHistoryItem>(prefs[Keys.HISTORY])
+            prefs[Keys.HISTORY] = json.encodeToString(history.take(limit.coerceAtLeast(0)))
         }
     }
 
@@ -302,6 +317,7 @@ class BrowserDataRepository(private val context: Context) {
         val HISTORY = stringPreferencesKey("history_json")
         val SESSION = stringPreferencesKey("session_json")
         val REDIRECT_STATS = stringPreferencesKey("redirect_stats_json")
+        val INSTANCE_MEASUREMENTS = stringPreferencesKey("instance_measurements_json")
         val INSTANCE_LATENCIES = stringPreferencesKey("instance_latencies_json")
         val INSTANCE_FAILURES = stringPreferencesKey("instance_failures_json")
         val PRIVACY_STATS = stringPreferencesKey("privacy_stats_json")

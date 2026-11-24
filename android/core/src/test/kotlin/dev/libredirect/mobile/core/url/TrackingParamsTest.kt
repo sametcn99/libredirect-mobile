@@ -36,7 +36,8 @@ class TrackingParamsTest {
     fun `global click identifiers are removed`() {
         assertEquals("p=1", TrackingParams.cleanQuery("p=1&fbclid=IwAR123", "example.org"))
         assertEquals("p=1", TrackingParams.cleanQuery("p=1&gclid=EAIaIQ", "example.org"))
-        assertEquals("p=1", TrackingParams.cleanQuery("igshid=abc&p=1", "example.org"))
+        assertNull(TrackingParams.cleanQuery("igshid=abc&p=1", "example.org"))
+        assertEquals("p=1", TrackingParams.cleanQuery("igshid=abc&p=1", "instagram.com"))
     }
 
     @Test

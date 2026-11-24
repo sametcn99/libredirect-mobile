@@ -108,12 +108,15 @@ model. The app adds the following local behavior:
   system Download Manager. Outbound HTTP download URLs pass through the
   same tracking-parameter stripping, allowlisted wrapper unwrapping, and
   domain-exception rules before connecting; active cookies stay in memory
-  only during transfer and are never persisted to the local downloads
-  index. A pre-download prompt warns on executable or installer files
+  only during transfer. Cookie and referrer headers are scoped to the
+  download request origin, and the app strips them when a redirect changes
+  origin. Private download records are never written to the local downloads
+  index. A saved file remains in its storage location. A pre-download prompt warns on executable or installer files
   even if confirmation prompts are otherwise turned off, and completed
   files are published via `MediaStore.Downloads` on Android 10+ (or the
   app's private downloads directory exposed through `FileProvider` on
   older versions) without requesting storage permissions.
+- **Private tabs** require a WebView provider with isolated profiles. Child tabs inherit the same session.
 - **Browsing data controls** (clear cookies/cache, clear history) act only
   on this app's own WebView profile and local storage.
 - **Settings backup/restore** goes through the system file picker (SAF) —

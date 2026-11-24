@@ -149,9 +149,8 @@ class ReverseRouterTest {
 
     @Test
     fun `frontend instance of one route does not reverse through another route`() {
-        // inv.example belongs to youtube; asking for a reddit-shaped path is
-        // still the youtube route — path is copied verbatim.
+        // A non-video frontend path does not identify a canonical YouTube URL.
         val original = ReverseRouter.reverse("https://inv.example/r/askscience", manifest)
-        assertEquals("https://youtube.com/r/askscience", original)
+        assertEquals(null, original)
     }
 }

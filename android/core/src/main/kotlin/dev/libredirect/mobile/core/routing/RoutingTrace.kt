@@ -60,6 +60,9 @@ enum class TraceReason {
     /** Input was never a valid eligible URL. */
     NOT_ELIGIBLE,
 
+    SIGNED_QUERY,
+    UNSUPPORTED_LINK_SHAPE,
+
     /** The frontend requires instances but none are healthy. */
     INSTANCE_COOLDOWN,
 }

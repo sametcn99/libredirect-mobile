@@ -45,7 +45,9 @@ object ReverseRouter {
         if (claims.size != 1) return null
         val (route, frontend) = claims.first()
         return when (frontend.strategy) {
-            is Strategy.ReplaceOrigin -> reverseReplaceOrigin(route.hosts, url)
+            is Strategy.ReplaceOrigin ->
+                route.hosts.takeIf { ServiceLinks.canReverseByOrigin(route.id, frontend.id, url) }
+                    ?.let { reverseReplaceOrigin(it, url) }
             is Strategy.Template -> reverseTemplate(route.hosts, url, frontend)
             else -> null
         }

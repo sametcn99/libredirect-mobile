@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package dev.libredirect.mobile.ui.browser
 
@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +48,7 @@ private const val ZOOM_MAX = 300
 fun SiteSettingsSheet(
     host: String,
     siteSetting: SiteSetting?,
+    defaults: SiteSetting,
     onToggle: (transform: (SiteSetting) -> SiteSetting) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
@@ -96,8 +98,8 @@ fun SiteSettingsSheet(
             )
             SiteToggleRow(
                 title = stringResource(R.string.site_settings_content_blocking),
-                subtitle = null,
-                checked = current.contentBlocking ?: true,
+                subtitle = if (current.contentBlocking == null) stringResource(R.string.link_target_default) else null,
+                checked = current.contentBlocking ?: defaults.contentBlocking ?: true,
                 onChange = { value -> onToggle { it.copy(contentBlocking = value) } },
             )
 
@@ -115,7 +117,11 @@ fun SiteSettingsSheet(
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
-                        text = stringResource(R.string.browser_text_zoom_percent_fmt, current.textZoom ?: ZOOM_DEFAULT),
+                        text =
+                            stringResource(
+                                R.string.browser_text_zoom_percent_fmt,
+                                current.textZoom ?: defaults.textZoom ?: ZOOM_DEFAULT,
+                            ),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -124,7 +130,10 @@ fun SiteSettingsSheet(
                     onClick = {
                         onToggle {
                             it.copy(
-                                textZoom = ((it.textZoom ?: 100) - ZOOM_STEP).coerceAtLeast(ZOOM_MIN),
+                                textZoom =
+                                    ((it.textZoom ?: defaults.textZoom ?: ZOOM_DEFAULT) - ZOOM_STEP).coerceAtLeast(
+                                        ZOOM_MIN,
+                                    ),
                             )
                         }
                     },
@@ -139,7 +148,10 @@ fun SiteSettingsSheet(
                     onClick = {
                         onToggle {
                             it.copy(
-                                textZoom = ((it.textZoom ?: 100) + ZOOM_STEP).coerceAtMost(ZOOM_MAX),
+                                textZoom =
+                                    ((it.textZoom ?: defaults.textZoom ?: ZOOM_DEFAULT) + ZOOM_STEP).coerceAtMost(
+                                        ZOOM_MAX,
+                                    ),
                             )
                         }
                     },
@@ -190,4 +202,3 @@ private fun SiteToggleRow(
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
-

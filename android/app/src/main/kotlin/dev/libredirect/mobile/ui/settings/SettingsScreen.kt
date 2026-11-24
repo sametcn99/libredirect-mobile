@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package dev.libredirect.mobile.ui.settings
 
@@ -52,6 +52,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -78,7 +79,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.browser.BrowserLauncher
+import dev.libredirect.mobile.settings.BackupOptions
 import dev.libredirect.mobile.settings.CustomTrackingParam
+import dev.libredirect.mobile.settings.HostLinkPolicy
 import dev.libredirect.mobile.settings.TabAutoClose
 import dev.libredirect.mobile.ui.MainUiState
 import dev.libredirect.mobile.ui.browser.SearchEngine
@@ -113,11 +116,14 @@ data class SettingsActions(
     val onDownloadWifiOnlyChange: (Boolean) -> Unit = {},
     val onClearIncognitoDownloadsChange: (Boolean) -> Unit = {},
     val onCloseIncognitoChange: (Boolean) -> Unit = {},
+    val onRoutingPreset: (dev.libredirect.mobile.settings.RoutingPreset) -> Unit = {},
+    val onHostLinkPolicyChange: (String, HostLinkPolicy) -> Unit = { _, _ -> },
+    val onHistoryLimitChange: (Int) -> Unit = {},
     val onAutoCloseTabsChange: (TabAutoClose) -> Unit = {},
     val onAutoHideToolbarChange: (Boolean) -> Unit = {},
-    val onExportSettings: (Uri) -> Unit = {},
+    val onExportSettings: (Uri, BackupOptions) -> Unit = { _, _ -> },
     val onImportSettings: (Uri) -> Unit = {},
-    val onApplyImport: () -> Unit = {},
+    val onApplyImport: (Boolean) -> Unit = {},
     val onDismissImport: () -> Unit = {},
     val onOpenRelease: (String) -> Unit = {},
     val onOpenDiagnostics: () -> Unit = {},
@@ -133,6 +139,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     var isSearchEngineDialogVisible by rememberSaveable { mutableStateOf(false) }
     var isLanguageDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var settingsQuery by rememberSaveable { mutableStateOf("") }
     val currentLanguageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
 
     Scaffold(
@@ -153,174 +160,205 @@ fun SettingsScreen(
                     .padding(padding),
         ) {
             item {
-                SectionTitle(stringResource(R.string.settings_section_browser_routing))
-            }
-
-            item {
-                val isInApp = state.selectedBrowserPackage == BrowserLauncher.IN_APP_BROWSER_PACKAGE
-                val badge = if (isInApp) stringResource(R.string.settings_badge_in_app) else null
-                SettingsCardItem(
-                    icon = Icons.Default.Language,
-                    title = stringResource(R.string.settings_default_browser),
-                    subtitle = state.selectedBrowserLabel,
-                    badge = badge,
-                    onClick = actions.onBrowserClick,
+                androidx.compose.material3.OutlinedTextField(
+                    value = settingsQuery,
+                    onValueChange = { settingsQuery = it },
+                    label = { Text(stringResource(R.string.settings_search_preferences)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
-            item {
-                // C1: system "default browser" role (API 29+). Only offered
-                // where the role exists; the request itself is launched by
-                // the host activity's result launcher (see BrowserRoleHost).
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val roleManager = remember { context.getSystemService(RoleManager::class.java) }
-                    if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_BROWSER)) {
-                        val isRoleHeld = roleManager.isRoleHeld(RoleManager.ROLE_BROWSER)
-                        SettingsCardItem(
-                            icon = Icons.Default.Public,
-                            title = stringResource(R.string.settings_set_default_browser),
-                            subtitle =
-                                if (isRoleHeld) {
-                                    stringResource(R.string.settings_default_browser_held)
-                                } else {
-                                    stringResource(R.string.settings_default_browser_desc)
-                                },
-                            onClick = { (context as? BrowserRoleHost)?.requestBrowserRole() },
+            fun matches(vararg labels: Int): Boolean =
+                settingsQuery.isBlank() ||
+                    labels.any { context.getString(it).contains(settingsQuery.trim(), ignoreCase = true) }
+
+            if (matches(
+                    R.string.settings_section_browser_routing,
+                    R.string.settings_default_browser,
+                    R.string.settings_set_default_browser,
+                    R.string.settings_language, R.string.settings_search_engine, R.string.settings_exceptions,
+                    R.string.settings_custom_services, R.string.settings_app_lock, R.string.settings_clipboard_offer,
+                    R.string.settings_section_routing_db, R.string.settings_auto_instance_refresh,
+                )
+            ) {
+                item {
+                    SectionTitle(stringResource(R.string.settings_section_browser_routing))
+                }
+
+                item {
+                    val isInApp = state.selectedBrowserPackage == BrowserLauncher.IN_APP_BROWSER_PACKAGE
+                    val badge = if (isInApp) stringResource(R.string.settings_badge_in_app) else null
+                    SettingsCardItem(
+                        icon = Icons.Default.Language,
+                        title = stringResource(R.string.settings_default_browser),
+                        subtitle = state.selectedBrowserLabel,
+                        badge = badge,
+                        onClick = actions.onBrowserClick,
+                    )
+                }
+
+                item {
+                    // C1: system "default browser" role (API 29+). Only offered
+                    // where the role exists; the request itself is launched by
+                    // the host activity's result launcher (see BrowserRoleHost).
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val roleManager = remember { context.getSystemService(RoleManager::class.java) }
+                        if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_BROWSER)) {
+                            val isRoleHeld = roleManager.isRoleHeld(RoleManager.ROLE_BROWSER)
+                            SettingsCardItem(
+                                icon = Icons.Default.Public,
+                                title = stringResource(R.string.settings_set_default_browser),
+                                subtitle =
+                                    if (isRoleHeld) {
+                                        stringResource(R.string.settings_default_browser_held)
+                                    } else {
+                                        stringResource(R.string.settings_default_browser_desc)
+                                    },
+                                onClick = { (context as? BrowserRoleHost)?.requestBrowserRole() },
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCardItem(
+                        icon = Icons.Default.Translate,
+                        title = stringResource(R.string.settings_language),
+                        subtitle =
+                            when {
+                                currentLanguageTag.isBlank() ->
+                                    stringResource(
+                                        R.string.settings_language_system_default,
+                                    )
+                                currentLanguageTag.startsWith("tr", ignoreCase = true) -> "Türkçe"
+                                else -> "English"
+                            },
+                        onClick = { isLanguageDialogVisible = true },
+                    )
+                }
+
+                item {
+                    SettingsCardItem(
+                        icon = Icons.Default.Search,
+                        title = stringResource(R.string.settings_search_engine),
+                        subtitle =
+                            SearchEngine.resolve(
+                                selectedId = state.searchEngine,
+                                customName = state.customSearchEngineName,
+                                customUrl = state.customSearchEngineUrl,
+                            ).displayName,
+                        onClick = { isSearchEngineDialogVisible = true },
+                    )
+                }
+
+                item {
+                    SettingsCardItem(
+                        icon = Icons.Default.Block,
+                        title = stringResource(R.string.settings_exceptions),
+                        subtitle = stringResource(R.string.settings_exceptions_subtitle_fmt, state.exceptions.size),
+                        onClick = actions.onExceptionsClick,
+                    )
+                }
+
+                item {
+                    SettingsCardItem(
+                        icon = Icons.Default.Tune,
+                        title = stringResource(R.string.settings_custom_services),
+                        subtitle =
+                            stringResource(
+                                R.string.settings_custom_services_subtitle_fmt,
+                                state.customRoutes.size,
+                            ),
+                        onClick = actions.onCustomServicesClick,
+                    )
+                }
+
+                item {
+                    val isAppLockAvailable =
+                        remember {
+                            androidx.biometric.BiometricManager
+                                .from(context)
+                                .canAuthenticate(
+                                    androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                                        androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+                                ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+                        }
+                    if (isAppLockAvailable) {
+                        SettingsToggleItem(
+                            icon = Icons.Default.Lock,
+                            title = stringResource(R.string.settings_app_lock),
+                            subtitle = stringResource(R.string.settings_app_lock_desc),
+                            checked = state.appLockEnabled,
+                            onCheckedChange = actions.onAppLockChange,
                         )
                     }
                 }
-            }
 
-            item {
-                SettingsCardItem(
-                    icon = Icons.Default.Translate,
-                    title = stringResource(R.string.settings_language),
-                    subtitle =
-                        when {
-                            currentLanguageTag.isBlank() -> stringResource(R.string.settings_language_system_default)
-                            currentLanguageTag.startsWith("tr", ignoreCase = true) -> "Türkçe"
-                            else -> "English"
-                        },
-                    onClick = { isLanguageDialogVisible = true },
-                )
-            }
-
-            item {
-                SettingsCardItem(
-                    icon = Icons.Default.Search,
-                    title = stringResource(R.string.settings_search_engine),
-                    subtitle =
-                        SearchEngine.resolve(
-                            selectedId = state.searchEngine,
-                            customName = state.customSearchEngineName,
-                            customUrl = state.customSearchEngineUrl,
-                        ).displayName,
-                    onClick = { isSearchEngineDialogVisible = true },
-                )
-            }
-
-            item {
-                SettingsCardItem(
-                    icon = Icons.Default.Block,
-                    title = stringResource(R.string.settings_exceptions),
-                    subtitle = stringResource(R.string.settings_exceptions_subtitle_fmt, state.exceptions.size),
-                    onClick = actions.onExceptionsClick,
-                )
-            }
-
-            item {
-                SettingsCardItem(
-                    icon = Icons.Default.Tune,
-                    title = stringResource(R.string.settings_custom_services),
-                    subtitle = stringResource(R.string.settings_custom_services_subtitle_fmt, state.customRoutes.size),
-                    onClick = actions.onCustomServicesClick,
-                )
-            }
-
-            item {
-                val isAppLockAvailable =
-                    remember {
-                        androidx.biometric.BiometricManager
-                            .from(context)
-                            .canAuthenticate(
-                                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or
-                                    androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL,
-                            ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
-                    }
-                if (isAppLockAvailable) {
+                item {
                     SettingsToggleItem(
-                        icon = Icons.Default.Lock,
-                        title = stringResource(R.string.settings_app_lock),
-                        subtitle = stringResource(R.string.settings_app_lock_desc),
-                        checked = state.appLockEnabled,
-                        onCheckedChange = actions.onAppLockChange,
+                        icon = Icons.Default.ContentPaste,
+                        title = stringResource(R.string.settings_clipboard_offer),
+                        subtitle = stringResource(R.string.settings_clipboard_offer_desc),
+                        checked = state.clipboardOfferEnabled,
+                        onCheckedChange = actions.onClipboardOfferChange,
+                    )
+                }
+
+                item {
+                    SectionTitle(stringResource(R.string.settings_section_routing_db))
+                }
+
+                item {
+                    ManifestDatabaseCard(
+                        revision = state.manifestRevision,
+                        isRefreshing = state.refreshInProgress,
+                        refreshMessage = state.lastRefreshMessage,
+                        errorMessage = state.manifestErrorMessage,
+                        generationNotes = state.generationNotes,
+                        onRefresh = actions.onRefreshManifest,
+                    )
+                }
+
+                item {
+                    SettingsToggleItem(
+                        icon = Icons.Default.Autorenew,
+                        title = stringResource(R.string.settings_auto_instance_refresh),
+                        subtitle = stringResource(R.string.settings_auto_instance_refresh_desc),
+                        checked = state.autoInstanceRefreshEnabled,
+                        onCheckedChange = actions.onAutoInstanceRefreshChange,
                     )
                 }
             }
 
             item {
-                SettingsToggleItem(
-                    icon = Icons.Default.ContentPaste,
-                    title = stringResource(R.string.settings_clipboard_offer),
-                    subtitle = stringResource(R.string.settings_clipboard_offer_desc),
-                    checked = state.clipboardOfferEnabled,
-                    onCheckedChange = actions.onClipboardOfferChange,
-                )
+                SettingsExtrasSection(state = state, actions = actions, query = settingsQuery)
             }
 
-            item {
-                SectionTitle(stringResource(R.string.settings_section_routing_db))
-            }
+            if (matches(R.string.settings_section_app_info, R.string.settings_title)) {
+                item {
+                    SectionTitle(stringResource(R.string.settings_section_app_info))
+                }
 
-            item {
-                ManifestDatabaseCard(
-                    revision = state.manifestRevision,
-                    isRefreshing = state.refreshInProgress,
-                    refreshMessage = state.lastRefreshMessage,
-                    errorMessage = state.manifestErrorMessage,
-                    generationNotes = state.generationNotes,
-                    onRefresh = actions.onRefreshManifest,
-                )
+                item {
+                    AppVersionCard(
+                        versionDisplay = state.appVersionDisplay,
+                        updateAvailable = state.updateAvailable?.versionName,
+                        isChecking = state.updateCheckInProgress,
+                        hasChecked = state.updateChecked,
+                        hasFailed = state.updateCheckFailed,
+                        onCheckForUpdates = actions.onCheckForUpdates,
+                        onOpenRelease = {
+                            state.updateAvailable?.releaseUrl?.let { url ->
+                                context.openUrl(url)
+                            }
+                        },
+                        onOpenSourceCode = {
+                            context.openUrl(GITHUB_REPO_URL)
+                        },
+                    )
+                }
             }
-
-            item {
-                SettingsToggleItem(
-                    icon = Icons.Default.Autorenew,
-                    title = stringResource(R.string.settings_auto_instance_refresh),
-                    subtitle = stringResource(R.string.settings_auto_instance_refresh_desc),
-                    checked = state.autoInstanceRefreshEnabled,
-                    onCheckedChange = actions.onAutoInstanceRefreshChange,
-                )
-            }
-
-            // 2.x–5.x additions: privacy, browser extras, backup, diagnostics.
-            item {
-                SettingsExtrasSection(state = state, actions = actions)
-            }
-
-            item {
-                SectionTitle(stringResource(R.string.settings_section_app_info))
-            }
-
-            item {
-                AppVersionCard(
-                    versionDisplay = state.appVersionDisplay,
-                    updateAvailable = state.updateAvailable?.versionName,
-                    isChecking = state.updateCheckInProgress,
-                    hasChecked = state.updateChecked,
-                    hasFailed = state.updateCheckFailed,
-                    onCheckForUpdates = actions.onCheckForUpdates,
-                    onOpenRelease = {
-                        state.updateAvailable?.releaseUrl?.let { url ->
-                            context.openUrl(url)
-                        }
-                    },
-                    onOpenSourceCode = {
-                        context.openUrl(GITHUB_REPO_URL)
-                    },
-                )
-            }
-
 
             item {
                 Spacer(Modifier.height(24.dp))

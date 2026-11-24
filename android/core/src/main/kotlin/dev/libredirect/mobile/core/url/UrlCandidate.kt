@@ -12,26 +12,41 @@ package dev.libredirect.mobile.core.url
  * scheme allowlist instead of being dropped as malformed.
  */
 object UrlCandidate {
+    private const val DOMAIN = """[a-zA-Z0-9][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9][a-zA-Z0-9-]*)+"""
     private val CANDIDATE =
-        Regex("""(?:https?://)?[a-zA-Z0-9][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9][a-zA-Z0-9-]*)+(?::\d{1,5})?(?:/[^\s"'<>]*)?""")
+        Regex(
+            """(?<![@a-zA-Z0-9_./-])(?:https?://)?$DOMAIN(?::\d{1,5})?(?:[/?#][^\s"'<>]*)?""",
+        )
 
-    fun find(text: String?): String? {
-        if (text.isNullOrBlank()) return null
-        return CANDIDATE
-            .findAll(text)
-            .map { it.value }
-            .map(::withoutTrailingPunctuation)
-            .filter(::looksLikeHost)
-            .map(::withHttpsScheme)
-            .firstOrNull()
+    data class Match(val range: IntRange, val url: String)
+
+    fun find(text: String?): String? = text?.let { matches(it).firstOrNull()?.url }
+
+    fun matches(text: String): Sequence<Match> =
+        CANDIDATE.findAll(text).mapNotNull { match ->
+            val candidate = withoutTrailingPunctuation(match.value)
+            if (!looksLikeHost(candidate)) return@mapNotNull null
+            Match(match.range.first until match.range.first + candidate.length, withHttpsScheme(candidate))
+        }
+
+    private fun withoutTrailingPunctuation(value: String): String {
+        var candidate = value.trimEnd('.', ',', ';', ':', '!', '?', '"', '\'')
+        val brackets = mapOf(')' to '(', ']' to '[', '}' to '{')
+        while (candidate.isNotEmpty()) {
+            val last = candidate.last()
+            val open = brackets[last]
+            if (open == null || candidate.count { it == last } <= candidate.count { it == open }) break
+            candidate = candidate.dropLast(1).trimEnd('.', ',', ';', ':', '!', '?')
+        }
+        return candidate
     }
 
-    /** Prose often glues sentence punctuation onto the end of a URL. */
-    private fun withoutTrailingPunctuation(candidate: String): String =
-        candidate.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'')
-
     private fun looksLikeHost(candidate: String): Boolean {
-        val host = candidate.substringAfter("://", candidate).substringBefore('/').substringBefore(':')
+        val host =
+            candidate.substringAfter(
+                "://",
+                candidate,
+            ).substringBefore('/').substringBefore('?').substringBefore('#').substringBefore(':')
         return host.contains('.') && host.any(Char::isLetter)
     }
 

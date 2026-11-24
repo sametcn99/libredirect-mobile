@@ -32,6 +32,8 @@ enum class OpenFileResult {
 interface DownloadFileStore {
     fun stagingFile(id: String): File
 
+    fun pruneAbandonedStaging(retainedIds: Set<String>) = Unit
+
     fun deleteStagingFile(id: String)
 
     fun publishCompletedFile(
@@ -59,6 +61,12 @@ class DownloadStorage(private val context: Context) : DownloadFileStore {
         val file = File(stagingDir, "$id.part")
         if (file.exists()) {
             file.delete()
+        }
+    }
+
+    override fun pruneAbandonedStaging(retainedIds: Set<String>) {
+        stagingDir.listFiles()?.forEach { file ->
+            if (file.extension == "part" && file.nameWithoutExtension !in retainedIds) file.delete()
         }
     }
 

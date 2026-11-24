@@ -2,6 +2,7 @@ package dev.libredirect.mobile.core.upstream
 
 import dev.libredirect.mobile.core.manifest.Frontend
 import dev.libredirect.mobile.core.manifest.Manifest
+import dev.libredirect.mobile.core.manifest.ManifestValidator
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.manifest.Strategy
 import java.time.Instant
@@ -17,7 +18,7 @@ import java.time.Instant
  * instance origins (the output of the runtime data.json parser).
  */
 object ManifestGenerator {
-    /** Mirrors [dev.libredirect.mobile.core.manifest.ManifestValidator]'s route/frontend id grammar. */
+    /** Mirrors [ManifestValidator]'s route/frontend id grammar. */
     private val manifestIdPattern = Regex("^[a-z][a-z0-9-]{0,63}$")
 
     data class Generation(
@@ -160,10 +161,10 @@ object ManifestGenerator {
                     frontend.instanceList != true -> "skipped (not a hosted instance frontend)"
                     !manifestIdPattern.matches(frontendId) ->
                         "skipped (frontend id '$frontendId' does not fit the manifest id grammar)"
-                    instances.isEmpty() -> "skipped (no usable HTTPS clearnet instances)"
                     else -> null
                 }
             if (skipNote == null) {
+                if (instances.isEmpty()) notes += "$serviceKey.$frontendKey: no usable HTTPS clearnet instances"
                 frontends +=
                     ConvertibleFrontend(
                         id = frontendId,

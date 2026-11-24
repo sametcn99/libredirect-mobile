@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
@@ -14,6 +15,19 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v7
+
+      - name: Require successful Android CI for this exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          result=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/android-ci.yml/runs" \
+            -f head_sha="$GITHUB_SHA" -f branch=main -f event=push \
+            --jq '.workflow_runs[0].conclusion')
+          if [ "$result" != success ]; then
+            echo "::error::Android CI must pass for $GITHUB_SHA before release (latest result: $result)"
+            exit 1
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -75,7 +89,10 @@ jobs:
         # workspace root, bypassing the job's android/ default — use
         # release-out/ paths instead.
         run: |
-          sha256sum "release-out/${{ steps.version.outputs.apk_name }}" > "release-out/${{ steps.version.outputs.apk_name }}.sha256"
+          (
+            cd release-out
+            sha256sum "${{ steps.version.outputs.apk_name }}" > "${{ steps.version.outputs.apk_name }}.sha256"
+          )
           cat "release-out/${{ steps.version.outputs.apk_name }}.sha256"
 
       - name: Remove local signing material
@@ -88,9 +105,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          notes_file="../.github/release-notes/${{ steps.version.outputs.tag }}.md"
+          notes_args=(--generate-notes)
+          if [ -f "$notes_file" ]; then
+            notes_args=(--notes-file "$notes_file")
+          fi
           gh release create "${{ steps.version.outputs.tag }}" \
             "release-out/${{ steps.version.outputs.apk_name }}" \
             "release-out/${{ steps.version.outputs.apk_name }}.sha256" \
             --repo "${{ github.repository }}" \
+            --target "$GITHUB_SHA" \
             --title "LibRedirect Mobile ${{ steps.version.outputs.tag }}" \
-            --generate-notes
+            "${notes_args[@]}"

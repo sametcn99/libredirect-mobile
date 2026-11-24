@@ -39,6 +39,8 @@ object SettingsBackupCodec {
         val bookmarks: List<BrowserBookmark> = emptyList(),
         /** Names of hosts that had site settings, for the import summary. */
         val siteSettingHosts: List<String> = emptyList(),
+        val includesSettings: Boolean = true,
+        val sharedRules: RulePackage? = null,
     )
 
     sealed interface ImportResult {
@@ -79,13 +81,14 @@ object SettingsBackupCodec {
             return ImportResult.Failure(Reason.UNSUPPORTED_VERSION)
         }
         val instanceUrls =
-            backup.settings.instanceSelections.values.mapNotNull { selection ->
-                when (selection) {
-                    is InstanceSelection.Pinned -> selection.instance
-                    is InstanceSelection.Custom -> selection.instance
-                    InstanceSelection.Automatic, InstanceSelection.Fastest -> null
+            (backup.settings.instanceSelections.values + backup.sharedRules?.instanceSelections.orEmpty().values)
+                .mapNotNull { selection ->
+                    when (selection) {
+                        is InstanceSelection.Pinned -> selection.instance
+                        is InstanceSelection.Custom -> selection.instance
+                        InstanceSelection.Automatic, InstanceSelection.Fastest -> null
+                    }
                 }
-            }
         if (instanceUrls.any { instance -> !UrlValidation.isValidHttpsOrigin(instance) }) {
             return ImportResult.Failure(Reason.INVALID_CUSTOM_INSTANCE)
         }

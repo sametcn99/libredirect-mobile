@@ -46,6 +46,7 @@ data class RoutingContext(
 data class CustomTrackingRules(
     val global: Set<String> = emptySet(),
     val byHost: Map<String, Set<String>> = emptyMap(),
+    val preserveByHost: Map<String, Set<String>> = emptyMap(),
 ) {
     companion object {
         val NONE = CustomTrackingRules()

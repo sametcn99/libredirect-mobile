@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package dev.libredirect.mobile.ui.custom
 
@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,11 +36,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
 import dev.libredirect.mobile.core.manifest.Frontend
+import dev.libredirect.mobile.core.manifest.Manifest
+import dev.libredirect.mobile.core.manifest.ManifestValidator
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.manifest.Strategy
+import dev.libredirect.mobile.core.routing.RoutingContext
+import dev.libredirect.mobile.core.routing.RoutingResult
+import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.core.url.UrlValidation
+import kotlinx.coroutines.launch
+
+private const val MAX_CUSTOM_SLUG_LENGTH = 36
 
 private data class CustomServiceDraft(
+    val routeId: String? = null,
     val name: String = "",
     val hosts: String = "",
     val frontendName: String = "",
@@ -84,6 +94,10 @@ fun CustomServicesScreen(
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var selectedDraft by remember { mutableStateOf(CustomServiceDraft()) }
+    var formGeneration by remember { mutableStateOf(0) }
+    val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     Scaffold(
         contentWindowInsets = WindowInsets.statusBars,
         topBar = {
@@ -102,6 +116,7 @@ fun CustomServicesScreen(
         modifier = modifier.fillMaxSize(),
     ) { padding ->
         LazyColumn(
+            state = scrollState,
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -109,7 +124,9 @@ fun CustomServicesScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
-                CustomServiceForm(onAdd = onAdd)
+                androidx.compose.runtime.key(formGeneration) {
+                    CustomServiceForm(selectedDraft, onAdd)
+                }
                 message?.let { Text(it, modifier = Modifier.padding(horizontal = 16.dp)) }
                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
             }
@@ -120,6 +137,16 @@ fun CustomServicesScreen(
                     supportingContent = {
                         Column {
                             Text(route.hosts.joinToString(", "))
+                            TextButton(onClick = {
+                                selectedDraft = route.asDraft(copy = false)
+                                formGeneration++
+                                scope.launch { scrollState.scrollToItem(0) }
+                            }) { Text(stringResource(R.string.custom_rule_edit)) }
+                            TextButton(onClick = {
+                                selectedDraft = route.asDraft(copy = true)
+                                formGeneration++
+                                scope.launch { scrollState.scrollToItem(0) }
+                            }) { Text(stringResource(R.string.custom_rule_duplicate)) }
                             if (instance != null) {
                                 Text(
                                     text = "→ $instance",
@@ -141,8 +168,13 @@ fun CustomServicesScreen(
 }
 
 @Composable
-private fun CustomServiceForm(onAdd: (Route) -> Unit) {
-    var draft by remember { mutableStateOf(CustomServiceDraft()) }
+private fun CustomServiceForm(
+    initial: CustomServiceDraft,
+    onAdd: (Route) -> Unit,
+) {
+    var draft by remember { mutableStateOf(initial) }
+    var sample by remember { mutableStateOf("") }
+    var preview by remember { mutableStateOf<String?>(null) }
     var showErrors by remember { mutableStateOf(false) }
     val validation = remember(draft) { validateDraft(draft) }
     val defaultFrontendName = stringResource(R.string.custom_services_default_frontend)
@@ -170,6 +202,44 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
             onDraftChange = { draft = it },
         )
 
+        OutlinedTextField(
+            value = sample,
+            onValueChange = {
+                sample = it
+                preview = null
+            },
+            label = { Text(stringResource(R.string.custom_rule_example)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TextButton(
+            enabled = validation.isValid && sample.isNotBlank(),
+            onClick = {
+                preview =
+                    draft.toRoute(defaultFrontendName)?.let { route ->
+                        val manifest =
+                            Manifest(
+                                schemaVersion = 1,
+                                revision = 1,
+                                generatedAt = java.time.Instant.now().toString(),
+                                routes = listOf(route),
+                            )
+                        val errors = ManifestValidator.validate(manifest)
+                        if (errors.isNotEmpty()) {
+                            errors.joinToString("\n")
+                        } else {
+                            (
+                                UrlRouter(manifest)
+                                    .resolve(sample.trim(), RoutingContext())
+                                    as? RoutingResult.Redirect
+                            )?.redirectedUrl
+                        }
+                    }.orEmpty()
+            },
+        ) { Text(stringResource(R.string.custom_rule_test)) }
+        preview?.let { output ->
+            Text(output.ifBlank { stringResource(R.string.inspect_no_route) })
+        }
         Button(
             onClick = {
                 if (validation.isValid) {
@@ -186,7 +256,11 @@ private fun CustomServiceForm(onAdd: (Route) -> Unit) {
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(stringResource(R.string.custom_services_btn_add))
+            Text(
+                stringResource(
+                    if (draft.routeId == null) R.string.custom_services_btn_add else R.string.host_link_save,
+                ),
+            )
         }
     }
 }
@@ -305,7 +379,7 @@ private fun CustomServiceDraft.toRoute(defaultFrontendName: String): Route? {
     val slug = cleanName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
     val strategy = template.trim().takeIf(String::isNotEmpty)?.let(Strategy::Template) ?: Strategy.ReplaceOrigin
     return Route(
-        id = "custom-$slug-${System.currentTimeMillis()}",
+        id = routeId ?: "custom-${slug.take(MAX_CUSTOM_SLUG_LENGTH)}-${System.currentTimeMillis()}",
         name = cleanName,
         hosts = cleanHosts.distinct().map(String::lowercase),
         frontends =
@@ -317,5 +391,17 @@ private fun CustomServiceDraft.toRoute(defaultFrontendName: String): Route? {
                     instances = listOf(cleanInstance),
                 ),
             ),
+    )
+}
+
+private fun Route.asDraft(copy: Boolean): CustomServiceDraft {
+    val frontend = frontends.firstOrNull()
+    return CustomServiceDraft(
+        routeId = id.takeUnless { copy },
+        name = name,
+        hosts = if (copy) "" else hosts.joinToString(", "),
+        frontendName = frontend?.name.orEmpty(),
+        instance = frontend?.instances?.firstOrNull().orEmpty(),
+        template = (frontend?.strategy as? Strategy.Template)?.output.orEmpty(),
     )
 }

@@ -1,5 +1,6 @@
 package dev.libredirect.mobile.browser
 
+import dev.libredirect.mobile.core.routing.InstanceHealth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -25,13 +26,14 @@ class InstanceProbe(
     private val client =
         OkHttpClient
             .Builder()
+            .callTimeout(timeoutSeconds, TimeUnit.SECONDS)
             .connectTimeout(timeoutSeconds, TimeUnit.SECONDS)
             .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
             .build()
 
     private val semaphore = Semaphore(concurrency)
 
-    suspend fun measure(instances: List<String>): Map<String, Long> =
+    suspend fun measure(instances: List<String>): Map<String, InstanceHealth> =
         withContext(Dispatchers.IO) {
             coroutineScope {
                 instances
@@ -42,18 +44,32 @@ class InstanceProbe(
         }
 
     @Suppress("TooGenericExceptionCaught")
-    private fun probe(instance: String): Long =
+    private fun probe(instance: String): InstanceHealth =
         try {
-            val request = Request.Builder().url(instance).head().build()
+            val request = Request.Builder().url(instance)
             val startNanos = System.nanoTime()
-            client.newCall(request).execute().use {
-                (System.nanoTime() - startNanos) / NANOS_PER_MILLI
-            }
+            val headStatus = client.newCall(request.head().build()).execute().use { it.code }
+            val status =
+                if (headStatus == METHOD_NOT_ALLOWED || headStatus == NOT_IMPLEMENTED) {
+                    client.newCall(request.get().header("Range", "bytes=0-0").build()).execute().use { it.code }
+                } else {
+                    headStatus
+                }
+            val latency =
+                if (status in HTTP_SUCCESS) {
+                    (System.nanoTime() - startNanos) / NANOS_PER_MILLI
+                } else {
+                    LATENCY_FAILED
+                }
+            InstanceHealth(latencyMillis = latency, httpStatus = status, measuredAtMillis = System.currentTimeMillis())
         } catch (_: Exception) {
-            LATENCY_FAILED
+            InstanceHealth(latencyMillis = LATENCY_FAILED, measuredAtMillis = System.currentTimeMillis())
         }
 
     companion object {
+        private val HTTP_SUCCESS = 200..299
+        private const val METHOD_NOT_ALLOWED = 405
+        private const val NOT_IMPLEMENTED = 501
         const val TIMEOUT_SECONDS = 5L
         const val PROBE_CONCURRENCY = 16
         const val LATENCY_FAILED = -1L

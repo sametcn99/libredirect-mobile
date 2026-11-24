@@ -106,7 +106,7 @@ class ManifestGeneratorTest {
     }
 
     @Test
-    fun `service without usable frontends falls back to the original passthrough frontend`() {
+    fun `hosted frontend without public instances remains available for a custom origin`() {
         val config =
             LibRedirectConfigParser.parse(
                 """
@@ -138,7 +138,7 @@ class ManifestGeneratorTest {
         assertEquals("Wikipedia", route.name)
         assertEquals(setOf("wikipedia.org", "www.wikipedia.org"), route.hosts.toSet())
         assertEquals(
-            listOf(Frontend("original", "Original site", Strategy.Passthrough)),
+            listOf(Frontend("wikiless", "Wikiless", Strategy.ReplaceOrigin)),
             route.frontends,
         )
         assertTrue(generation.notes.any { "no usable HTTPS clearnet instances" in it })

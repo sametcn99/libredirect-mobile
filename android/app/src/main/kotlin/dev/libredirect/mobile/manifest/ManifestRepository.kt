@@ -7,9 +7,11 @@ import dev.libredirect.mobile.core.manifest.ManifestJson
 import dev.libredirect.mobile.core.manifest.ManifestValidator
 import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.RoutingContext
+import dev.libredirect.mobile.core.routing.RoutingResult
 import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.core.upstream.LibRedirectConfigParser
 import dev.libredirect.mobile.core.upstream.ManifestGenerator
+import dev.libredirect.mobile.core.url.UrlParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -87,6 +89,29 @@ class ManifestRepository(
     fun lastLoadError(): String? = store.lastDiagnostic
 
     fun customRoutes(): List<Route> = customServiceRepository.routes()
+
+    data class RuleImportItem(val route: Route, val conflict: Boolean, val error: String?)
+
+    fun previewRuleImport(routes: List<Route>): List<RuleImportItem> {
+        val base = store.loadBase()
+        val installed = customServiceRepository.routes()
+        val accepted = installed.toMutableList()
+        return routes.map { route ->
+            val conflict = installed.any { it.id == route.id }
+            val others = accepted.filterNot { it.id == route.id }
+            val error =
+                if (base == null) {
+                    "No routing manifest available"
+                } else {
+                    ManifestValidator.validate(base.copy(routes = base.routes + others + route)).firstOrNull()
+                }
+            if (error == null) {
+                accepted.removeAll { it.id == route.id }
+                accepted.add(route)
+            }
+            RuleImportItem(route, conflict, error)
+        }
+    }
 
     /** Adds a custom route only when it remains valid and does not shadow a built-in host/id. */
     fun addCustomRoute(route: Route): Result<Unit> {
@@ -186,8 +211,19 @@ class ManifestRepository(
      */
     private fun selfTest(manifest: Manifest): Boolean =
         try {
-            UrlRouter(manifest).resolve("https://example.org/", RoutingContext())
-            true
+            val router = UrlRouter(manifest)
+            val unchanged = router.resolve("https://example.org/", RoutingContext())
+            val exercised =
+                listOf(
+                    "https://youtube.com/results?search_query=kotlin",
+                    "https://zelda.fandom.com/wiki/Link",
+                    "https://tr.wikipedia.org/wiki/Ankara",
+                    "https://maps.google.com/?ll=39.93,32.86",
+                ).map { router.explain(it, RoutingContext()) }
+            unchanged is RoutingResult.Passthrough &&
+                exercised.all { trace ->
+                    trace.resultUrl?.let { UrlParser.parseScheme(it) != null } ?: true
+                }
         } catch (_: RuntimeException) {
             false
         }

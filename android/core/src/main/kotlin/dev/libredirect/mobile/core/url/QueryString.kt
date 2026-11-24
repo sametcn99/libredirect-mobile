@@ -37,6 +37,12 @@ object QueryString {
             ?.firstOrNull { it.first }
             ?.second
 
+    fun names(rawQuery: String?): List<String> =
+        rawQuery.orEmpty().split('&').mapNotNull {
+                pair ->
+            decode(pair.substringBefore('=')).takeUnless { it.isNullOrEmpty() }
+        }
+
     fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
 
     private fun decode(value: String): String? =

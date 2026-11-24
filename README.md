@@ -173,26 +173,27 @@ All screenshots below were captured from LibRedirect Mobile **v1.3.11** (Build 2
 
 - **Privacy-focused routing**: Redirect eligible links without accounts, analytics, or a backend.
 - **Tracking-parameter stripping**: Well-known tracking parameters (`utm_*`, `fbclid`, `gclid`, YouTube's `si`, Amazon's `ref_*`, X's `s`/`t`, …) are removed before a link is opened — including links that are not routed at all. User exceptions keep their URLs byte-for-byte intact, and you can add your own global or per-host rules.
-- **Query-parameter stripping (on by default)**: On top of the tracking denylist, every non-functional query parameter (locale tags like Instagram's `?hl=en`, share attribution, …) is dropped before routing; only functional names such as video, search, and permalink IDs survive. Toggleable in Settings → Privacy.
+- **Query cleaning** preserves unknown and functional parameters. Known signed links are kept intact. Optional extra cleanup is scoped to verified Instagram share and YouTube watch links. Domain rules can keep named parameters, skip extra cleanup, or skip wrapper unwrapping.
 - **Wrapper & AMP unwrapping**: Redirect wrappers (`google.com/url?q=`, `l.facebook.com`, `out.reddit.com`, AMP caches, …) are resolved entirely offline before routing (on by default).
 - **Short-link resolution (opt-in, off by default)**: When enabled, links from a fixed allowlist of shorteners (t.co, bit.ly, …) are followed with HTTPS requests before routing. This is the one feature that makes routing touch the network — see [SECURITY.md](SECURITY.md).
 - **Offline-first routing**: Route links locally — apart from the opt-in short-link feature, routing never makes a network request.
-- **Smart instance selection**: Automatic mode is latency-weighted random over instances that are not in a failure cooldown; a **Fastest** mode always picks the lowest-latency measured instance; Pinned and Custom modes behave as before. Failed loads cool instances down for 10 minutes.
+- **Smart instance selection**: Automatic mode is latency-weighted random over instances that are not in a failure cooldown; **Fastest** prefers recent successful probes and skips load cooldowns. Probes classify HTTP failures, including 429 and 5xx. Hosted frontends can use a personal HTTPS instance even when their public list is empty.
 - **Automatic failover**: When a routed page fails (network error, 5xx/429, bot interstitial), the browser retries on the next healthy instance (up to twice) before offering the original site.
 - **Instance health panel**: The service detail screen lists every instance with Fast/Slow/Unreachable/Not-measured/Cooldown badges, a "measure all" action, and an optional daily background measurement.
-- **Per-service control**: Enable or disable individual services, choose the frontend for each service, set a service to **ask every time**, and pick an instance (Automatic / Fastest / Pinned / Custom).
+- **Per-service control**: Enable or disable individual services, choose the frontend for each service, set a service to **ask every time**, and pick an instance (Automatic / Fastest / Pinned / Custom). Choose a destination app per service or domain and decide how unavailable alternatives fall back.
 - **Routing exceptions**: Host, host/path, and wildcard (`*.example.com`) rules, plus per-app exclusions based on the sending app's referrer (a convenience, not a security guarantee).
 - **Temporary pause**: Pause routing for 15 minutes, an hour, or until you turn it back on — from the Home card or the Quick Settings tile.
-- **"Why?" explainer**: The Home quick-link tester shows a structured trace: matched rule, chosen frontend/instance, selection mode, stripped parameters, or the exact reason a link passed through.
+- **"Why?" explainer**: Use **Inspect links** on Home or **LibRedirect · Clean links** in Android share. Compare the incoming, cleaned and alternative links, then copy, share, open the selected destination, or open the original once. For a message with several links, select which ones to clean and share the original text with those edits.
 - **Original-link share/copy**: The browser menu can share or copy the pre-redirect URL, computing it from frontend URLs where safely reversible.
-- **Custom services**: Add local services with source hostnames and an HTTPS instance or an output template supporting `{instance}`, `{path}`, `{query:name}`, and `{fragment}`.
-- **Safe fallback**: Open the original URL when routing fails for an eligible link (fail-open); malformed or unsupported-scheme input is never opened at all.
+- **Custom services**: Add, edit, duplicate and test local URL rules with an HTTPS instance or a template using `{instance}`, `{path}`, `{query:name}`, and `{fragment}`.
+- **Fallback policies**: Open the original, ask first, or block automatic fallback for each service. External app handoff and an in-app page load are reported separately.
 - **Redirect-loop prevention**: When handing a link to an external browser, the app can never be chosen as its own target.
 - **Quick access**: A Quick Settings tile and a home-screen widget toggle routing (the widget also routes the clipboard link); launcher shortcuts open a new browser tab or the services list.
 
 ### Built-in browser
 
 - **Multi-tab browsing**: A tabbed WebView browser ("LibRedirect Browser") that receives routed links directly, with a tab switcher (sort, groups, close all / close other tabs), navigation controls, and a combined URL/search address bar. Open tabs survive process death; stale tabs can auto-close.
+- **Private tabs**: Child tabs inherit their parent’s session. Isolated profiles require a compatible Android System WebView. Site-only data deletion is available when the WebView exposes that capability.
 - **Content blocking**: Well-known tracker/ad hosts are blocked per-request (on by default). A bundled list works offline; updates come from one fixed HTTPS source through the same validation pipeline as the routing data.
 - **Per-site settings**: JavaScript, desktop mode, text size, forced dark rendering, and content blocking per host, from the address bar's security icon.
 - **Picture-in-picture**: Fullscreen video continues in a PiP window when you leave the app.
@@ -200,19 +201,19 @@ All screenshots below were captured from LibRedirect Mobile **v1.3.11** (Build 2
 - **Reader mode**: A locally packaged, dependency-free article extractor renders pages in a clean, theme-aware view.
 - **Start page**: New tabs offer a grid of bookmarks and frequently visited sites.
 - **Search engines**: Choose DuckDuckGo, SearXNG, Brave Search, Google, Startpage, or add a custom engine via a `%s` URL template.
-- **Bookmarks and history**: Local bookmark list with standard HTML and JSON import/export; history limit configurable (off / 50 / 200 / 500 / 1000).
+- **Bookmarks and history**: Bookmarks of routed links retain the source URL when it is known, so they can reopen through the currently selected instance. History limits and HTML/JSON bookmark import and export are available.
 - **Built-in download manager**: OkHttp-backed transfer engine running in a foreground service with live progress, speed, and ETA notifications (`Pause all` / `Cancel`), HTTP `Range` pause/resume, failure categorization and retry, **Wi-Fi only** scheduling (resumes automatically on unmetered networks or via manual override), and `http(s):` / `data:` / `blob:` support.
 - **Pre-download confirmation & smart filename resolution**: A configurable confirmation sheet (also forced for executables/installers) supports renaming files, live `Range`-probed size and MIME previews, and stripped tracking-parameter counts. Proxy query URLs (e.g. `/mediaproxy?url=...`), `Content-Disposition` headers, server `Content-Type`, and leading container signatures (`MP4`, `MOV`, `WebM`, `JPEG`, `PNG`, `PDF`, …) resolve automatically so proxied media saves with its real extension instead of `.bin`.
-- **Downloads library & privacy controls**: In-app downloads sheet with search, category filter chips (`Active`, `Completed`, `Images`, `Videos`, `Audio`, `Documents`, `Archives & apps`, `Failed`), system `MediaStore` / `FileProvider` open and share actions without storage permissions, optional local-file cleanup on removal, and settings for confirmation prompts, Wi-Fi-only downloads, and incognito download history cleanup.
+- **Downloads library & privacy controls**: In-app downloads sheet with search, category filter chips (`Active`, `Completed`, `Images`, `Videos`, `Audio`, `Documents`, `Archives & apps`, `Failed`), system `MediaStore` / `FileProvider` open and share actions without storage permissions, optional local-file cleanup on removal, and settings for confirmation prompts and Wi-Fi-only downloads. Private transfer records stay out of the saved download index. Files you deliberately save remain available in their storage location.
 - **Page appearance**: Light/dark rendering, auto-darkening, and a hide-toolbars-while-scrolling option.
 - **Browsing tools**: Find in page, desktop-site toggle, print/save-as-PDF, share page/link, share/copy original link, open in external browser, clear cookies and cache, HTTPS security indicator, and a banner showing the original → redirected URL mapping.
 
 ### App
 
-- **Backup & restore**: Export every setting, custom service, tracking rule, site setting, and (optionally) bookmarks into one JSON file via the system file picker; imports are validated and confirmed before anything changes.
-- **Onboarding**: A four-step first-launch guide (what the app does, default-browser role, per-app "open by default" fixes, share/text entry points), reopenable from Settings.
+- **Backup & restore**: Choose settings, custom rules and bookmarks for a JSON export, or share selected service rules. The import preview shows conflicting and invalid rules, and the result reports items that failed.
+- **Routing setup**: Open the setup from Home to review the browser role and Android app defaults, launch an example link, and see which delivery stages were observed.
 - **Privacy statistics card**: Local counters for redirects, cleaned parameters, unwrapped wrappers, resolved short links, and blocked requests — resettable, never leaves the device.
-- **Diagnostics**: A local, copyable diagnostics screen (versions, routing-data revision, rule counts, recent in-memory errors) with no telemetry.
+- **Diagnostics**: Device and WebView capabilities, host-only routing outcomes, and recent errors stay local. You can add reproduction steps and review a report before sharing it.
 - **Two-pane layout**: On tablets/foldables, the services screen shows list and detail side by side; service categories and filters help discovery.
 - **Update check**: A best-effort check of the project's GitHub Releases with in-app release notes (no push notifications; purely informational, fail-safe).
 - **Distribution**: `fastlane/metadata/android/` metadata (EN/TR) for F-Droid/IzzyOnDroid, Obtainium-friendly releases, and a CI reproducible-build check.
@@ -220,7 +221,17 @@ All screenshots below were captured from LibRedirect Mobile **v1.3.11** (Build 2
 
 ## How routing works
 
-The Android client does not contain a separate code path for each supported service. It reads a manifest that describes source hosts, frontends, instances, and routing strategies.
+The Android client reads a manifest of source hosts, frontends, instances and routing strategies. The routing core also has fixed URL transformations for supported frontend formats.
+
+| Frontend | Supported special link formats |
+| --- | --- |
+| Invidious | YouTube watch, results, playlist, channel, short, live and supported embeds |
+| BreezeWiki and Phantom | Fandom wiki articles and wiki search with the source wiki name |
+| Wikiless | Language-specific Wikipedia article links |
+| OpenStreetMap | Google Maps coordinates and zoom, text search, and coordinate-to-coordinate directions |
+| Other YouTube frontends | Supported direct YouTube page links. Check **Inspect links** for the selected frontend's decision. |
+
+Unsupported formats follow the service's fallback preference.
 
 The manifest supports a fixed set of routing primitives, enforced by a sealed type in the core routing module:
 
@@ -231,7 +242,7 @@ The manifest supports a fixed set of routing primitives, enforced by a sealed ty
 
 There is no expression or eval variant: adding a new primitive requires an app release, by design. The app never executes JavaScript or arbitrary expressions from the manifest. The routing manifest is generated by the app itself from the live upstream [LibRedirect configuration and instance data](https://github.com/libredirect), validated and self-tested before activation. The manifest bundled into the APK is only a first-start/offline fallback.
 
-When a link cannot be routed (service disabled, no instance available, or an exception matches), the original URL opens normally. Routing itself is fail-open; only input that was never a valid eligible URL (bad scheme, unparseable) is dropped.
+The service fallback policy applies when an enabled alternative cannot handle the link. Disabled routes and explicit exceptions can pass eligible links through.
 
 ## Project structure
 
@@ -272,7 +283,7 @@ Generation runs automatically in the background on app start (throttled to once 
 
 ## Releases and updates
 
-Releases are built by the `Android Release` GitHub Actions workflow, which reads the version from `android/app/build.gradle.kts`, builds a signed APK, smoke-tests the bundled manifest inside it, and publishes the APK as a GitHub Release tagged `v{versionName}`.
+Releases are built by the `Android Release` GitHub Actions workflow, which reads the version from `android/app/build.gradle.kts`, requires a green Android CI run for the exact main commit, builds a signed APK, smoke-tests the bundled manifest inside it, and publishes the APK and SHA-256 checksum under `v{versionName}`. CI includes Android emulator tests on API 28 and 36.
 
 The app checks GitHub's "latest release" endpoint and, if a newer version exists, shows a banner on the Home and Settings screens linking to the release page — release notes are shown in-app ("What's new"). Installation is manual (download the APK from GitHub Releases) or automatic via [Obtainium](https://github.com/ImranR98/Obtainium): add the repo URL `https://github.com/sametcn99/libredirect-mobile` and Obtainium tracks GitHub Releases for updates without any install permission in the app. CI runs a reproducible-build check (two release builds must hash identically). See [CONTRIBUTING.md](CONTRIBUTING.md) for the release checklist.
 

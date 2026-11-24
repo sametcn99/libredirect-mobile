@@ -10,9 +10,8 @@ data class Frontend(
     val instances: List<String> = emptyList(),
 ) {
     init {
-        val requiresInstances = Strategy.requiresInstances(strategy)
-        require(requiresInstances == instances.isNotEmpty()) {
-            "Frontend '$id': ${strategy::class.simpleName} requires instances=$requiresInstances, got ${instances.size}"
+        require(strategy is Strategy.ReplaceOrigin || Strategy.requiresInstances(strategy) == instances.isNotEmpty()) {
+            "Frontend '$id': invalid instance list for ${strategy::class.simpleName}"
         }
     }
 }

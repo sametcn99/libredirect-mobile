@@ -235,6 +235,47 @@ class SettingsRepository(private val context: Context) {
         setRouteMode(routeId, if (enabled) RouteMode.ALWAYS else RouteMode.OFF)
     }
 
+    suspend fun importSharedRules(
+        rules: RulePackage,
+        replace: Boolean,
+    ) {
+        context.settingsDataStore.edit { prefs ->
+            val currentFrontends = decodeStringMap(prefs[Keys.SELECTED_FRONTENDS])
+            val selections = decodeInstanceSelections(prefs[Keys.INSTANCE_SELECTIONS])
+            val policies = decodeOrDefault(prefs[Keys.LINK_POLICIES], LinkPolicies())
+            prefs[Keys.SELECTED_FRONTENDS] = json.encodeToString(mergeRules(currentFrontends, rules.frontends, replace))
+            val mergedSelections = mergeRules(selections, rules.instanceSelections, replace)
+            prefs[Keys.INSTANCE_SELECTIONS] = json.encodeToString(mergedSelections)
+            prefs[Keys.LINK_POLICIES] =
+                json.encodeToString(
+                    policies.copy(routes = mergeRules(policies.routes, rules.policies, replace)),
+                )
+        }
+    }
+
+    private fun <T> mergeRules(
+        current: Map<String, T>,
+        imported: Map<String, T>,
+        replace: Boolean,
+    ): Map<String, T> = if (replace) current + imported else imported + current
+
+    suspend fun applyRoutingPreset(preset: RoutingPreset) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[Keys.ROUTING_ENABLED] = preset.route
+            prefs[Keys.QUERY_PARAM_STRIP_ENABLED] = preset.extraCleanup
+            prefs[Keys.SHORT_LINK_RESOLVE_ENABLED] = false
+            val policies = decodeOrDefault(prefs[Keys.LINK_POLICIES], LinkPolicies())
+            prefs[Keys.LINK_POLICIES] = json.encodeToString(policies.copy(defaultFallback = preset.fallback))
+        }
+    }
+
+    suspend fun updateLinkPolicies(update: (LinkPolicies) -> LinkPolicies) {
+        context.settingsDataStore.edit { prefs ->
+            val current = decodeOrDefault(prefs[Keys.LINK_POLICIES], LinkPolicies())
+            prefs[Keys.LINK_POLICIES] = json.encodeToString(update(current))
+        }
+    }
+
     suspend fun setSelectedFrontend(
         routeId: String,
         frontendId: String,
@@ -270,6 +311,7 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { prefs ->
             prefs[Keys.ROUTING_ENABLED] = settings.routingEnabled
             prefs[Keys.SELECTED_BROWSER] = settings.selectedBrowserPackage ?: BrowserLauncher.SYSTEM_DEFAULT_PACKAGE
+            prefs[Keys.LINK_POLICIES] = json.encodeToString(settings.linkPolicies)
             prefs[Keys.DISABLED_ROUTES] = json.encodeToString(settings.disabledRoutes)
             prefs[Keys.ASK_MODE_ROUTES] = json.encodeToString(settings.askModeRoutes)
             prefs[Keys.SELECTED_FRONTENDS] = json.encodeToString(settings.selectedFrontends)
@@ -373,6 +415,7 @@ class SettingsRepository(private val context: Context) {
         AppSettings(
             routingEnabled = prefs[Keys.ROUTING_ENABLED] ?: true,
             selectedBrowserPackage = prefs[Keys.SELECTED_BROWSER] ?: BrowserLauncher.IN_APP_BROWSER_PACKAGE,
+            linkPolicies = decodeOrDefault(prefs[Keys.LINK_POLICIES], LinkPolicies()),
             disabledRoutes = decodeSet(prefs[Keys.DISABLED_ROUTES]),
             askModeRoutes = decodeSet(prefs[Keys.ASK_MODE_ROUTES]),
             selectedFrontends = decodeStringMap(prefs[Keys.SELECTED_FRONTENDS]),
@@ -432,6 +475,7 @@ class SettingsRepository(private val context: Context) {
         val SELECTED_BROWSER = stringPreferencesKey("selected_browser")
         val DISABLED_ROUTES = stringPreferencesKey("disabled_routes_json")
         val ASK_MODE_ROUTES = stringPreferencesKey("ask_mode_routes_json")
+        val LINK_POLICIES = stringPreferencesKey("link_policies_json")
         val SELECTED_FRONTENDS = stringPreferencesKey("selected_frontends_json")
         val INSTANCE_SELECTIONS = stringPreferencesKey("instance_selections_json")
         val EXCEPTIONS = stringPreferencesKey("exceptions_json")

@@ -43,7 +43,6 @@ import java.util.concurrent.TimeUnit
 
 private const val MAX_CONCURRENT_DOWNLOADS = 2
 private const val MAX_HISTORY_ITEMS = 200
-private const val MAX_FAILURE_DETAIL_LENGTH = 120
 private const val PROGRESS_EMIT_INTERVAL_MS = 250L
 private const val PERSIST_INTERVAL_MS = 2_000L
 private const val MILLIS_PER_SEC = 1_000L
@@ -53,20 +52,34 @@ private const val READ_TIMEOUT_SECS = 30L
 private const val PROBE_TIMEOUT_SECS = 4L
 private const val PROBE_SNIFF_BYTES = 64
 private const val HTTP_PARTIAL_CONTENT = 206
-private const val HTTP_RANGE_NOT_SATISFIABLE = 416
 private const val INDEX_FILE_NAME = "downloads_index.json"
 
 @Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 class DownloadRepository(
     private val context: Context?,
     private val storage: DownloadFileStore = DownloadStorage(requireNotNull(context)),
-    private val client: OkHttpClient = defaultClient(),
+    client: OkHttpClient = defaultClient(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val indexFile: File = File(requireNotNull(context).filesDir, INDEX_FILE_NAME),
     private val isUnmeteredNetwork: () -> Boolean = { context == null || checkUnmeteredNetwork(context) },
     private val onStartService: () -> Unit = { context?.let { DownloadService.start(it) } },
     onPostCompletionNotification: ((DownloadItem) -> Unit)? = null,
 ) {
+    private val client =
+        client.newBuilder()
+            .addNetworkInterceptor { chain ->
+                val request = chain.request()
+                val original = request.tag(DownloadOrigin::class.java)
+                val secured =
+                    if (original != null && !sameDownloadOrigin(original.url, request.url.toString())) {
+                        request.newBuilder().removeHeader("Cookie").removeHeader("Referer").build()
+                    } else {
+                        request
+                    }
+                chain.proceed(secured)
+            }.build()
+    private val closedPrivateTransfers = ConcurrentHashMap.newKeySet<String>()
+
     private val notificationHelper: DownloadNotificationHelper? =
         context?.let(::DownloadNotificationHelper)
     private val onPostCompletionNotification: (DownloadItem) -> Unit =
@@ -87,6 +100,8 @@ class DownloadRepository(
 
     private val _downloads = MutableStateFlow<List<DownloadItem>>(emptyList())
     val downloads: StateFlow<List<DownloadItem>> = _downloads.asStateFlow()
+    private val _visibleDownloads = MutableStateFlow<List<DownloadItem>>(emptyList())
+    val visibleDownloads: StateFlow<List<DownloadItem>> = _visibleDownloads.asStateFlow()
 
     private val _events = MutableSharedFlow<DownloadEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<DownloadEvent> = _events.asSharedFlow()
@@ -114,7 +129,14 @@ class DownloadRepository(
             try {
                 if (indexFile.exists()) {
                     val raw = indexFile.readText(Charsets.UTF_8)
-                    json.decodeFromString<List<DownloadItem>>(raw).map { normalizeRestoredItem(it) }
+                    json.decodeFromString<List<DownloadItem>>(raw).mapNotNull { item ->
+                        if (item.isIncognito) {
+                            storage.deleteStagingFile(item.id)
+                            null
+                        } else {
+                            normalizeRestoredItem(item)
+                        }
+                    }
                 } else {
                     emptyList()
                 }
@@ -125,6 +147,7 @@ class DownloadRepository(
             } catch (_: IOException) {
                 emptyList()
             }
+        storage.pruneAbandonedStaging(initial.map { it.id }.toSet())
         val sorted = initial.sortedByDescending { it.createdAtEpochMillis }
         updateDownloadsState(persist = true) { sorted }
         loaded.complete(Unit)
@@ -178,7 +201,9 @@ class DownloadRepository(
                 createdAtEpochMillis = now,
                 updatedAtEpochMillis = now,
             )
-        request.cookies?.takeIf { it.isNotBlank() }?.let { ephemeralCookiesById[id] = it }
+        request.cookies
+            ?.takeIf { it.isNotBlank() && sameDownloadOrigin(request.originalUrl, request.cleanedUrl) }
+            ?.let { ephemeralCookiesById[id] = it }
         controlOps.trySend {
             insertItem(item)
             _events.tryEmit(DownloadEvent.Started(item))
@@ -201,7 +226,10 @@ class DownloadRepository(
                     url = request.cleanedUrl,
                     userAgent = request.userAgent,
                     referer = request.referer,
-                    cookies = if (request.isIncognito) null else request.cookies,
+                    cookies =
+                        request.cookies?.takeIf {
+                            !request.isIncognito && sameDownloadOrigin(request.originalUrl, request.cleanedUrl)
+                        },
                     rangeHeader = "bytes=0-${PROBE_SNIFF_BYTES - 1}",
                 )
             val call = probeClient.newCall(httpReq)
@@ -630,16 +658,22 @@ class DownloadRepository(
 
     fun clearIncognitoHistory() {
         controlOps.trySend {
-            val removable = _downloads.value.filter { it.isIncognito && !it.status.isActive }
-            if (removable.isEmpty()) return@trySend
-            removable.forEach { item ->
-                ephemeralCookiesById.remove(item.id)
-                if (item.status != DownloadStatus.COMPLETED && !activeJobs.containsKey(item.id)) {
-                    storage.deleteStagingFile(item.id)
+            updateDownloadsState(persist = false) { list ->
+                list.filter { item ->
+                    when {
+                        !item.isIncognito -> true
+                        item.status.isActive -> {
+                            closedPrivateTransfers.add(item.id)
+                            true
+                        }
+                        else -> {
+                            ephemeralCookiesById.remove(item.id)
+                            storage.deleteStagingFile(item.id)
+                            false
+                        }
+                    }
                 }
             }
-            val removeIds = removable.map { it.id }.toSet()
-            updateDownloadsState(persist = true) { list -> list.filterNot { it.id in removeIds } }
             unregisterWifiCallbackIfUnused()
         }
     }
@@ -741,14 +775,14 @@ class DownloadRepository(
         onStartService()
 
         val staging = storage.stagingFile(id)
-        var existingOffset = if (staging.exists()) staging.length() else 0L
+        var existingOffset = staging.takeIf { initial.resumeValidator != null }?.length() ?: 0L
         var callAndResp = executeHttpCall(id, initial, existingOffset) ?: return
-        if (callAndResp.second.code == HTTP_RANGE_NOT_SATISFIABLE && existingOffset > 0L) {
+        if (existingOffset > 0L && shouldRestartTransfer(callAndResp.second, initial, existingOffset)) {
             callAndResp.second.close()
             activeCalls.remove(id, callAndResp.first)
             storage.deleteStagingFile(id)
             existingOffset = 0L
-            callAndResp = executeHttpCall(id, initial, 0L) ?: return
+            callAndResp = executeHttpCall(id, initial, existingOffset) ?: return
         }
 
         val (activeCall, response) = callAndResp
@@ -762,6 +796,10 @@ class DownloadRepository(
                         detail = "HTTP ${resp.code}",
                         httpStatusCode = resp.code,
                     )
+                    return
+                }
+                if (resp.code == HTTP_PARTIAL_CONTENT && existingOffset == 0L) {
+                    markFailed(id, DownloadFailureReason.HTTP_ERROR, "Unexpected partial response")
                     return
                 }
                 val body = resp.body
@@ -789,6 +827,12 @@ class DownloadRepository(
                         contentLength >= 0L -> startOffset + contentLength
                         else -> initial.totalBytes
                     }
+                val validator = downloadValidator(resp)
+                if (validator != initial.resumeValidator || resp.request.url.toString() != initial.resumeUrl) {
+                    updateItem(id, persist = true) {
+                        it.copy(resumeValidator = validator, resumeUrl = resp.request.url.toString())
+                    }
+                }
                 val contentDisposition = resp.header("Content-Disposition")
                 val serverContentType = resp.header("Content-Type")
                 val headerResolved =
@@ -814,6 +858,16 @@ class DownloadRepository(
                         persistMetadata = metadataChanged,
                     ) ?: return
 
+                val expectedSize = contentRangeTotal ?: (startOffset + contentLength).takeIf { contentLength >= 0L }
+                if (expectedSize != null && writtenTotal != expectedSize) {
+                    markFailed(
+                        id,
+                        DownloadFailureReason.NETWORK_ERROR,
+                        "Incomplete response",
+                        bytesDownloaded = writtenTotal,
+                    )
+                    return
+                }
                 val latest = findItem(id) ?: return
                 if (latest.status != DownloadStatus.RUNNING) return
                 val finalMetadata =
@@ -893,8 +947,7 @@ class DownloadRepository(
         }
     }
 
-    private fun stagedByteCount(id: String): Long =
-        storage.stagingFile(id).takeIf { it.exists() }?.length() ?: 0L
+    private fun stagedByteCount(id: String): Long = storage.stagingFile(id).takeIf { it.exists() }?.length() ?: 0L
 
     private suspend fun syncPausedBytes(
         id: String,
@@ -1000,10 +1053,13 @@ class DownloadRepository(
         referer: String?,
         cookies: String?,
         rangeHeader: String? = null,
+        ifRange: String? = null,
     ): Request {
-        val builder = Request.Builder().url(url)
+        val builder = Request.Builder().url(url).tag(DownloadOrigin::class.java, DownloadOrigin(url))
+        builder.header("Accept-Encoding", "identity")
+        ifRange?.let { builder.header("If-Range", it) }
         userAgent?.takeIf { it.isNotBlank() }?.let { builder.header("User-Agent", it) }
-        referer?.takeIf { it.isNotBlank() }?.let { builder.header("Referer", it) }
+        referer?.takeIf { sameDownloadOrigin(it, url) }?.let { builder.header("Referer", it) }
         cookies?.takeIf { it.isNotBlank() }?.let { builder.header("Cookie", it) }
         rangeHeader?.let { builder.header("Range", it) }
         return builder.build()
@@ -1022,6 +1078,7 @@ class DownloadRepository(
                 referer = item.referer,
                 cookies = ephemeralCookiesById[id],
                 rangeHeader = rangeHeader,
+                ifRange = item.resumeValidator?.takeIf { rangeHeader != null },
             )
         val call = client.newCall(request)
         activeCalls[id] = call
@@ -1102,7 +1159,7 @@ class DownloadRepository(
         }
         completedItem?.let {
             _events.tryEmit(DownloadEvent.Completed(it))
-            onPostCompletionNotification(it)
+            if (!it.isIncognito) onPostCompletionNotification(it)
         }
     }
 
@@ -1135,16 +1192,16 @@ class DownloadRepository(
         }
         failedItem?.let { item ->
             _events.tryEmit(DownloadEvent.Failed(item))
-            onPostCompletionNotification(item)
+            if (!item.isIncognito) onPostCompletionNotification(item)
+            if (item.isIncognito) return@let
             // Diagnostics hook (issue #12 follow-up): every download failure
             // funnels through here, so one record covers all failure paths.
             // Host-only on purpose — never the full URL.
-            val detailPart = detail?.take(MAX_FAILURE_DETAIL_LENGTH)?.let { " detail=$it" }.orEmpty()
             val httpPart = httpStatusCode?.let { " http=$it" }.orEmpty()
             DiagnosticsLog.record(
                 "Downloads",
                 "Download failed: host=${item.sourceHost.ifBlank { "(unknown)" }} " +
-                    "reason=$reason$detailPart$httpPart",
+                    "reason=$reason$httpPart",
             )
         }
     }
@@ -1156,23 +1213,36 @@ class DownloadRepository(
         transform: (List<DownloadItem>) -> List<DownloadItem>,
     ) {
         stateMutex.withLock {
-            val updated = transform(_downloads.value)
+            val updated =
+                transform(_downloads.value).filterNot { item ->
+                    val discard = !item.status.isActive && closedPrivateTransfers.remove(item.id)
+                    if (discard) {
+                        ephemeralCookiesById.remove(item.id)
+                        storage.deleteStagingFile(item.id)
+                    }
+                    discard
+                }
             if (!persist) {
-                _downloads.value = updated
+                publishDownloads(updated)
                 return@withLock
             }
             try {
                 indexFile.parentFile?.mkdirs()
                 val temp = File(indexFile.parentFile, "${indexFile.name}.tmp")
-                temp.writeText(json.encodeToString(updated), Charsets.UTF_8)
+                temp.writeText(json.encodeToString(updated.filterNot { it.isIncognito }), Charsets.UTF_8)
                 if (!temp.renameTo(indexFile)) {
                     temp.copyTo(indexFile, overwrite = true)
                     temp.delete()
                 }
             } catch (_: IOException) {
             }
-            _downloads.value = updated
+            publishDownloads(updated)
         }
+    }
+
+    private fun publishDownloads(items: List<DownloadItem>) {
+        _downloads.value = items
+        _visibleDownloads.value = items.filterNot { it.id in closedPrivateTransfers }
     }
 
     private fun ensureWifiCallbackRegistered() {

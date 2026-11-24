@@ -4,7 +4,6 @@ package dev.libredirect.mobile.downloads
 
 import android.webkit.MimeTypeMap
 import dev.libredirect.mobile.core.routing.ExceptionMatcher
-import dev.libredirect.mobile.core.url.CustomTrackingScope
 import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlParser
 import dev.libredirect.mobile.core.url.UrlUnwrapper
@@ -399,7 +398,7 @@ private fun cleanHttpDownloadUrl(
 ): PreparedDownloadUrl {
     var working = rawUrl
     var unwrappedLayers = 0
-    if (settings.unwrapRedirectWrappersEnabled) {
+    if (settings.canUnwrap(rawUrl)) {
         val unwrapped = UrlUnwrapper.unwrapAll(working)
         if (unwrapped.url != working) {
             working = unwrapped.url
@@ -415,8 +414,7 @@ private fun cleanHttpDownloadUrl(
             sourceHost = fallbackHost,
         )
     }
-    val rules = settings.customTrackingRules()
-    val scope = CustomTrackingScope(global = rules.global, byHost = rules.byHost)
+    val scope = settings.trackingScope()
     val strippedCount = TrackingParams.removedCount(parsed.rawQuery, parsed.host, scope)
     val cleaned = TrackingParams.stripFrom(working, parsed, scope)
     return PreparedDownloadUrl(

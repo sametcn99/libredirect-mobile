@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package dev.libredirect.mobile.ui.service
 
@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.AddToHomeScreen
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,15 +45,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.libredirect.mobile.R
+import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.core.routing.InstanceHealth
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.url.UrlValidation
+import dev.libredirect.mobile.settings.OriginalFallback
+import dev.libredirect.mobile.settings.RouteLinkPolicy
 import dev.libredirect.mobile.settings.RouteMode
 import dev.libredirect.mobile.ui.FrontendUiState
 import dev.libredirect.mobile.ui.ServiceUiState
+import dev.libredirect.mobile.ui.settings.SettingsChoice
 import kotlinx.coroutines.delay
 
 private const val CUSTOM_COMMIT_DEBOUNCE_MILLIS = 600L
@@ -67,6 +73,9 @@ fun ServiceDetailScreen(
     redirectCount: Int = 0,
     onPinShortcut: () -> Unit = {},
     routeMode: RouteMode = RouteMode.ALWAYS,
+    linkPolicy: RouteLinkPolicy = RouteLinkPolicy(),
+    onTargetChange: (String?) -> Unit = {},
+    onFallbackChange: (OriginalFallback) -> Unit = {},
     onRouteModeChange: (RouteMode) -> Unit = {},
     instanceHealth: Map<String, InstanceHealth> = emptyMap(),
     isMeasuringHealth: Boolean = false,
@@ -111,6 +120,9 @@ fun ServiceDetailScreen(
                 )
             }
             item {
+                ServiceLinkControls(service.sampleHost, linkPolicy, onTargetChange, onFallbackChange)
+            }
+            item {
                 Text(
                     text = stringResource(R.string.service_detail_frontend_header),
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
@@ -139,6 +151,46 @@ fun ServiceDetailScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ServiceLinkControls(
+    sampleHost: String?,
+    policy: RouteLinkPolicy,
+    onTargetChange: (String?) -> Unit,
+    onFallbackChange: (OriginalFallback) -> Unit,
+) {
+    val context = LocalContext.current
+    val targets =
+        remember(context, sampleHost) {
+            val launcher = BrowserLauncher(context)
+            sampleHost?.let { launcher.installedTargets("https://$it/") } ?: launcher.installedBrowsers()
+        }
+    val choices =
+        mutableMapOf<String?, String>(
+            null to stringResource(R.string.link_target_default),
+            BrowserLauncher.ASK_PACKAGE to stringResource(R.string.link_target_ask),
+        )
+    targets.forEach { target -> choices[target.packageName] = target.label }
+    policy.targetPackage?.takeUnless(choices::containsKey)?.let {
+        choices[it] = stringResource(R.string.link_target_unavailable)
+    }
+    SettingsChoice(stringResource(R.string.inspect_target), choices, policy.targetPackage, onTargetChange)
+    SettingsChoice(
+        stringResource(R.string.original_fallback_label),
+        mapOf(
+            OriginalFallback.OPEN to stringResource(R.string.original_fallback_open),
+            OriginalFallback.ASK to stringResource(R.string.original_fallback_ask),
+            OriginalFallback.BLOCK to stringResource(R.string.original_fallback_block),
+        ),
+        policy.fallback,
+        onFallbackChange,
+    )
+    Text(
+        stringResource(R.string.link_target_external_note),
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
 }
 
 /** Local usage stats (A6) plus a pinned-shortcut action (C3) for this service. */
@@ -274,12 +326,14 @@ private fun InstanceHealthPanel(
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = instance.removePrefix("https://"),
+                    text =
+                        instance.removePrefix("https://") +
+                            health[instance]?.httpStatus?.let { " · HTTP $it" }.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     modifier = Modifier.weight(1f),
                 )
-                health[instance]?.latencyMillis?.takeIf { it > 0 }?.let { latency ->
+                health[instance]?.currentLatency(nowMillis())?.takeIf { it >= 0 }?.let { latency ->
                     Text(
                         text = stringResource(R.string.browser_instance_latency_fmt, latency),
                         style = MaterialTheme.typography.labelSmall,
@@ -297,7 +351,7 @@ private fun healthStatus(
     health: InstanceHealth?,
     nowMillis: Long,
 ): HealthStatus {
-    val latency = health?.latencyMillis
+    val latency = health?.currentLatency(nowMillis)
     return when {
         health?.isCoolingDown(nowMillis) == true -> HealthStatus.COOLDOWN
         latency != null && latency < 0 -> HealthStatus.UNREACHABLE
@@ -324,6 +378,10 @@ private fun FrontendRow(
 ) {
     ListItem(
         headlineContent = { Text(frontend.name) },
+        supportingContent = {
+            val available = frontend.instances.isNotEmpty() || frontend.selection is InstanceSelection.Custom
+            Text(stringResource(if (available) R.string.inspect_redirect else R.string.inspect_no_instance))
+        },
         leadingContent = { RadioButton(selected = selected, onClick = onSelect) },
         modifier = Modifier.clickable(onClick = onSelect),
     )

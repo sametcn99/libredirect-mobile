@@ -46,6 +46,26 @@ object QueryParams {
             "sort",
         )
 
+    private val instagramSharePath = Regex("^/(p|reel|tv)/[A-Za-z0-9_-]+/?$")
+    private val youtubeWatchPath = Regex("^/watch/?$")
+
+    /** Extra cleanup for verified share-link shapes only. */
+    fun stripShareTags(
+        input: String,
+        url: ParsedUrl,
+        preserve: Set<String> = emptySet(),
+    ): StripResult {
+        val names =
+            when {
+                url.host in setOf("www.instagram.com", "instagram.com") && instagramSharePath.matches(url.rawPath) ->
+                    setOf("hl")
+                url.host in setOf("www.youtube.com", "youtube.com", "m.youtube.com") &&
+                    youtubeWatchPath.matches(url.rawPath) -> setOf("hl")
+                else -> emptySet()
+            }
+        return stripMatching(input, url) { it in names && it !in preserve }
+    }
+
     /** Outcome of one strip pass: the cleaned URL and how many pairs were removed. */
     data class StripResult(
         val url: String,
@@ -63,8 +83,16 @@ object QueryParams {
         input: String,
         url: ParsedUrl,
         keep: Set<String> = FUNCTIONAL_NAMES,
+    ): StripResult = stripMatching(input, url) { it !in keep }
+
+    @Suppress("ReturnCount")
+    private fun stripMatching(
+        input: String,
+        url: ParsedUrl,
+        shouldRemove: (String) -> Boolean,
     ): StripResult {
         val rawQuery = url.rawQuery ?: return StripResult(input, 0)
+        if (TrackingParams.isSignedQuery(rawQuery)) return StripResult(input, 0)
         var removed = 0
         val kept =
             rawQuery.split("&").filter { pair ->
@@ -72,9 +100,9 @@ object QueryParams {
                     true
                 } else {
                     val name = decodedName(pair)?.lowercase()
-                    val isFunctional = name != null && name in keep
-                    if (!isFunctional) removed++
-                    isFunctional
+                    val remove = name != null && shouldRemove(name)
+                    if (remove) removed++
+                    !remove
                 }
             }
         if (removed == 0) return StripResult(input, 0)

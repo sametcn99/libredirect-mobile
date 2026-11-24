@@ -12,12 +12,15 @@ import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.browser.InAppRedirectInfo
 import dev.libredirect.mobile.core.routing.RoutingFailure
 import dev.libredirect.mobile.core.routing.RoutingResult
+import dev.libredirect.mobile.core.routing.UrlRouter
 import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlCandidate
 import dev.libredirect.mobile.core.url.UrlParser
 import dev.libredirect.mobile.diagnostics.DiagnosticsLog
+import dev.libredirect.mobile.diagnostics.RouteMeasurements
 import dev.libredirect.mobile.diagnostics.RoutingOutcomeLog
 import dev.libredirect.mobile.settings.AppSettings
+import dev.libredirect.mobile.settings.OriginalFallback
 import dev.libredirect.mobile.settings.SettingsRepository
 import dev.libredirect.mobile.ui.browser.BrowserDataRepository
 import dev.libredirect.mobile.ui.browser.PrivacyStats
@@ -67,6 +70,7 @@ class RedirectActivity : ComponentActivity() {
                 DiagnosticsLog.record(TAG, error, "routing failed at stage=${stage.current}")
                 showMessage(app, R.string.redirect_cannot_open)
             } finally {
+                RouteMeasurements.recordRouting(stage.startedAtNanos)
                 // Always finish on the main thread so the translucent proxy window closes cleanly.
                 finishOnMain()
             }
@@ -79,6 +83,7 @@ class RedirectActivity : ComponentActivity() {
      * resolve → ask → launch), not just that it broke.
      */
     private class RouteStage {
+        val startedAtNanos = System.nanoTime()
         @Volatile
         var current: String = "extract"
     }
@@ -106,13 +111,14 @@ class RedirectActivity : ComponentActivity() {
             ?.getStringExtra(Intent.EXTRA_TEXT)
             ?.let(UrlCandidate::find)
 
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun route(
         app: LibRedirectApplication,
         url: String,
         referrer: String?,
         stage: RouteStage,
     ) {
+        SetupCheck.record(url, SetupCheck.Stage.RECEIVED)
         stage.current = "manifest-load"
         val manifest = withContext(Dispatchers.IO) { app.manifestRepository.activeManifest() }
         val settings = SettingsRepository(app).current()
@@ -144,15 +150,36 @@ class RedirectActivity : ComponentActivity() {
         // Paused routing (2.6) behaves exactly like the master switch off:
         // links pass through with tracking cleanup only.
         val routingActive = settings.routingEnabled && !settings.isRoutingPaused()
-        val result =
-            if (!routingActive || manifest == null) {
-                RoutingResult.Passthrough(prepared.url)
+        val decision =
+            if (routingActive && manifest != null) {
+                UrlRouter(manifest).resolveWithTrace(prepared.url, context)
             } else {
-                dev.libredirect.mobile.core.routing.UrlRouter(manifest).resolve(prepared.url, context)
+                null
             }
+        val result = decision?.result ?: RoutingResult.Passthrough(pipeline.clean(prepared))
+        val selectedPackage =
+            settings.linkPolicies.targetPackage(
+                UrlParser.parse(prepared.url)?.host,
+                decision?.trace?.routeId,
+                settings.selectedBrowserPackage,
+            )
         RoutingOutcomeLog.record(prepared.url, result)
+        when (decision?.trace?.let(settings.linkPolicies::fallback)) {
+            OriginalFallback.BLOCK -> {
+                showMessage(app, R.string.original_fallback_blocked)
+                return
+            }
+            OriginalFallback.ASK -> {
+                withContext(Dispatchers.Main.immediate) {
+                    AskFallbackActivity.start(activeLaunchContext(app), url, selectedPackage)
+                }
+                return
+            }
+            OriginalFallback.OPEN, null -> Unit
+        }
 
         val destination = destinationFor(result)
+        SetupCheck.record(url, if (destination == null) SetupCheck.Stage.FAILED else SetupCheck.Stage.RESOLVED)
         if (destination == null) {
             recordNoDestination(intent.action, result, stage.current, prepared.url)
             return showMessage(app, R.string.redirect_cannot_open)
@@ -179,7 +206,7 @@ class RedirectActivity : ComponentActivity() {
                     launchContext,
                     redirect,
                     displayNames = displayNames,
-                    preferredBrowserPackage = settings.selectedBrowserPackage,
+                    preferredBrowserPackage = selectedPackage,
                     hasBrowserPreference = true,
                 )
                 finishIfAlive()
@@ -190,7 +217,7 @@ class RedirectActivity : ComponentActivity() {
         val redirectInfo =
             redirect?.let {
                 InAppRedirectInfo(
-                    originalUrl = prepared.url,
+                    originalUrl = url,
                     routeId = it.routeId,
                     frontendId = it.frontendId,
                     instance = it.instance,
@@ -200,20 +227,28 @@ class RedirectActivity : ComponentActivity() {
         // context first (prevents Android 14+ BAL blocks), finish the
         // translucent proxy immediately, and persist stats in the background.
         stage.current = "launch"
-        val launched =
+        val outcome =
             withContext(Dispatchers.Main.immediate) {
                 val launchContext = activeLaunchContext(app)
                 val ok =
-                    BrowserLauncher(launchContext).launch(
+                    BrowserLauncher(launchContext).launchOutcome(
                         launchContext,
                         destination,
-                        preferredPackage = settings.selectedBrowserPackage,
+                        preferredPackage = selectedPackage,
                         redirect = redirectInfo,
                     )
                 finishIfAlive()
                 ok
             }
-        if (!launched) {
+        val delivery =
+            when (outcome) {
+                BrowserLauncher.LaunchOutcome.CHOOSER -> SetupCheck.Stage.CHOOSER
+                BrowserLauncher.LaunchOutcome.FAILED -> SetupCheck.Stage.FAILED
+                else -> SetupCheck.Stage.DELIVERED
+            }
+        SetupCheck.record(url, delivery)
+        RouteMeasurements.recordOutcome(outcome.name)
+        if (outcome == BrowserLauncher.LaunchOutcome.FAILED) {
             recordLaunchFailure(settings, prepared.url, hadRedirect = redirect != null)
             showMessage(app, R.string.redirect_no_browser)
         } else if (redirect != null || (result is RoutingResult.Passthrough && prepared.url != effectiveUrl)) {
@@ -314,13 +349,13 @@ class RedirectActivity : ComponentActivity() {
         redirected: Boolean,
     ) {
         val parsed = UrlParser.parse(prepared.url)
-        val scope = settings.customTrackingRules()
+        val scope = settings.trackingScope()
         val stripped =
             parsed?.let {
                 TrackingParams.removedCount(
                     it.rawQuery,
                     it.host,
-                    dev.libredirect.mobile.core.url.CustomTrackingScope(scope.global, scope.byHost),
+                    scope,
                 )
             } ?: 0
         dataRepository.addPrivacyStats(

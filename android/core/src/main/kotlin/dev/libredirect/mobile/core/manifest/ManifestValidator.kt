@@ -207,9 +207,7 @@ object ManifestValidator {
         errors: MutableList<String>,
     ) {
         when (val strategy = frontend.strategy) {
-            Strategy.ReplaceOrigin -> {
-                if (frontend.instances.isEmpty()) errors += "frontend '${frontend.id}' needs instances"
-            }
+            Strategy.ReplaceOrigin -> Unit
             is Strategy.Template -> {
                 if (frontend.instances.isEmpty()) errors += "frontend '${frontend.id}' needs instances"
                 validateTemplate(routeId, frontend.id, strategy.output, errors)

@@ -11,6 +11,7 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.webkit.WebViewCompat
 import dev.libredirect.mobile.BuildConfig
 import dev.libredirect.mobile.LibRedirectApplication
 import dev.libredirect.mobile.MainActivity
@@ -19,31 +20,37 @@ import dev.libredirect.mobile.blocker.BlocklistFetcher
 import dev.libredirect.mobile.blocker.BlocklistStore
 import dev.libredirect.mobile.browser.BrowserInfo
 import dev.libredirect.mobile.browser.BrowserLauncher
+import dev.libredirect.mobile.browser.InstanceProbe
 import dev.libredirect.mobile.browser.ShortcutActions
 import dev.libredirect.mobile.core.manifest.Manifest
 import dev.libredirect.mobile.core.manifest.Route
+import dev.libredirect.mobile.core.manifest.Strategy
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
-import dev.libredirect.mobile.core.routing.RoutingOutcome
-import dev.libredirect.mobile.core.routing.RoutingTrace
-import dev.libredirect.mobile.core.routing.TraceReason
 import dev.libredirect.mobile.core.url.UrlCandidate
 import dev.libredirect.mobile.diagnostics.DiagnosticsLog
+import dev.libredirect.mobile.diagnostics.RouteMeasurements
 import dev.libredirect.mobile.diagnostics.RoutingOutcomeLog
 import dev.libredirect.mobile.manifest.InstanceHealthWorker
 import dev.libredirect.mobile.manifest.InstanceRefreshWorker
 import dev.libredirect.mobile.manifest.RefreshResult
 import dev.libredirect.mobile.media.MediaPlaybackBus
 import dev.libredirect.mobile.media.MediaPlaybackService
-import dev.libredirect.mobile.redirect.LinkPipeline
+import dev.libredirect.mobile.redirect.LinkInspection
 import dev.libredirect.mobile.settings.AppSettings
+import dev.libredirect.mobile.settings.BackupOptions
+import dev.libredirect.mobile.settings.CustomTrackingParam
+import dev.libredirect.mobile.settings.HostLinkPolicy
+import dev.libredirect.mobile.settings.RouteLinkPolicy
 import dev.libredirect.mobile.settings.RouteMode
+import dev.libredirect.mobile.settings.RulePackage
 import dev.libredirect.mobile.settings.SettingsBackupCodec
 import dev.libredirect.mobile.settings.SettingsRepository
 import dev.libredirect.mobile.settings.TabAutoClose
 import dev.libredirect.mobile.ui.browser.BrowserDataRepository
 import dev.libredirect.mobile.ui.browser.BrowserViewModel
 import dev.libredirect.mobile.ui.browser.SearchEngine
+import dev.libredirect.mobile.ui.browser.WebViewProfileManager
 import dev.libredirect.mobile.update.UpdateCheckResult
 import dev.libredirect.mobile.update.UpdateRepository
 import kotlinx.coroutines.CancellationException
@@ -111,6 +118,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * [dev.libredirect.mobile.MainActivity]; consumed by AppNavHost once it
      * has navigated).
      */
+    private val _inspectionText = MutableStateFlow("")
+    val inspectionText = _inspectionText.asStateFlow()
+
+    fun inspectLinks(text: String) {
+        _inspectionText.value = text
+        onShortcutRoute(ROUTE_INSPECT_LINK)
+    }
+
     private val _shortcutRoute = MutableStateFlow<String?>(null)
     val shortcutRoute: StateFlow<String?> = _shortcutRoute.asStateFlow()
 
@@ -336,11 +351,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setBackgroundAudioEnabled(enabled: Boolean) =
         launchSafely { settingsRepository.setBackgroundAudioEnabled(enabled) }
 
-    fun setAskBeforeDownload(enabled: Boolean) =
-        launchSafely { settingsRepository.setAskBeforeDownload(enabled) }
+    fun setAskBeforeDownload(enabled: Boolean) = launchSafely { settingsRepository.setAskBeforeDownload(enabled) }
 
-    fun setDownloadWifiOnly(enabled: Boolean) =
-        launchSafely { settingsRepository.setDownloadWifiOnly(enabled) }
+    fun setDownloadWifiOnly(enabled: Boolean) = launchSafely { settingsRepository.setDownloadWifiOnly(enabled) }
 
     fun setClearIncognitoDownloads(enabled: Boolean) =
         launchSafely { settingsRepository.setClearIncognitoDownloads(enabled) }
@@ -349,7 +362,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAutoCloseTabs(mode: TabAutoClose) = launchSafely { settingsRepository.setAutoCloseOldTabs(mode.id) }
 
-    fun setHistoryLimit(limit: Int) = launchSafely { settingsRepository.setHistoryLimit(limit) }
+    fun setHistoryLimit(limit: Int) =
+        launchSafely {
+            settingsRepository.setHistoryLimit(limit)
+            browserDataRepository.enforceHistoryLimit(settingsRepository.current().historyLimit)
+        }
 
     fun setAutoHideToolbar(enabled: Boolean) = launchSafely { settingsRepository.setAutoHideToolbar(enabled) }
 
@@ -367,7 +384,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- 3.2 user-defined tracking parameters ---
 
-    fun setCustomTrackingParams(params: List<dev.libredirect.mobile.settings.CustomTrackingParam>) =
+    fun setCustomTrackingParams(params: List<CustomTrackingParam>) =
         launchSafely { settingsRepository.setCustomTrackingParams(params) }
 
     // --- 2.3 instance health panel ---
@@ -381,16 +398,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.isMeasuringHealth) return
         _uiState.value = _uiState.value.copy(isMeasuringHealth = true)
         launchSafely {
-            val probe = dev.libredirect.mobile.browser.InstanceProbe()
+            val probe = InstanceProbe()
             val results = probe.measure(frontend.instances)
-            browserDataRepository.saveLatencies(results)
-            val health =
-                (results.keys + browserDataRepository.instanceFailures().keys).associateWith { host ->
-                    dev.libredirect.mobile.core.routing.InstanceHealth(
-                        latencyMillis = results[host],
-                        lastFailedAtMillis = browserDataRepository.instanceFailures()[host],
-                    )
-                }
+            browserDataRepository.saveInstanceMeasurements(results)
+            val health = browserDataRepository.instanceHealth()
             _uiState.value = _uiState.value.copy(instanceHealth = health, isMeasuringHealth = false)
         }
     }
@@ -400,10 +411,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.isMeasuringAllServices) return
         _uiState.value = _uiState.value.copy(isMeasuringAllServices = true, latencyMeasureMessage = null)
         launchSafely {
-            val currentManifest = loadManifest() ?: run {
-                _uiState.value = _uiState.value.copy(isMeasuringAllServices = false)
-                return@launchSafely
-            }
+            val currentManifest =
+                loadManifest() ?: run {
+                    _uiState.value = _uiState.value.copy(isMeasuringAllServices = false)
+                    return@launchSafely
+                }
             val instances =
                 withContext(Dispatchers.IO) {
                     currentManifest.routes
@@ -414,9 +426,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(isMeasuringAllServices = false)
                 return@launchSafely
             }
-            val probe = dev.libredirect.mobile.browser.InstanceProbe()
+            val probe = InstanceProbe()
             val results = probe.measure(instances)
-            browserDataRepository.saveLatencies(results)
+            browserDataRepository.saveInstanceMeasurements(results)
             val now = System.currentTimeMillis()
             browserDataRepository.setLastLatencyMeasureResult(now, results.size)
             loadInstanceHealth()
@@ -446,22 +458,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Seeds the health panel from stored measurements when the detail screen opens. */
     fun loadInstanceHealth() {
         launchSafely {
-            val latencies = browserDataRepository.cachedLatencies()
-            val failures = browserDataRepository.instanceFailures()
-            val health =
-                (latencies.keys + failures.keys).associateWith { host ->
-                    dev.libredirect.mobile.core.routing.InstanceHealth(
-                        latencyMillis = latencies[host],
-                        lastFailedAtMillis = failures[host],
-                    )
-                }
+            val health = browserDataRepository.instanceHealth()
             _uiState.value = _uiState.value.copy(instanceHealth = health)
         }
     }
 
     // --- 5.1 backup / restore ---
 
-    fun exportSettingsTo(uri: Uri) {
+    fun exportSettingsTo(
+        uri: Uri,
+        options: BackupOptions,
+    ) {
         launchSafely {
             val (verName, _, _) = versionInfo()
             val settings = settingsRepository.current()
@@ -469,10 +476,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 SettingsBackupCodec.Backup(
                     exportedAtEpochMillis = System.currentTimeMillis(),
                     appVersionName = verName,
-                    settings = settings,
-                    customRoutes = manifestRepository.customRoutes(),
-                    bookmarks = browserDataRepository.bookmarks.first(),
-                    siteSettingHosts = settings.siteSettings.keys.toList(),
+                    settings = if (options.settings) settings else AppSettings(),
+                    customRoutes =
+                        manifestRepository.customRoutes().filter { route ->
+                            options.customRoutes && (options.serviceIds == null || route.id in options.serviceIds)
+                        },
+                    bookmarks = if (options.bookmarks) browserDataRepository.bookmarks.first() else emptyList(),
+                    siteSettingHosts = if (options.settings) settings.siteSettings.keys.toList() else emptyList(),
+                    includesSettings = options.settings,
+                    sharedRules =
+                        options.serviceIds?.let {
+                            RulePackage.fromSettings(settings, it)
+                        },
                 )
             val encoded = SettingsBackupCodec.encode(backup)
             withContext(Dispatchers.IO) {
@@ -490,12 +505,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val content =
                 withContext(Dispatchers.IO) {
                     app.contentResolver.openInputStream(uri)?.use { stream ->
-                        stream.readBytes()
+                        val limit = SettingsBackupCodec.MAX_BACKUP_BYTES + 1
+                        val output = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(BACKUP_READ_BUFFER_BYTES)
+                        while (output.size() < limit) {
+                            val read = stream.read(buffer, 0, minOf(buffer.size, limit - output.size()))
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                        }
+                        output.toByteArray()
                     } ?: throw IOException("Cannot open import source")
                 }
             when (val result = SettingsBackupCodec.decode(String(content, Charsets.UTF_8))) {
-                is SettingsBackupCodec.ImportResult.Success ->
-                    _uiState.value = _uiState.value.copy(pendingSettingsImport = result.backup)
+                is SettingsBackupCodec.ImportResult.Success -> {
+                    val items =
+                        withContext(Dispatchers.IO) { manifestRepository.previewRuleImport(result.backup.customRoutes) }
+                    _uiState.value = _uiState.value.copy(
+                        pendingSettingsImport = result.backup,
+                        pendingRuleItems = items,
+                    )
+                }
                 is SettingsBackupCodec.ImportResult.Failure -> {
                     val reasonText =
                         when (result.reason) {
@@ -514,29 +543,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun applyPendingImport() {
+    fun applyPendingImport(replaceConflicts: Boolean) {
         val backup = _uiState.value.pendingSettingsImport ?: return
+        _uiState.value = _uiState.value.copy(pendingSettingsImport = null)
         launchSafely {
-            settingsRepository.importAll(backup.settings)
-            for (route in backup.customRoutes) {
-                manifestRepository.addCustomRoute(route)
+            if (backup.includesSettings) {
+                settingsRepository.importAll(backup.settings)
+                browserDataRepository.enforceHistoryLimit(backup.settings.historyLimit)
             }
-            if (backup.bookmarks.isNotEmpty()) {
-                browserDataRepository.importBookmarks(backup.bookmarks)
-            }
+            backup.sharedRules?.let { rules -> settingsRepository.importSharedRules(rules, replaceConflicts) }
+            val failures =
+                withContext(Dispatchers.IO) {
+                    manifestRepository.previewRuleImport(backup.customRoutes).mapNotNull { item ->
+                        when {
+                            item.conflict && !replaceConflicts -> null
+                            item.error != null -> "${item.route.name} — ${item.error}"
+                            else ->
+                                manifestRepository.addCustomRoute(item.route).exceptionOrNull()?.let {
+                                    "${item.route.name} — ${it.message.orEmpty()}"
+                                }
+                        }
+                    }
+                }
+            if (backup.bookmarks.isNotEmpty()) browserDataRepository.importBookmarks(backup.bookmarks)
             _uiState.value =
                 _uiState.value.copy(
-                    pendingSettingsImport = null,
-                    customServiceMessage = app.getString(R.string.backup_import_applied),
+                    pendingRuleItems = emptyList(),
+                    customServiceMessage = app.getString(R.string.backup_import_applied).takeIf { failures.isEmpty() },
+                    errorMessage =
+                        failures.takeIf(List<String>::isNotEmpty)?.joinToString("\n")
+                            ?.let { app.getString(R.string.backup_import_partial, it) },
                 )
         }
     }
 
     fun dismissPendingImport() {
-        _uiState.value = _uiState.value.copy(pendingSettingsImport = null)
+        _uiState.value = _uiState.value.copy(pendingSettingsImport = null, pendingRuleItems = emptyList())
     }
 
     // --- 6 diagnostics ---
+
+    suspend fun inspectLink(input: String): LinkInspection =
+        dev.libredirect.mobile.redirect.inspectLink(
+            input,
+            settingsRepository.current(),
+            withContext(Dispatchers.IO) { manifestRepository.activeManifest() },
+            browserDataRepository,
+        )
 
     /** Everything the diagnostics screen shows, as copyable text (no URLs/history). */
     fun diagnosticsText(): String {
@@ -553,6 +606,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("App start: ${Instant.ofEpochMilli(DiagnosticsLog.startedAtEpochMillis)}")
             appendLine("WebView: $webviewVersion")
+            appendLine(RouteMeasurements.summary())
+            appendLine("WebView isolated profiles: ${WebViewProfileManager.isSupported()}")
             appendLine("Routing data revision: ${settings.manifestRevision ?: "n/a"}")
             appendLine("Rules: $routeCount services / $frontendCount frontends / $instanceCount instances")
             appendLine(
@@ -577,8 +632,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun webViewVersion(): String =
         try {
-            val info = app.packageManager.getPackageInfo("com.google.android.webview", 0)
-            info.versionName ?: app.getString(R.string.diagnostics_webview_unknown)
+            WebViewCompat.getCurrentWebViewPackage(app)?.let { "${it.packageName} ${it.versionName}" }
+                ?: app.getString(R.string.diagnostics_webview_unknown)
         } catch (_: Exception) {
             app.getString(R.string.diagnostics_webview_unknown)
         }
@@ -609,6 +664,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) = launchSafely {
         settingsRepository.setCustomSearchEngine(name, url)
         settingsRepository.setSearchEngine(SearchEngine.CUSTOM_ID)
+    }
+
+    fun applyRoutingPreset(preset: dev.libredirect.mobile.settings.RoutingPreset) =
+        launchSafely { settingsRepository.applyRoutingPreset(preset) }
+
+    fun updateServiceLinkPolicy(
+        routeId: String,
+        update: (RouteLinkPolicy) -> RouteLinkPolicy,
+    ) = launchSafely {
+        settingsRepository.updateLinkPolicies { policies ->
+            val previous = policies.routes[routeId] ?: RouteLinkPolicy(fallback = policies.defaultFallback)
+            policies.copy(routes = policies.routes + (routeId to update(previous)))
+        }
+    }
+
+    fun updateHostLinkPolicy(
+        host: String,
+        policy: HostLinkPolicy,
+    ) = launchSafely {
+        settingsRepository.updateLinkPolicies { policies ->
+            val hosts =
+                if (policy == HostLinkPolicy()) {
+                    policies.hosts - host
+                } else {
+                    policies.hosts + (host to policy)
+                }
+            policies.copy(hosts = hosts)
+        }
     }
 
     fun setSelectedFrontend(
@@ -770,6 +853,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return MainUiState(
             loading = false,
             routingEnabled = settings.routingEnabled,
+            linkPolicies = settings.linkPolicies,
             selectedBrowserPackage = settings.selectedBrowserPackage,
             selectedBrowserLabel = browserLabel,
             services = services,
@@ -825,6 +909,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         manifest?.routes?.map { route ->
             ServiceUiState(
                 routeId = route.id,
+                sampleHost = route.hosts.firstOrNull(),
                 name = route.name,
                 enabled = settings.isRouteEnabled(route.id),
                 frontends =
@@ -832,7 +917,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         FrontendUiState(
                             id = frontend.id,
                             name = frontend.name,
-                            needsInstance = frontend.instances.isNotEmpty(),
+                            needsInstance = Strategy.requiresInstances(frontend.strategy),
                             instances = frontend.instances,
                             selection =
                                 settings.instanceSelections["${route.id}/${frontend.id}"]
@@ -875,6 +960,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
+        const val BACKUP_READ_BUFFER_BYTES = 8192
         const val TAG = "MainViewModel"
         const val MILLIS_PER_MINUTE = 60_000L
 

@@ -9,4 +9,10 @@ data class BrowserBookmark(
     val title: String,
     val url: String,
     val createdAtEpochMillis: Long = System.currentTimeMillis(),
-)
+    val canonicalUrl: String? = null,
+) {
+    val openUrl: String
+        get() = canonicalUrl ?: url
+
+    fun matches(value: String): Boolean = value == url || value == canonicalUrl
+}

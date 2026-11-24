@@ -35,7 +35,7 @@ class Issue12ApiLevelRegressionTest {
     @Test
     fun queryParamStrippingWorksOnDeviceRuntime() {
         val parsed = UrlParser.parse(instagramHlLink)!!
-        val stripped = QueryParams.stripAllExcept(instagramHlLink, parsed)
+        val stripped = QueryParams.stripShareTags(instagramHlLink, parsed)
         assertEquals("https://www.instagram.com/reel/DTqr4mTElos/", stripped.url)
         assertEquals(1, stripped.removedCount)
     }

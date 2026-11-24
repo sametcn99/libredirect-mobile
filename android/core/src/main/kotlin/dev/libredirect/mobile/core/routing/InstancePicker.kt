@@ -23,11 +23,10 @@ class InstancePicker(private val random: Random = Random.Default) {
         nowMillis: Long = 0L,
     ): String? {
         val instances = frontend.instances
-        if (instances.isEmpty()) return null
 
         return when (selection) {
             is InstanceSelection.Automatic -> pickWeighted(instances, health, nowMillis)
-            is InstanceSelection.Fastest -> pickFastest(instances, health)
+            is InstanceSelection.Fastest -> pickFastest(instances, health, nowMillis)
             is InstanceSelection.Pinned ->
                 if (selection.instance in instances) selection.instance else pickWeighted(instances, health, nowMillis)
             is InstanceSelection.Custom ->
@@ -42,18 +41,18 @@ class InstancePicker(private val random: Random = Random.Default) {
     private fun pickFastest(
         instances: List<String>,
         health: Map<String, InstanceHealth>,
+        nowMillis: Long,
     ): String? =
         instances
-            .map { it to health[it] }
-            .sortedWith(
-                compareBy(
-                    // Measured successes first (by latency), then unmeasured,
-                    // then failed probes — "fastest" must never pick a dead instance.
-                    { (_, h) -> h?.latencyMillis == null },
-                    { (_, h) -> (h?.latencyMillis ?: 0L) < 0 },
-                    { (_, h) -> h?.latencyMillis ?: Long.MAX_VALUE },
-                ),
-            ).firstOrNull()?.first
+            .filterNot { health[it]?.isCoolingDown(nowMillis) == true }
+            .minByOrNull { instance ->
+                val latency = health[instance]?.currentLatency(nowMillis)
+                when {
+                    latency == null -> Long.MAX_VALUE - 1
+                    latency < 0 -> Long.MAX_VALUE
+                    else -> latency
+                }
+            }
 
     /**
      * Latency-weighted random among healthy instances; when all are cooling
@@ -64,9 +63,13 @@ class InstancePicker(private val random: Random = Random.Default) {
         health: Map<String, InstanceHealth>,
         nowMillis: Long,
     ): String? {
+        if (instances.isEmpty()) return null
         val healthy = instances.filterNot { instance -> health[instance]?.isCoolingDown(nowMillis) == true }
         val candidates = healthy.ifEmpty { instances }
-        val weights = candidates.map { instance -> (health[instance] ?: InstanceHealth()).selectionWeight }
+        val weights =
+            candidates.map { instance ->
+                InstanceHealth(latencyMillis = health[instance]?.currentLatency(nowMillis)).selectionWeight
+            }
         val total = weights.sum()
         return if (total <= 0.0) {
             candidates.random(random)

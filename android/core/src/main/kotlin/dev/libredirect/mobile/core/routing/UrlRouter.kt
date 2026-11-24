@@ -26,6 +26,11 @@ class UrlRouter(
      * Same decision as [resolve], with a structured trace for the "why?" card
      * (2.8). The outcome is identical to [resolve] for the same inputs.
      */
+    fun resolveWithTrace(
+        input: String,
+        context: RoutingContext,
+    ): Decision = decide(input, context)
+
     fun explain(
         input: String,
         context: RoutingContext,
@@ -54,7 +59,7 @@ class UrlRouter(
         val url =
             UrlParser.parse(input)
                 ?: return failure(input, RoutingFailure.MALFORMED_URL, TraceReason.NOT_ELIGIBLE)
-        val route = routeMatcher.match(url.host)
+        val route = routeMatcher.match(url.host)?.takeIf { ServiceLinks.matchesRoute(it.id, url) }
         val selectedFrontendId = route?.let { context.selectedFrontends[it.id] }
         val frontend = route?.frontends?.find { it.id == selectedFrontendId } ?: route?.frontends?.firstOrNull()
         val scope = context.customTrackingScope()
@@ -67,6 +72,12 @@ class UrlRouter(
                     passthroughTrace(input, TraceReason.EXCEPTION_MATCHED, detail = detail),
                 )
             }
+
+            url.rawQuery?.let(TrackingParams::isSignedQuery) == true ->
+                Decision(
+                    RoutingResult.Passthrough(input),
+                    passthroughTrace(input, TraceReason.SIGNED_QUERY, route?.id),
+                )
 
             route == null ->
                 Decision(
@@ -124,10 +135,7 @@ class UrlRouter(
                 val redirected = "${strategy.scheme}://${TrackingParams.stripFrom(input, url, scope)}"
                 redirect(input, redirected, null, target)
             }
-            is Strategy.ReplaceOrigin ->
-                pickInstance(target)?.let { instance ->
-                    redirect(input, replaceOrigin(cleanUrl, instance), instance, target)
-                } ?: noInstance(input, target)
+            is Strategy.ReplaceOrigin -> replaceServiceOrigin(input, cleanUrl, target, scope)
             is Strategy.Template ->
                 pickInstance(target)?.let { instance ->
                     redirect(input, TemplateRenderer.render(strategy.output, cleanUrl, instance), instance, target)
@@ -251,13 +259,29 @@ class UrlRouter(
         return if (target.context.instanceOverrides.containsKey(target.overrideKey)) "override" else mode
     }
 
-    private fun replaceOrigin(
+    @Suppress("ReturnCount")
+    private fun replaceServiceOrigin(
+        input: String,
         url: ParsedUrl,
-        instanceOrigin: String,
-    ): String {
-        val query = url.rawQuery?.let { "?$it" }.orEmpty()
-        val fragment = url.rawFragment?.let { "#$it" }.orEmpty()
-        return "$instanceOrigin${url.rawPath}$query$fragment"
+        target: TargetInfo,
+        scope: CustomTrackingScope,
+    ): Decision {
+        val suffix = ServiceLinks.transform(target.routeId, target.frontend.id, url)
+        if (suffix == null) {
+            val cleaned = UrlParser.parse(input)?.let { TrackingParams.stripFrom(input, it, scope) } ?: input
+            return Decision(
+                RoutingResult.Passthrough(cleaned),
+                passthroughTrace(
+                    cleaned,
+                    TraceReason.UNSUPPORTED_LINK_SHAPE,
+                    target.routeId,
+                    target.frontend.id,
+                    target.strippedCount,
+                ),
+            )
+        }
+        val instance = pickInstance(target) ?: return noInstance(input, target)
+        return redirect(input, instance + suffix, instance, target)
     }
 
     private fun matchedExceptionLabel(
@@ -274,7 +298,7 @@ class UrlRouter(
         }
 
     private fun RoutingContext.customTrackingScope(): CustomTrackingScope =
-        CustomTrackingScope(global = customTrackingRules.global, byHost = customTrackingRules.byHost)
+        CustomTrackingScope(customTrackingRules.global, customTrackingRules.byHost, customTrackingRules.preserveByHost)
 
     /** Bundles what a redirect decision needs, keeping helper signatures small. */
     private data class TargetInfo(
@@ -286,7 +310,7 @@ class UrlRouter(
         val overrideKey: String get() = "$routeId/${frontend.id}"
     }
 
-    private data class Decision(
+    data class Decision(
         val result: RoutingResult,
         val trace: RoutingTrace,
     )

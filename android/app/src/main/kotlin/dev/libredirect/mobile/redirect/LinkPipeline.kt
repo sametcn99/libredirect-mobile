@@ -6,6 +6,7 @@ import dev.libredirect.mobile.core.routing.InstanceHealth
 import dev.libredirect.mobile.core.routing.RoutingContext
 import dev.libredirect.mobile.core.url.QueryParams
 import dev.libredirect.mobile.core.url.ShortLinkPolicy
+import dev.libredirect.mobile.core.url.TrackingParams
 import dev.libredirect.mobile.core.url.UrlParser
 import dev.libredirect.mobile.core.url.UrlUnwrapper
 import dev.libredirect.mobile.settings.AppSettings
@@ -29,6 +30,7 @@ class LinkPipeline(
         val unwrappedLayers: Int = 0,
         val shortLinkResolved: Boolean = false,
         val strippedQueryParams: Int = 0,
+        val urlBeforeQueryCleanup: String = url,
     )
 
     /**
@@ -40,6 +42,7 @@ class LinkPipeline(
     suspend fun prepare(
         input: String,
         allowQueryParamStrip: Boolean = true,
+        allowNetwork: Boolean = true,
     ): Prepared {
         var url = input
         var unwrappedLayers = 0
@@ -48,7 +51,7 @@ class LinkPipeline(
 
         if (matchesUserException(input)) return Prepared(url)
 
-        if (settings.unwrapRedirectWrappersEnabled) {
+        if (settings.canUnwrap(url)) {
             val result = UrlUnwrapper.unwrapAll(url)
             if (result.url != url) {
                 url = result.url
@@ -56,7 +59,7 @@ class LinkPipeline(
             }
         }
 
-        if (settings.shortLinkResolveEnabled) {
+        if (allowNetwork && settings.shortLinkResolveEnabled) {
             val host = UrlParser.parse(url)?.host
             if (host != null && ShortLinkPolicy.isAllowed(host)) {
                 val resolved = shortLinkResolver.resolve(url)
@@ -67,10 +70,12 @@ class LinkPipeline(
             }
         }
 
+        val urlBeforeQueryCleanup = url
         if (allowQueryParamStrip && settings.queryParamStripEnabled) {
             val parsed = UrlParser.parse(url)
-            if (parsed != null) {
-                val stripped = QueryParams.stripAllExcept(url, parsed)
+            val policy = parsed?.host?.let(settings.linkPolicies::forHost)
+            if (parsed != null && policy?.skipExtraCleanup != true) {
+                val stripped = QueryParams.stripShareTags(url, parsed, policy?.preserveParameters.orEmpty())
                 if (stripped.removedCount > 0) {
                     url = stripped.url
                     strippedQueryParams = stripped.removedCount
@@ -83,7 +88,14 @@ class LinkPipeline(
             unwrappedLayers = unwrappedLayers,
             shortLinkResolved = shortLinkResolved,
             strippedQueryParams = strippedQueryParams,
+            urlBeforeQueryCleanup = urlBeforeQueryCleanup,
         )
+    }
+
+    fun clean(prepared: Prepared): String {
+        val url = UrlParser.parse(prepared.url)
+        if (url == null || matchesUserException(prepared.url)) return prepared.url
+        return TrackingParams.stripFrom(prepared.url, url, settings.trackingScope())
     }
 
     private fun matchesUserException(url: String): Boolean {
@@ -92,15 +104,8 @@ class LinkPipeline(
     }
 
     /** Health snapshot for the routing core: probe latencies + load-failure cooldowns. */
-    suspend fun healthSnapshot(dataRepository: BrowserDataRepository): Map<String, InstanceHealth> {
-        val latencies = dataRepository.cachedLatencies()
-        val failures = dataRepository.instanceFailures()
-        val keys = latencies.keys + failures.keys
-        if (keys.isEmpty()) return emptyMap()
-        return keys.associateWith { host ->
-            InstanceHealth(latencyMillis = latencies[host], lastFailedAtMillis = failures[host])
-        }
-    }
+    suspend fun healthSnapshot(dataRepository: BrowserDataRepository): Map<String, InstanceHealth> =
+        dataRepository.instanceHealth()
 
     fun routingContext(
         health: Map<String, InstanceHealth>,

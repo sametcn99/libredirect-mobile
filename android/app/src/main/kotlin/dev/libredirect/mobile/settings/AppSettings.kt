@@ -5,6 +5,8 @@ import dev.libredirect.mobile.core.routing.CustomTrackingRules
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceSelection
 import dev.libredirect.mobile.core.routing.RoutingContext
+import dev.libredirect.mobile.core.url.CustomTrackingScope
+import dev.libredirect.mobile.core.url.UrlParser
 import kotlinx.serialization.Serializable
 
 /**
@@ -60,6 +62,7 @@ enum class TabAutoClose(val id: String) {
 @Serializable
 data class AppSettings(
     val routingEnabled: Boolean = true,
+    val linkPolicies: LinkPolicies = LinkPolicies(),
     val selectedBrowserPackage: String? = BrowserLauncher.IN_APP_BROWSER_PACKAGE,
     /** Route ids the user has turned off; a route not in this set is enabled by default. */
     val disabledRoutes: Set<String> = emptySet(),
@@ -104,12 +107,7 @@ data class AppSettings(
      * network" and requests go to the shortener, so off by default.
      */
     val shortLinkResolveEnabled: Boolean = false,
-    /**
-     * Strip every query parameter that is not functionally meaningful
-     * (video id, search term, permalink id, …) before routing, in addition
-     * to the tracking-parameter denylist. On by default; functional names
-     * are protected by [dev.libredirect.mobile.core.url.QueryParams].
-     */
+    /** Remove verified extra share tags for supported link shapes. */
     val queryParamStripEnabled: Boolean = true,
     /** User-defined tracking parameter rules (3.2). */
     val customTrackingParams: List<CustomTrackingParam> = emptyList(),
@@ -164,6 +162,15 @@ data class AppSettings(
             customTrackingRules = customTrackingRules(),
         )
 
+    fun trackingScope(): CustomTrackingScope {
+        val rules = customTrackingRules()
+        return CustomTrackingScope(rules.global, rules.byHost, rules.preserveByHost)
+    }
+
+    fun canUnwrap(url: String): Boolean =
+        unwrapRedirectWrappersEnabled &&
+            UrlParser.parse(url)?.host?.let(linkPolicies::forHost)?.skipWrapperUnwrap != true
+
     /** User rules split into global and host-scoped sets for the routing core. */
     fun customTrackingRules(): CustomTrackingRules {
         val global = mutableSetOf<String>()
@@ -178,6 +185,7 @@ data class AppSettings(
                 byHost.getOrPut(host) { mutableSetOf() } += name
             }
         }
-        return CustomTrackingRules(global = global, byHost = byHost)
+        val preserve = linkPolicies.hosts.mapValues { (_, policy) -> policy.preserveParameters }
+        return CustomTrackingRules(global = global, byHost = byHost, preserveByHost = preserve)
     }
 }

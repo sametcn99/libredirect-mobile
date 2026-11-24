@@ -58,7 +58,7 @@ class DownloadNotificationHelper(private val context: Context) {
         val title =
             when {
                 primary == null -> context.getString(R.string.downloads_title)
-                count == 1 -> primary.fileName
+                count == 1 && !primary.isIncognito -> primary.fileName
                 else -> context.getString(R.string.downloads_notif_active_fmt, count)
             }
         val (progress, indeterminate) = computeAggregateProgress(activeItems, primary)

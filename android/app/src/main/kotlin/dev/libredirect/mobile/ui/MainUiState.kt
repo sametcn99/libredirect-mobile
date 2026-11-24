@@ -6,7 +6,9 @@ import dev.libredirect.mobile.core.manifest.Route
 import dev.libredirect.mobile.core.routing.ExceptionRule
 import dev.libredirect.mobile.core.routing.InstanceHealth
 import dev.libredirect.mobile.core.routing.InstanceSelection
+import dev.libredirect.mobile.manifest.ManifestRepository
 import dev.libredirect.mobile.settings.CustomTrackingParam
+import dev.libredirect.mobile.settings.LinkPolicies
 import dev.libredirect.mobile.settings.RouteMode
 import dev.libredirect.mobile.settings.SettingsBackupCodec
 import dev.libredirect.mobile.settings.TabAutoClose
@@ -15,7 +17,9 @@ import dev.libredirect.mobile.update.UpdateInfo
 
 data class MainUiState(
     val loading: Boolean = true,
+    val pendingRuleItems: List<ManifestRepository.RuleImportItem> = emptyList(),
     val routingEnabled: Boolean = true,
+    val linkPolicies: LinkPolicies = LinkPolicies(),
     val selectedBrowserPackage: String? = BrowserLauncher.IN_APP_BROWSER_PACKAGE,
     val selectedBrowserLabel: String = "LibRedirect Browser",
     val services: List<ServiceUiState> = emptyList(),
@@ -87,6 +91,7 @@ data class MainUiState(
 )
 
 data class ServiceUiState(
+    val sampleHost: String? = null,
     val routeId: String,
     val name: String,
     val enabled: Boolean,

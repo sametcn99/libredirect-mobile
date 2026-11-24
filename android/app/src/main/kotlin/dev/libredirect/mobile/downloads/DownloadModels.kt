@@ -83,6 +83,8 @@ data class DownloadItem(
     val wifiOnly: Boolean = false,
     val userAgent: String? = null,
     val referer: String? = null,
+    val resumeValidator: String? = null,
+    val resumeUrl: String? = null,
     val httpStatusCode: Int? = null,
     val failureReason: DownloadFailureReason = DownloadFailureReason.NONE,
     val failureDetail: String? = null,

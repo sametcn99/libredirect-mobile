@@ -1,5 +1,6 @@
 package dev.libredirect.mobile.core.url
 
+import dev.libredirect.mobile.core.routing.WildcardPattern
 import java.net.URLDecoder
 
 /**
@@ -47,8 +48,6 @@ object TrackingParams {
             "wickedid",
             "mbid",
             // Social share attribution
-            "igshid",
-            "igsh",
             "mibextid",
         )
 
@@ -62,6 +61,7 @@ object TrackingParams {
                 "amazon.",
                 prefixes = setOf("ref_", "pd_rd_", "pf_rd_"),
             ),
+            ScopedParams("instagram.com", exact = setOf("igsh", "igshid")),
             ScopedParams("spotify.com", exact = setOf("si")),
             ScopedParams("tiktok.com", exact = setOf("_r", "_t", "is_from_webapp", "sender_device")),
             ScopedParams("x.com", exact = setOf("s", "t")),
@@ -83,7 +83,7 @@ object TrackingParams {
         host: String,
         custom: CustomTrackingScope = CustomTrackingScope.NONE,
     ): String? {
-        if (rawQuery.isNullOrEmpty()) return null
+        if (rawQuery.isNullOrEmpty() || isSignedQuery(rawQuery)) return null
         var removed = false
         val kept =
             rawQuery.split("&").filter { pair ->
@@ -108,7 +108,7 @@ object TrackingParams {
         host: String,
         custom: CustomTrackingScope = CustomTrackingScope.NONE,
     ): Int {
-        if (rawQuery.isNullOrEmpty()) return 0
+        if (rawQuery.isNullOrEmpty() || isSignedQuery(rawQuery)) return 0
         return rawQuery
             .split("&")
             .count { pair ->
@@ -121,19 +121,39 @@ object TrackingParams {
             }
     }
 
+    /** Removing any pair can invalidate a signed URL, including a tracking pair. */
+    internal fun isSignedQuery(rawQuery: String): Boolean =
+        rawQuery.split('&').any { pair ->
+            val name = decodedName(pair)?.lowercase()
+            name != null &&
+                (
+                    name in setOf("signature", "sig", "x-amz-signature", "x-goog-signature", "key-pair-id") ||
+                        (name == "token" && QueryString.find(rawQuery, "expires") != null)
+                )
+        }
+
     private fun isTrackingName(
         name: String,
         host: String,
         custom: CustomTrackingScope,
     ): Boolean =
-        name.startsWith("utm_") ||
-            name in GLOBAL ||
-            matchesName(name, custom.global) ||
-            custom.byHost.entries.any { (domain, names) -> hostMatches(host, domain) && matchesName(name, names) } ||
-            HOST_SCOPED.any {
-                    scoped ->
-                hostMatches(host, scoped.domain) && matchesParam(name, scoped.exact, scoped.prefixes)
-            }
+        custom.preserveByHost.entries.none {
+                (domain, names) ->
+            hostMatches(host, domain) && matchesName(name, names)
+        } &&
+            (
+                name.startsWith("utm_") ||
+                    name in GLOBAL ||
+                    matchesName(name, custom.global) ||
+                    custom.byHost.entries.any {
+                            (domain, names) ->
+                        hostMatches(host, domain) && matchesName(name, names)
+                    } ||
+                    HOST_SCOPED.any {
+                            scoped ->
+                        hostMatches(host, scoped.domain) && matchesParam(name, scoped.exact, scoped.prefixes)
+                    }
+            )
 
     private fun matchesName(
         name: String,
@@ -141,7 +161,7 @@ object TrackingParams {
     ): Boolean =
         names.any { candidate ->
             if (candidate.contains('*')) {
-                dev.libredirect.mobile.core.routing.WildcardPattern.matches(candidate, name)
+                WildcardPattern.matches(candidate, name)
             } else {
                 name == candidate.lowercase()
             }
@@ -232,6 +252,7 @@ object TrackingParams {
 data class CustomTrackingScope(
     val global: Set<String> = emptySet(),
     val byHost: Map<String, Set<String>> = emptyMap(),
+    val preserveByHost: Map<String, Set<String>> = emptyMap(),
 ) {
     companion object {
         val NONE = CustomTrackingScope()
