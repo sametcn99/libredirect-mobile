@@ -29,6 +29,8 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.core.view.doOnAttach
+import androidx.core.view.doOnLayout
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.webkit.WebStorageCompat
@@ -1723,6 +1725,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         val existing = webViewPool[tabId]
         if (existing != null && webViewDarkModes[tabId] == darkPages) {
             (existing.parent as? ViewGroup)?.removeView(existing)
+            existing.doOnAttach(View::postInvalidateOnAnimation)
             return existing
         }
 
@@ -1744,7 +1747,16 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
         val restored = savedState?.let { newWebView.restoreState(it) } != null
         if (!restored) {
-            loadInitialPage(newWebView, tabId, tab, isReplacement = existing != null)
+            // AndroidView attaches and sizes the WebView after its factory returns.
+            // An already-resolved external link otherwise starts loading inside the factory.
+            newWebView.doOnAttach { attachedView ->
+                attachedView.doOnLayout {
+                    if (newWebView.isAttachedToWindow && webViewPool[tabId] === newWebView) {
+                        val currentTab = _uiState.value.tabs.find { it.id == tabId }
+                        loadInitialPage(newWebView, tabId, currentTab, isReplacement = existing != null)
+                    }
+                }
+            }
         }
         trimWebViewPool()
         return newWebView
@@ -3113,6 +3125,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             handler?.cancel()
             if (view?.url == null || view.url.equals("about:blank", ignoreCase = true)) {
                 handleRoutedLoadFailure(tabId)
+            }
+        }
+
+        override fun onPageCommitVisible(
+            view: WebView,
+            url: String,
+        ) {
+            if (webViewPool[tabId] === view && view.isAttachedToWindow) {
+                view.postInvalidateOnAnimation()
             }
         }
 
