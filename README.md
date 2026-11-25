@@ -285,7 +285,12 @@ Generation runs automatically in the background on app start (throttled to once 
 
 Releases are built by the `Android Release` GitHub Actions workflow, which reads the version from `android/app/build.gradle.kts`, requires a green Android CI run for the exact main commit, builds a signed APK, smoke-tests the bundled manifest inside it, and publishes the APK and SHA-256 checksum under `v{versionName}`. CI includes Android emulator tests on API 28 and 36.
 
-The app checks GitHub's "latest release" endpoint and, if a newer version exists, shows a banner on the Home and Settings screens linking to the release page — release notes are shown in-app ("What's new"). Installation is manual (download the APK from GitHub Releases) or automatic via [Obtainium](https://github.com/ImranR98/Obtainium): add the repo URL `https://github.com/sametcn99/libredirect-mobile` and Obtainium tracks GitHub Releases for updates without any install permission in the app. CI runs a reproducible-build check (two release builds must hash identically). See [CONTRIBUTING.md](CONTRIBUTING.md) for the release checklist.
+The app checks GitHub's "latest release" endpoint and, if a newer version exists, shows a banner on the Home and Settings screens linking to the release page. Release notes are shown in-app ("What's new").
+
+- [Download the signed APK from GitHub Releases](https://github.com/sametcn99/libredirect-mobile/releases/latest).
+- [Add LibRedirect Mobile to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22dev.libredirect.mobile%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fsametcn99%2Flibredirect-mobile%22%2C%22author%22%3A%22sametcn99%22%2C%22name%22%3A%22LibRedirect%20Mobile%22%7D) to install it and track updates from the same GitHub Releases source.
+
+CI runs a reproducible-build check (two release builds must hash identically). See [CONTRIBUTING.md](CONTRIBUTING.md) for the release checklist.
 
 ## Privacy and permissions
 
