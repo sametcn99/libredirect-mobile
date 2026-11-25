@@ -15,8 +15,12 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import dev.libredirect.mobile.browser.BrowserLauncher
 import dev.libredirect.mobile.browser.ShortcutActions
+import dev.libredirect.mobile.media.MediaPlaybackBus
 import dev.libredirect.mobile.media.MediaPlaybackService
 import dev.libredirect.mobile.ui.AppNavHost
 import dev.libredirect.mobile.ui.MainViewModel
@@ -25,6 +29,9 @@ import dev.libredirect.mobile.ui.browser.BrowserViewModel
 import dev.libredirect.mobile.ui.lock.AppLockGate
 import dev.libredirect.mobile.ui.settings.BrowserRoleHost
 import dev.libredirect.mobile.ui.theme.LibRedirectMobileTheme
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), BrowserRoleHost {
     private companion object {
@@ -57,6 +64,9 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
         if (savedInstanceState == null) {
             handleIntent(intent, isColdStart = true)
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
+            observeBackgroundAudio()
+        }
         setContent {
             LibRedirectMobileTheme {
                 val isAppLocked by mainViewModel.isAppLocked.collectAsState()
@@ -84,9 +94,26 @@ class MainActivity : AppCompatActivity(), BrowserRoleHost {
         mainViewModel.lockApp()
         // 4.5: opt-in wipe of incognito tabs when the app leaves the foreground.
         mainViewModel.maybeCloseIncognitoTabs(browserViewModel)
-        // 4.6: keep audio alive behind a foreground service while opted in
-        // and the active tab's page is actually playing media.
-        mainViewModel.maybeStartMediaPlaybackService()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.CINNAMON_BUN) {
+            mainViewModel.maybeStartMediaPlaybackService()
+        }
+    }
+
+    private fun observeBackgroundAudio() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                // Android 17 requires the playback service to start while the activity is visible.
+                combine(mainViewModel.uiState, MediaPlaybackBus.state) { ui, media ->
+                    ui.backgroundAudioEnabled to media.isPlaying
+                }.distinctUntilChanged().collect { (enabled, playing) ->
+                    if (!enabled) {
+                        MediaPlaybackService.stop(this@MainActivity)
+                    } else if (playing) {
+                        mainViewModel.maybeStartMediaPlaybackService()
+                    }
+                }
+            }
+        }
     }
 
     override fun onDestroy() {

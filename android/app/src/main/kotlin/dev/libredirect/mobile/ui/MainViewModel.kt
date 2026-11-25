@@ -641,8 +641,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // --- 4.6 background audio hook ---
 
     /**
-     * Called from MainActivity.onStop: when the user opted in and media is
-     * playing on the active tab, a foreground service keeps playback alive.
+     * Starts the foreground service when the user opted in and media is
+     * playing on the active tab.
      */
     fun maybeStartMediaPlaybackService() {
         if (!latestSettings.backgroundAudioEnabled) return

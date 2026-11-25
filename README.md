@@ -254,7 +254,7 @@ The service fallback policy applies when an enabled alternative cannot handle th
 ## Requirements
 
 - JDK 17
-- Android SDK with the compileSdk version pinned in `android/gradle/libs.versions.toml`
+- Android SDK Platform 37.2, as configured in `android/app/build.gradle.kts`
 
 ## Build and test the Android app
 
@@ -283,7 +283,7 @@ Generation runs automatically in the background on app start (throttled to once 
 
 ## Releases and updates
 
-Releases are built by the `Android Release` GitHub Actions workflow, which reads the version from `android/app/build.gradle.kts`, requires a green Android CI run for the exact main commit, builds a signed APK, smoke-tests the bundled manifest inside it, and publishes the APK and SHA-256 checksum under `v{versionName}`. CI includes Android emulator tests on API 28 and 36.
+Releases are built by the `Android Release` GitHub Actions workflow, which reads the version from `android/app/build.gradle.kts`, requires a green Android CI run for the exact main commit, builds a signed APK, smoke-tests the bundled manifest inside it, and publishes the APK and SHA-256 checksum under `v{versionName}`. CI includes emulator tests on Android 9 (API 28), Android 16 (API 36), Android 17 (API 37), and Android 17 QPR2 (API 37.2, 16 KB page size).
 
 The app checks GitHub's "latest release" endpoint and, if a newer version exists, shows a banner on the Home and Settings screens linking to the release page. Release notes are shown in-app ("What's new").
 

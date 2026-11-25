@@ -43,8 +43,8 @@ code by the manifest model and `ManifestValidator` — binds them together.
 
 ### Android (`android/`)
 
-Requirements: JDK 17, Android SDK (compileSdk as pinned in
-`android/gradle/libs.versions.toml`).
+Requirements are JDK 17 and Android SDK Platform 37.2, as configured in
+`android/app/build.gradle.kts`.
 
 ```bash
 cd android
@@ -137,7 +137,7 @@ Maintainers release as follows (there is no manual tagging):
    The version display reads `BuildConfig` at compile time, so no other
    file needs the same numbers.
 2. Commit and wait for Android CI to pass for that exact commit on `main`,
-   including the API 28 and API 36 device suites. Add release notes in
+   including the API 28, 36, 37.0, and 37.2 device suites. Add release notes in
    `.github/release-notes/v{versionName}.md` when writing a curated description.
    Dispatch the `Android Release` GitHub Actions workflow. It builds
    and signs the APK, smoke-tests the bundled manifest inside the release

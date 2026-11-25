@@ -102,7 +102,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [28, 36]
+        include:
+          - api-level: 28
+            target: google_apis
+          - api-level: 36
+            target: google_apis
+          - api-level: '37.0'
+            target: google_apis
+            ram-size: 4096M
+            gpu: software
+          - api-level: '37.2'
+            target: google_apis_ps16k
+            ram-size: 4096M
+            gpu: software
     defaults:
       run:
         working-directory: android
@@ -122,8 +134,10 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          target: google_apis
+          target: ${{ matrix.target }}
           arch: x86_64
+          ram-size: ${{ matrix.ram-size }}
+          emulator-options: -no-window -gpu ${{ matrix.gpu || 'swiftshader_indirect' }} -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           working-directory: android
           script: ./gradlew :app:connectedDebugAndroidTest

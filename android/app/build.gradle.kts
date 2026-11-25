@@ -24,14 +24,19 @@ val releaseStoreFile = localProperties.getProperty("RELEASE_STORE_FILE")?.let { 
 
 android {
     namespace = "dev.libredirect.mobile"
-    compileSdk = 35
+    compileSdk {
+        version =
+            release(37) {
+                minorApiLevel = 2
+            }
+    }
 
     defaultConfig {
         applicationId = "dev.libredirect.mobile"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 24
-        versionName = "1.3.15"
+        targetSdk = 37
+        versionCode = 25
+        versionName = "1.3.16"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
