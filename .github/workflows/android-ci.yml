@@ -134,6 +134,9 @@ jobs:
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Run connected tests
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # Emulator 37.3 requires an explicit opt-in to run with -accel off.
+          ANDROID_I_WANT_MY_TCG: ${{ matrix.profile && 'yes' || '' }}
         with:
           api-level: ${{ matrix.api-level }}
           target: ${{ matrix.target }}
@@ -142,9 +145,10 @@ jobs:
           cores: ${{ matrix.profile && 4 || 2 }}
           ram-size: ${{ matrix.profile && '4096M' || '' }}
           disk-size: ${{ matrix.profile && '10G' || '' }}
+          emulator-boot-timeout: ${{ matrix.profile && 900 || 600 }}
           emulator-options: >-
             -no-window -no-snapshot -noaudio -no-boot-anim
-            ${{ matrix.profile && '-no-accel -gpu swiftshader -feature -Vulkan -show-kernel' || '-gpu swiftshader_indirect' }}
+            ${{ matrix.profile && '-accel off -gpu swiftshader -feature -Vulkan -show-kernel' || '-gpu swiftshader_indirect' }}
           pre-emulator-launch-script: adb start-server
           disable-animations: true
           working-directory: android
