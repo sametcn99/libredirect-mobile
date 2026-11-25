@@ -133,9 +133,16 @@ jobs:
         run: |
           # Older avdmanager versions write target=android-0 for 37.x system images.
           sdkmanager --install 'cmdline-tools;22.0'
-          tools="$ANDROID_HOME/cmdline-tools/22.0/bin"
-          test -x "$tools/avdmanager"
-          echo "$tools" >> "$GITHUB_PATH"
+          tools="$ANDROID_HOME/cmdline-tools"
+          test -x "$tools/22.0/bin/avdmanager"
+          # The emulator action adds cmdline-tools/latest/bin ahead of GITHUB_PATH.
+          if ! [ "$tools/latest" -ef "$tools/22.0" ]; then
+            if [ -e "$tools/latest" ] || [ -L "$tools/latest" ]; then
+              mv "$tools/latest" "$RUNNER_TEMP/original-android-cmdline-tools"
+            fi
+            ln -s 22.0 "$tools/latest"
+          fi
+          "$tools/latest/bin/sdkmanager" --version
       - name: Assemble Android 17 test APKs before boot
         if: ${{ matrix.profile }}
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
