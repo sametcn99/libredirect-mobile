@@ -35,10 +35,15 @@ android {
         applicationId = "dev.libredirect.mobile"
         minSdk = 26
         targetSdk = 37
-        versionCode = 25
-        versionName = "1.3.16"
+        versionCode = 26
+        versionName = "1.3.17"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    dependenciesInfo {
+        // F-Droid rejects the encrypted dependency metadata in the APK signing block.
+        includeInApk = false
     }
 
     signingConfigs {
