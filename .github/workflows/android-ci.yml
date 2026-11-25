@@ -132,8 +132,8 @@ jobs:
         if: ${{ matrix.profile }}
         run: |
           # Older avdmanager versions write target=android-0 for 37.x system images.
-          sdkmanager --install 'cmdline-tools;22.0'
           tools="$ANDROID_HOME/cmdline-tools"
+          "$tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" --install 'cmdline-tools;22.0'
           test -x "$tools/22.0/bin/avdmanager"
           # The emulator action adds cmdline-tools/latest/bin ahead of GITHUB_PATH.
           if ! [ "$tools/latest" -ef "$tools/22.0" ]; then
