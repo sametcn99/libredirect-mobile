@@ -109,12 +109,10 @@ jobs:
             target: google_apis
           - api-level: '37.0'
             target: google_apis
-            ram-size: 4096M
-            gpu: software
+            profile: pixel_7
           - api-level: '37.2'
             target: google_apis_ps16k
-            ram-size: 4096M
-            gpu: software
+            profile: pixel_7
     defaults:
       run:
         working-directory: android
@@ -136,8 +134,14 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: ${{ matrix.target }}
           arch: x86_64
-          ram-size: ${{ matrix.ram-size }}
-          emulator-options: -no-window -gpu ${{ matrix.gpu || 'swiftshader_indirect' }} -no-snapshot -noaudio -no-boot-anim
+          profile: ${{ matrix.profile }}
+          cores: ${{ matrix.profile && 4 || 2 }}
+          ram-size: ${{ matrix.profile && '4096M' || '' }}
+          emulator-boot-timeout: ${{ matrix.profile && 240 || 600 }}
+          emulator-options: >-
+            -no-window -no-snapshot -noaudio -no-boot-anim
+            ${{ matrix.profile && '-gpu swiftshader -feature -Vulkan -show-kernel' || '-gpu swiftshader_indirect' }}
+          pre-emulator-launch-script: adb start-server
           disable-animations: true
           working-directory: android
           script: ./gradlew :app:connectedDebugAndroidTest
