@@ -124,10 +124,14 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v6
       - name: Enable KVM access
+        if: ${{ !matrix.profile }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Assemble Android 17 test APKs before boot
+        if: ${{ matrix.profile }}
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Run connected tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -137,14 +141,18 @@ jobs:
           profile: ${{ matrix.profile }}
           cores: ${{ matrix.profile && 4 || 2 }}
           ram-size: ${{ matrix.profile && '4096M' || '' }}
-          emulator-boot-timeout: ${{ matrix.profile && 240 || 600 }}
+          disk-size: ${{ matrix.profile && '10G' || '' }}
           emulator-options: >-
             -no-window -no-snapshot -noaudio -no-boot-anim
-            ${{ matrix.profile && '-gpu swiftshader -feature -Vulkan -show-kernel' || '-gpu swiftshader_indirect' }}
+            ${{ matrix.profile && '-no-accel -gpu swiftshader -feature -Vulkan -show-kernel' || '-gpu swiftshader_indirect' }}
           pre-emulator-launch-script: adb start-server
           disable-animations: true
           working-directory: android
-          script: ./gradlew :app:connectedDebugAndroidTest
+          script: |
+            adb shell df -h /data
+            adb shell cmd package path android
+            if [ '${{ matrix.api-level }}' = '37.2' ]; then test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384; fi
+            ./gradlew :app:connectedDebugAndroidTest
       - name: Verify device tests actually ran and passed
         run: |
           python3 - <<'PYXML'
